@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1785357923320,
+      "tag": "0000_lucky_ulik",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785359659356,
+      "tag": "0001_burly_jigsaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785702295705,
+      "tag": "0002_long_molten_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785706820689,
+      "tag": "0003_majestic_scarecrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1787174502950,
+      "tag": "0004_chemical_hemingway",
+      "breakpoints": true
+    }
+  ]
+}
