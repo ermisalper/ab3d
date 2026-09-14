@@ -26,6 +26,13 @@ test("Meshy route keeps secrets server-side and exposes the print pipeline", asy
   assert.match(route, /searchParams\.get\("health"\)/);
   assert.match(route, /\/v1\/balance/);
   assert.doesNotMatch(route, /msy_[A-Za-z0-9]{12,}/);
+  assert.match(route, /MAX_PROMPT_LENGTH = 800/);
+  assert.match(route, /\/v1\/multi-image-to-3d/);
+  assert.match(route, /ai_model: "meshy-7"/);
+  assert.match(route, /should_remesh: false/);
+  assert.match(route, /image_enhancement: false/);
+  assert.match(route, /\/creative-lab\/figure\/v1\/prototype/);
+  assert.match(route, /\/creative-lab\/keychain\/v1\/build/);
   assert.match(route, /\/v1\/resize/);
   assert.match(route, /\/v1\/print\/analyze/);
   assert.match(route, /\/v1\/print\/repair/);
@@ -61,6 +68,11 @@ test("studio provides a rotatable viewer and downloadable production formats", a
   assert.match(studio, /Individuelle Keycap/);
   assert.match(studio, /Einklapp-Fidget/);
   assert.match(studio, /Tabletop-Terrain/);
+  assert.match(studio, /1 bis 4 Bilder auswählen/);
+  assert.match(studio, /Originalgetreu/);
+  assert.match(studio, /Kreativ gestalten/);
+  assert.match(studio, /creative-prototype/);
+  assert.match(studio, /imageDatas/);
   assert.match(studio, /selectedTemplate\.printRule/);
   assert.match(studio, /min=\{selectedTemplate\.minHeight\}/);
   assert.match(studio, /setGenerationMode\(template\.mode === "image" \? "quality" : "fast"\)/);

@@ -16,19 +16,49 @@ import { buildDesignPlan, buildServerMeshPrompt } from "../../design-planner";
 
 const MESHY_API = "https://api.meshy.ai/openapi";
 const TASK_ID = /^[a-zA-Z0-9-]{8,80}$/;
-const MAX_PROMPT_LENGTH = 600;
+const MAX_PROMPT_LENGTH = 800;
 const MAX_IMAGE_DATA_LENGTH = 11_500_000;
+const MAX_IMAGE_PAYLOAD_LENGTH = 32_000_000;
 const TASK_ENDPOINTS = {
   text: "/v2/text-to-3d",
   image: "/v1/image-to-3d",
+  "multi-image": "/v1/multi-image-to-3d",
   "image-transform": "/v1/image-to-image",
   resize: "/v1/resize",
   convert: "/v1/convert",
   "print-analyze": "/v1/print/analyze",
   "print-repair": "/v1/print/repair",
+  "creative-chibi-prototype": "/creative-lab/figure/v1/prototype",
+  "creative-chibi-build": "/creative-lab/figure/v1/build",
+  "creative-vinyl-prototype": "/creative-lab/vinyl-figure/v1/prototype",
+  "creative-vinyl-build": "/creative-lab/vinyl-figure/v1/build",
+  "creative-brick-prototype": "/creative-lab/brick-figure/v1/prototype",
+  "creative-brick-build": "/creative-lab/brick-figure/v1/build",
+  "creative-keychain-prototype": "/creative-lab/keychain/v1/prototype",
+  "creative-keychain-build": "/creative-lab/keychain/v1/build",
+  "creative-magnet-prototype": "/creative-lab/fridge-magnet/v1/prototype",
+  "creative-magnet-build": "/creative-lab/fridge-magnet/v1/build",
+  "creative-keycap-prototype": "/creative-lab/keycap/v1/prototype",
+  "creative-keycap-build": "/creative-lab/keycap/v1/build",
 } as const;
 type TaskType = keyof typeof TASK_ENDPOINTS;
-type ModelTaskType = Exclude<TaskType, "image-transform" | "print-analyze">;
+type CreativeTemplateId = "chibi" | "vinyl" | "brick" | "keychain" | "magnet" | "keycap";
+type ModelTaskType = Exclude<TaskType, "image-transform" | "print-analyze" | `creative-${CreativeTemplateId}-prototype`>;
+
+const CREATIVE_TEMPLATES = new Set<CreativeTemplateId>(["chibi", "vinyl", "brick", "keychain", "magnet", "keycap"]);
+const MODEL_TASK_TYPES = new Set<ModelTaskType>([
+  "text", "image", "multi-image", "resize", "convert", "print-repair",
+  "creative-chibi-build", "creative-vinyl-build", "creative-brick-build",
+  "creative-keychain-build", "creative-magnet-build", "creative-keycap-build",
+]);
+
+function isCreativeTemplate(value?: string): value is CreativeTemplateId {
+  return CREATIVE_TEMPLATES.has(value as CreativeTemplateId);
+}
+
+function creativeTaskType(templateId: CreativeTemplateId, stage: "prototype" | "build") {
+  return `creative-${templateId}-${stage}` as TaskType;
+}
 
 function getApiKey() {
   const key = process.env.MESHY_API_KEY;
@@ -52,7 +82,7 @@ async function meshyFetch(path: string, init?: RequestInit) {
     ...init,
     headers: {
       Authorization: `Bearer ${getApiKey()}`,
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.body ? { "Content-Type": "application/json; charset=utf-8" } : {}),
       ...init?.headers,
     },
   });
@@ -87,7 +117,7 @@ async function ownedModelUrl(options: {
   const taskId = options.taskId || "";
   const taskType = options.taskType || "";
   const format = options.format || "glb";
-  if (!TASK_ID.test(taskId) || !["text", "image", "resize", "convert", "print-repair"].includes(taskType)) {
+  if (!TASK_ID.test(taskId) || !MODEL_TASK_TYPES.has(taskType as ModelTaskType)) {
     return { ok: false as const, status: 400, error: "Ungültige Modellquelle." };
   }
   const modelTaskType = taskType as ModelTaskType;
@@ -169,17 +199,21 @@ export async function POST(request: Request) {
     }
 
     const contentLength = Number(request.headers.get("content-length") || 0);
-    if (contentLength > MAX_IMAGE_DATA_LENGTH + 30_000) {
-      return Response.json({ error: "Die Bilddatei ist zu gross." }, { status: 413 });
+    if (contentLength > MAX_IMAGE_PAYLOAD_LENGTH + 60_000) {
+      return Response.json({ error: "Die Bildauswahl ist zu gross." }, { status: 413 });
     }
 
     const body = await request.json() as {
-      action?: "create" | "refine" | "transform-image" | "resize" | "analyze" | "repair" | "convert";
+      action?: "create" | "refine" | "transform-image" | "creative-prototype" | "creative-build" | "resize" | "analyze" | "repair" | "convert";
       type?: "text" | "image";
       prompt?: string;
       texturePrompt?: string;
       imageData?: string;
+      imageDatas?: string[];
       inputTaskId?: string;
+      prototypeTaskId?: string;
+      candidateId?: string;
+      templateId?: string;
       printReady?: boolean;
       quality?: "fast" | "quality";
       willRefine?: boolean;
@@ -238,6 +272,70 @@ export async function POST(request: Request) {
       return Response.json({ taskId: task.taskId, type: isRepair ? "print-repair" : "convert", tokenBalance: task.tokenBalance });
     }
 
+    if (body.action === "creative-prototype") {
+      if (!isCreativeTemplate(body.templateId)) {
+        return Response.json({ error: "Diese Produktvorlage unterstützt keinen Spezialmodus." }, { status: 400 });
+      }
+      const imageData = body.imageData || "";
+      if (!validImage(imageData)) {
+        return Response.json({ error: "Bitte verwende ein gültiges JPG- oder PNG-Bild bis 8 MB." }, { status: 400 });
+      }
+      const taskType = creativeTaskType(body.templateId, "prototype");
+      const task = await beginChargedTask({
+        email: user.email,
+        amount: 1,
+        reason: `${body.templateId} Designentwurf`,
+        refundReason: "Spezialentwurf nicht gestartet",
+        path: TASK_ENDPOINTS[taskType],
+        payload: {
+          image_url: imageData,
+          name: `AB3D ${body.templateId}`,
+          remove_background: false,
+        },
+        kind: taskType,
+      });
+      if (!task.ok) return task.response;
+      return Response.json({ taskId: task.taskId, type: taskType, tokenBalance: task.tokenBalance });
+    }
+
+    if (body.action === "creative-build") {
+      if (!isCreativeTemplate(body.templateId) || !body.prototypeTaskId || !TASK_ID.test(body.prototypeTaskId)) {
+        return Response.json({ error: "Ungültiger Spezialentwurf." }, { status: 400 });
+      }
+      const parent = await getOwnedTask(body.prototypeTaskId, user.email);
+      if (!parent || parent.status !== "SUCCEEDED" || parent.kind !== creativeTaskType(body.templateId, "prototype")) {
+        return Response.json({ error: "Der Spezialentwurf ist noch nicht fertig oder gehört nicht zu deinem Konto." }, { status: 403 });
+      }
+      if (body.templateId === "keycap" && (!body.candidateId || body.candidateId.length > 200)) {
+        return Response.json({ error: "Die Keycap-Vorschau enthält keine gültige Auswahl." }, { status: 400 });
+      }
+      const taskType = creativeTaskType(body.templateId, "build");
+      const task = await beginChargedTask({
+        email: user.email,
+        amount: 2,
+        reason: `${body.templateId} Spezialmodell`,
+        refundReason: "Spezialmodell nicht gestartet",
+        path: TASK_ENDPOINTS[taskType],
+        payload: {
+          input_task_id: body.prototypeTaskId,
+          ...(body.templateId === "keycap" ? { candidate_id: body.candidateId } : {}),
+          ...(body.templateId === "keychain" ? {
+            options: { badge_shape: "circle", size_mm: 60, relief_height_mm: 3, base_thickness_mm: 2.4, has_closed_back: true, smoothing: 0.3, export_resolution: 1024 },
+            output: { format: "glb" },
+          } : {}),
+          ...(body.templateId === "magnet" ? {
+            options: { badge_shape: "rounded-rect", size_mm: 70, relief_height_mm: 3.3, base_thickness_mm: 2.4, has_closed_back: true, smoothing: 0.3, export_resolution: 1024 },
+            output: { format: "glb" },
+          } : {}),
+          name: `AB3D ${body.templateId}`,
+        },
+        kind: taskType,
+        parentTaskId: body.prototypeTaskId,
+      });
+      if (!task.ok) return task.response;
+      return Response.json({ taskId: task.taskId, type: taskType, tokenBalance: task.tokenBalance });
+    }
+
     if (body.action === "transform-image") {
       const imageData = body.imageData || "";
       const prompt = body.prompt?.trim() || "";
@@ -245,7 +343,7 @@ export async function POST(request: Request) {
         return Response.json({ error: "Bitte verwende ein gültiges JPG- oder PNG-Bild bis 8 MB." }, { status: 400 });
       }
       if (prompt.length < 12 || prompt.length > MAX_PROMPT_LENGTH) {
-        return Response.json({ error: "Beschreibe die gewünschte Interpretation mit 12 bis 600 Zeichen." }, { status: 400 });
+        return Response.json({ error: "Beschreibe die gewünschte Interpretation mit 12 bis 800 Zeichen." }, { status: 400 });
       }
       if (!hasUnlimitedTokens(user.email) && await getTokenBalance(user.email) < 3) {
         return Response.json({
@@ -260,11 +358,11 @@ export async function POST(request: Request) {
         refundReason: "Bildinterpretation nicht gestartet",
         path: "/v1/image-to-image",
         payload: {
-          ai_model: "nano-banana",
+          ai_model: "nano-banana-2",
           prompt,
           reference_image_urls: [imageData],
-          generate_multi_view: false,
-          aspect_ratio: "1:1",
+          generate_multi_view: true,
+          remove_background: false,
         },
         kind: "image-transform",
       });
@@ -316,7 +414,7 @@ export async function POST(request: Request) {
         payload: {
           mode: "refine",
           preview_task_id: body.previewTaskId,
-          ai_model: "latest",
+          ai_model: "meshy-7",
           enable_pbr: true,
           texture_resolution: "2k",
           remove_lighting: true,
@@ -355,7 +453,7 @@ export async function POST(request: Request) {
       }).slice(0, MAX_PROMPT_LENGTH);
       const quality = body.quality === "quality" ? "quality" : "fast";
       if (prompt.length < 12 || prompt.length > MAX_PROMPT_LENGTH) {
-        return Response.json({ error: "Der Prompt muss zwischen 12 und 600 Zeichen enthalten." }, { status: 400 });
+        return Response.json({ error: "Der Prompt muss zwischen 12 und 800 Zeichen enthalten." }, { status: 400 });
       }
       if (!hasUnlimitedTokens(user.email) && body.willRefine && await getTokenBalance(user.email) < 2) {
         return Response.json({
@@ -373,8 +471,8 @@ export async function POST(request: Request) {
           mode: "preview",
           prompt,
           model_type: "standard",
-          ai_model: "latest",
-          should_remesh: quality === "quality" && Boolean(body.printReady),
+          ai_model: "meshy-7",
+          should_remesh: false,
           moderation: true,
           target_formats: ["glb"],
           alpha_thumbnail: true,
@@ -386,12 +484,17 @@ export async function POST(request: Request) {
       return Response.json({ taskId: task.taskId, type: "text", tokenBalance: task.tokenBalance });
     }
 
-    const imageData = body.imageData || "";
+    const imageDatas = Array.isArray(body.imageDatas)
+      ? body.imageDatas.slice(0, 4).filter((entry): entry is string => typeof entry === "string")
+      : body.imageData ? [body.imageData] : [];
     const inputTaskId = body.inputTaskId || "";
     const quality = body.quality === "quality" ? "quality" : "fast";
     const texturePrompt = body.texturePrompt?.trim().slice(0, MAX_PROMPT_LENGTH) || "";
-    if (!inputTaskId && !validImage(imageData)) {
-      return Response.json({ error: "Bitte verwende ein gültiges JPG- oder PNG-Bild bis 8 MB." }, { status: 400 });
+    if (!inputTaskId && (imageDatas.length < 1 || imageDatas.some((entry) => !validImage(entry)))) {
+      return Response.json({ error: "Bitte verwende ein bis vier gültige JPG- oder PNG-Bilder." }, { status: 400 });
+    }
+    if (imageDatas.reduce((sum, entry) => sum + entry.length, 0) > MAX_IMAGE_PAYLOAD_LENGTH) {
+      return Response.json({ error: "Die ausgewählten Bilder sind zusammen zu gross." }, { status: 413 });
     }
     if (inputTaskId) {
       if (!TASK_ID.test(inputTaskId)) return Response.json({ error: "Ungültige Bild-Auftrags-ID." }, { status: 400 });
@@ -400,31 +503,33 @@ export async function POST(request: Request) {
         return Response.json({ error: "Die kreative Bildinterpretation ist noch nicht fertig oder gehört nicht zu dir." }, { status: 403 });
       }
     }
+    const useMultiImage = Boolean(inputTaskId) || imageDatas.length > 1;
+    const taskType = useMultiImage ? "multi-image" : "image";
     const task = await beginChargedTask({
       email: user.email,
       amount: quality === "quality" ? 2 : 1,
       reason: "Bild-zu-3D mit Textur",
       refundReason: "Bild-Auftrag nicht gestartet",
-      path: "/v1/image-to-3d",
+      path: TASK_ENDPOINTS[taskType],
       payload: {
-        ...(inputTaskId ? { input_task_id: inputTaskId } : { image_url: imageData }),
-        model_type: "standard",
-        ai_model: "latest",
-        should_remesh: quality === "quality" && Boolean(body.printReady),
-        ...(quality === "quality" && body.printReady ? { target_polycount: 100000 } : {}),
+        ...(inputTaskId ? { input_task_id: inputTaskId } : useMultiImage ? { image_urls: imageDatas } : { image_url: imageDatas[0] }),
+        ...(useMultiImage ? {} : { model_type: "standard" }),
+        ai_model: "meshy-7",
+        should_remesh: false,
         should_texture: quality === "quality",
-        ...(quality === "quality" ? { enable_pbr: true, texture_resolution: "2k", remove_lighting: true } : {}),
-        image_enhancement: true,
+        ...(quality === "quality" ? { enable_pbr: true, texture_resolution: "2k" } : {}),
+        ...(inputTaskId ? {} : { image_enhancement: false }),
+        moderation: true,
         ...(quality === "quality" && texturePrompt ? { texture_prompt: texturePrompt } : {}),
         target_formats: ["glb"],
         alpha_thumbnail: true,
         origin_at: "bottom",
       },
-      kind: "image",
+      kind: taskType,
       parentTaskId: inputTaskId || undefined,
     });
     if (!task.ok) return task.response;
-    return Response.json({ taskId: task.taskId, type: "image", tokenBalance: task.tokenBalance });
+    return Response.json({ taskId: task.taskId, type: taskType, tokenBalance: task.tokenBalance });
   } catch (error) {
     const message = error instanceof Error && error.message === "MESHY_API_KEY_NOT_CONFIGURED"
       ? "Der KI-Generator ist noch nicht aktiviert."

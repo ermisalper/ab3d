@@ -7,8 +7,11 @@ import ModelViewer from "./model-viewer";
 
 type InputMode = "text" | "image";
 type GenerationMode = "fast" | "quality";
-type TaskType = InputMode | "image-transform" | "resize" | "convert" | "print-analyze" | "print-repair";
-type ModelTaskType = Exclude<TaskType, "image-transform" | "print-analyze">;
+type ImageStrategy = "accurate" | "creative";
+type CreativeTemplateId = "chibi" | "vinyl" | "brick" | "keychain" | "magnet" | "keycap";
+type CreativeTaskType = `creative-${CreativeTemplateId}-${"prototype" | "build"}`;
+type TaskType = InputMode | "multi-image" | "image-transform" | CreativeTaskType | "resize" | "convert" | "print-analyze" | "print-repair";
+type ModelTaskType = Exclude<TaskType, "image-transform" | "print-analyze" | `creative-${CreativeTemplateId}-prototype`>;
 type GenerationState = "idle" | "uploading" | "transforming" | "generating" | "refining" | "resizing" | "analyzing" | "repairing" | "converting" | "complete" | "error";
 type ModelUrls = { glb?: string; stl?: string; "3mf"?: string; obj?: string; fbx?: string; usdz?: string };
 type Printability = {
@@ -24,6 +27,7 @@ type MeshyTask = {
   progress?: number;
   model_urls?: ModelUrls;
   image_urls?: string[];
+  candidate_ids?: string[];
   thumbnail_url?: string;
   task_error?: { message?: string };
   tokenBalance?: number;
@@ -65,6 +69,12 @@ const templates: Template[] = [
   { id: "terrain", name: "Tabletop-Terrain", category: "Spiel & Hobby", description: "Modulares Gelände für deine Spielwelt.", prompt: "A modular rocky tabletop terrain tile with clear walkable levels, a perfectly flat underside, robust readable details, compatible straight edges and no unsupported fragile overhangs", mode: "text", complexity: 1.45, image: "/creations/terrain.webp", examples: ["Alpine Ruinenlandschaft", "Modulare Felsklippen", "Fantasy-Wald mit Wegen"], inputHint: "Ein Satz zu Welt, Geländeart und Spielfläche", printRule: "Flache Unterseite, definierte Modulränder und robuste Miniaturdetails.", defaultHeight: 6, minHeight: 3, maxHeight: 15, badge: "Idee" },
   { id: "photo-frame", name: "3D-Fotolicht", category: "Personalisieren", description: "Dein Foto als geschichtetes Lichtrelief.", prompt: "Convert the reference into a refined layered lithophane-style photo light panel inside a stable minimal frame, with simplified tonal depth, flat rear illumination cavity and robust rounded borders", mode: "image", complexity: 1.15, image: "/creations/photo-frame.webp", examples: ["Porträt mit weichem Licht", "Bergpanorama im Rahmen", "Haustier als Lichtrelief"], inputHint: "Ein kontrastreiches Foto im Hoch- oder Querformat", printRule: "Nur für Niedervolt-LED; Reliefdicke und Lichtabstand werden vor Fertigung geprüft.", defaultHeight: 18, minHeight: 10, maxHeight: 35, badge: "Foto" },
 ];
+
+const creativeTemplates = new Set<CreativeTemplateId>(["chibi", "vinyl", "brick", "keychain", "magnet", "keycap"]);
+
+function isCreativeTemplate(value: string): value is CreativeTemplateId {
+  return creativeTemplates.has(value as CreativeTemplateId);
+}
 
 const styles = {
   Japandi: "calm Japandi aesthetic with soft natural transitions and restrained detail",
@@ -124,9 +134,10 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   const [selectedTemplate, setSelectedTemplate] = useState(templates[0]);
   const [mode, setMode] = useState<InputMode>(templates[0].mode);
   const [customerWish, setCustomerWish] = useState("");
-  const [imageData, setImageData] = useState("");
-  const [imageName, setImageName] = useState("");
-  const [imagePreview, setImagePreview] = useState("");
+  const [imageDatas, setImageDatas] = useState<string[]>([]);
+  const [imageNames, setImageNames] = useState<string[]>([]);
+  const [interpretedPreview, setInterpretedPreview] = useState("");
+  const [imageStrategy, setImageStrategy] = useState<ImageStrategy>("accurate");
   const [generationMode, setGenerationMode] = useState<GenerationMode>("quality");
   const [style, setStyle] = useState<keyof typeof styles>("Japandi");
   const [surface, setSurface] = useState<keyof typeof surfaces>("Feine Rillen");
@@ -169,8 +180,10 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   const generationRef = useRef(0);
 
   const busy = ["uploading", "transforming", "generating", "refining", "resizing", "analyzing", "repairing", "converting"].includes(state);
-  const creativeImage = generationMode === "quality";
+  const creativeImage = mode === "image" && imageStrategy === "creative";
   const textured = generationMode === "quality";
+  const imageData = imageDatas[0] || "";
+  const imagePreview = interpretedPreview || imageData;
   const freeTemplate = templates[0];
   const specificTemplates = templates.filter((item) => !item.featured);
   const shownTemplates = category === "Alle" ? specificTemplates : specificTemplates.filter((item) => item.category === category);
@@ -316,6 +329,8 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
     setSelectedTemplate(template);
     setMode(template.mode);
     setGenerationMode(template.mode === "image" ? "quality" : "fast");
+    setImageStrategy("accurate");
+    setInterpretedPreview("");
     setHeightCm(template.defaultHeight);
     setCustomerWish("");
     resetPlanner();
@@ -329,26 +344,33 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
     resetResult();
   };
 
-  const handleImage = (file?: File) => {
-    if (!file) return;
+  const handleImages = async (selection: FileList | File[]) => {
+    const files = Array.from(selection).slice(0, 4);
+    if (!files.length) return;
     setError("");
-    if (!["image/jpeg", "image/png"].includes(file.type)) {
-      setError("Bitte verwende eine JPG- oder PNG-Datei.");
+    if (files.some((file) => !["image/jpeg", "image/png"].includes(file.type))) {
+      setError("Bitte verwende nur JPG- oder PNG-Dateien.");
       return;
     }
-    if (file.size > 8 * 1024 * 1024) {
-      setError("Das Bild darf maximal 8 MB gross sein.");
+    if (files.some((file) => file.size > 8 * 1024 * 1024) || files.reduce((sum, file) => sum + file.size, 0) > 22 * 1024 * 1024) {
+      setError("Ein Bild darf maximal 8 MB gross sein, alle Bilder zusammen maximal 22 MB.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = String(reader.result);
-      setImageData(value);
-      setImagePreview(value);
-      setImageName(file.name);
+    try {
+      const values = await Promise.all(files.map((file) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Bild konnte nicht gelesen werden."));
+        reader.readAsDataURL(file);
+      })));
+      setImageDatas(values);
+      setImageNames(files.map((file) => file.name));
+      setInterpretedPreview("");
+      if (values.length > 1) setImageStrategy("accurate");
       resetResult();
-    };
-    reader.readAsDataURL(file);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Die Bilder konnten nicht gelesen werden.");
+    }
   };
 
   const pollTask = async (id: string, taskType: TaskType, runId: number): Promise<MeshyTask> => {
@@ -362,16 +384,23 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       if (task.status === "FAILED" || task.status === "CANCELED") {
         throw new Error("Die AB3D Design Engine konnte diesen Arbeitsschritt nicht abschliessen. Bitte prüfe deine Eingabe und starte erneut.");
       }
-      const labels: Record<TaskType, string> = {
+      const labels: Partial<Record<TaskType, string>> = {
         text: "3D-Geometrie wird aufgebaut …",
         image: "Das interpretierte Motiv wird dreidimensional …",
+        "multi-image": "Mehrere Ansichten werden zu präziser 3D-Geometrie verbunden …",
         "image-transform": "Das Foto wird als neues Design interpretiert …",
+        "creative-chibi-prototype": "Die Chibi-Vorschau wird gestaltet …",
+        "creative-vinyl-prototype": "Die Vinyl-Vorschau wird gestaltet …",
+        "creative-brick-prototype": "Die Figuren-Vorschau wird gestaltet …",
+        "creative-keychain-prototype": "Das Schlüsselanhänger-Relief wird entworfen …",
+        "creative-magnet-prototype": "Das Magnet-Relief wird entworfen …",
+        "creative-keycap-prototype": "Die Keycap-Vorschau wird gestaltet …",
         resize: "Das Modell wird auf reale Abmessungen skaliert …",
         "print-analyze": "Wasserdichtheit und Geometrie werden geprüft …",
         "print-repair": "Fehlerhafte Druckgeometrie wird repariert …",
         convert: "STL- und 3MF-Dateien werden erstellt …",
       };
-      setStatusText(task.status === "PENDING" ? "Auftrag wartet auf einen freien KI-Platz …" : labels[taskType]);
+      setStatusText(task.status === "PENDING" ? "Auftrag wartet auf einen freien KI-Platz …" : labels[taskType] || "Das finale 3D-Modell wird aufgebaut …");
       await wait(5000);
     }
     throw new Error("Die Generierung dauert ungewöhnlich lange. Bitte versuche es später erneut.");
@@ -390,7 +419,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       setError("Schliesse zuerst den Produktplaner ab und bestätige den technischen Aufbau.");
       return;
     }
-    const requiredTokens = mode === "text" ? (textured ? 2 : 1) : (creativeImage ? 3 : 1);
+    const requiredTokens = mode === "text" ? (textured ? 2 : 1) : creativeImage ? 3 : generationMode === "quality" ? 2 : 1;
     if (!unlimited && tokenBalance !== null && tokenBalance < requiredTokens) {
       setError(`Für diesen Ablauf brauchst du ${requiredTokens} Tokens. Dein aktuelles Guthaben reicht dafür nicht aus.`);
       return;
@@ -415,91 +444,136 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
     setScaledHeight(null);
 
     try {
-      let inputTaskId: string | undefined;
-      if (mode === "image" && creativeImage) {
+      let completed: MeshyTask;
+      let finalTaskId: string;
+      let finalTaskType: ModelTaskType;
+      const useSpecialWorkflow = mode === "image" && creativeImage && imageDatas.length === 1 && isCreativeTemplate(selectedTemplate.id);
+
+      if (useSpecialWorkflow) {
         setState("transforming");
-        setStatusText("Das Motiv wird kreativ neu interpretiert …");
-        const transformation = [
-          "Create a clean square product reference image for high-quality Image-to-3D reconstruction.",
-          selectedTemplate.prompt,
-          styles[style],
-          surfaces[surface],
-          `Use ${colorMoods[colorMood]} as the material and color direction.`,
-          "Create an original design rather than a literal photo copy, while preserving only the defining features of the main subject.",
-          "One complete centered object, front three-quarter view, plain neutral background, even lighting, no text, no extra objects.",
-          printReady ? `The silhouette must work as one stable, cohesive 3D-printable object. Product rule: ${selectedTemplate.printRule}` : "",
-          customerWish.trim() ? `Customer request: ${customerWish.trim().slice(0, 100)}.` : "",
-        ].filter(Boolean).join(" ");
-        const transformResponse = await fetch("/api/meshy", {
+        setStatusText(`${selectedTemplate.name} wird mit dem spezialisierten Meshy-Ablauf entworfen …`);
+        const prototypeType = `creative-${selectedTemplate.id}-prototype` as TaskType;
+        const prototypeResponse = await fetch("/api/meshy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "transform-image", imageData, prompt: transformation.slice(0, 600) }),
+          body: JSON.stringify({ action: "creative-prototype", templateId: selectedTemplate.id, imageData }),
         });
-        const transformed = await readJson(transformResponse);
-        if (typeof transformed.tokenBalance === "number") setTokenBalance(transformed.tokenBalance);
-        setTaskId(transformed.taskId);
-        const transformedTask = await pollTask(transformed.taskId, "image-transform", runId);
-        inputTaskId = transformedTask.id;
-        const interpretedImage = safeMeshyUrl(transformedTask.image_urls?.[0]);
-        if (interpretedImage) setImagePreview(interpretedImage);
-      }
+        const prototype = await readJson(prototypeResponse);
+        if (typeof prototype.tokenBalance === "number") setTokenBalance(prototype.tokenBalance);
+        setTaskId(prototype.taskId);
+        const prototypeResult = await pollTask(prototype.taskId, prototypeType, runId);
+        const conceptImage = safeMeshyUrl(prototypeResult.image_urls?.[0]);
+        if (conceptImage) setInterpretedPreview(conceptImage);
 
-      setState("generating");
-      setProgress(2);
-      setStatusText("AB3D baut die echte 3D-Geometrie …");
-      const createResponse = await fetch("/api/meshy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "create",
-          type: mode,
-          prompt: finalPrompt,
-          texturePrompt: finalPrompt,
-          designPlan: mode === "text" ? {
-            templateId: selectedTemplate.id,
-            idea: customerWish,
-            answers: plannerAnswers,
-            planVersion: designPlan?.planVersion,
-          } : undefined,
-          visualDirection: mode === "text" ? {
-            style: styles[style],
-            surface: surfaces[surface],
-            colorMood: colorMoods[colorMood],
-          } : undefined,
-          imageData: mode === "image" && !inputTaskId ? imageData : undefined,
-          inputTaskId,
-          printReady,
-          quality: generationMode,
-          willRefine: mode === "text" && textured,
-        }),
-      });
-      const created = await readJson(createResponse);
-      if (typeof created.tokenBalance === "number") setTokenBalance(created.tokenBalance);
-      setTaskId(created.taskId);
-      let completed = await pollTask(created.taskId, mode, runId);
-      let finalTaskId = created.taskId;
-
-      if (mode === "text" && textured) {
-        setState("refining");
+        setState("generating");
         setProgress(5);
-        setStatusText("Geometrie fertig – Material und Farbe werden erzeugt …");
-        const refineResponse = await fetch("/api/meshy", {
+        setStatusText("Bestätigter Entwurf wird als spezialisiertes 3D-Modell aufgebaut …");
+        const buildType = `creative-${selectedTemplate.id}-build` as ModelTaskType;
+        const buildResponse = await fetch("/api/meshy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "refine", previewTaskId: created.taskId, texturePrompt: finalPrompt }),
+          body: JSON.stringify({
+            action: "creative-build",
+            templateId: selectedTemplate.id,
+            prototypeTaskId: prototype.taskId,
+            candidateId: prototypeResult.candidate_ids?.[0],
+          }),
         });
-        const refined = await readJson(refineResponse);
-        if (typeof refined.tokenBalance === "number") setTokenBalance(refined.tokenBalance);
-        setTaskId(refined.taskId);
-        finalTaskId = refined.taskId;
-        completed = await pollTask(refined.taskId, "text", runId);
+        const built = await readJson(buildResponse);
+        if (typeof built.tokenBalance === "number") setTokenBalance(built.tokenBalance);
+        setTaskId(built.taskId);
+        completed = await pollTask(built.taskId, buildType, runId);
+        finalTaskId = built.taskId;
+        finalTaskType = buildType;
+      } else {
+        let inputTaskId: string | undefined;
+        if (mode === "image" && creativeImage) {
+          setState("transforming");
+          setStatusText("Das Motiv wird kreativ als konsistente Mehransicht vorbereitet …");
+          const transformation = [
+            "Create a clean product reference for high-quality multi-view 3D reconstruction.",
+            selectedTemplate.prompt,
+            styles[style],
+            surfaces[surface],
+            `Use ${colorMoods[colorMood]} as the material and color direction.`,
+            "Create one complete centered object with a clean silhouette, neutral background, even lighting, no text and no extra objects.",
+            printReady ? `Make the object cohesive and 3D-printable. Product rule: ${selectedTemplate.printRule}` : "",
+            customerWish.trim() ? `Customer request: ${customerWish.trim().slice(0, 100)}.` : "",
+          ].filter(Boolean).join(" ");
+          const transformResponse = await fetch("/api/meshy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "transform-image", imageData, prompt: transformation.slice(0, 800) }),
+          });
+          const transformed = await readJson(transformResponse);
+          if (typeof transformed.tokenBalance === "number") setTokenBalance(transformed.tokenBalance);
+          setTaskId(transformed.taskId);
+          const transformedTask = await pollTask(transformed.taskId, "image-transform", runId);
+          inputTaskId = transformedTask.id;
+          const interpretedImage = safeMeshyUrl(transformedTask.image_urls?.[0]);
+          if (interpretedImage) setInterpretedPreview(interpretedImage);
+        }
+
+        setState("generating");
+        setProgress(2);
+        setStatusText(mode === "image" && imageDatas.length > 1 ? "Meshy 7 verbindet deine Ansichten zur präzisen 3D-Form …" : "AB3D baut die echte 3D-Geometrie …");
+        const createResponse = await fetch("/api/meshy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "create",
+            type: mode,
+            prompt: finalPrompt,
+            texturePrompt: finalPrompt,
+            designPlan: mode === "text" ? {
+              templateId: selectedTemplate.id,
+              idea: customerWish,
+              answers: plannerAnswers,
+              planVersion: designPlan?.planVersion,
+            } : undefined,
+            visualDirection: mode === "text" ? {
+              style: styles[style],
+              surface: surfaces[surface],
+              colorMood: colorMoods[colorMood],
+            } : undefined,
+            imageDatas: mode === "image" && !inputTaskId ? imageDatas : undefined,
+            inputTaskId,
+            printReady,
+            quality: generationMode,
+            willRefine: mode === "text" && textured,
+          }),
+        });
+        const created = await readJson(createResponse);
+        if (typeof created.tokenBalance === "number") setTokenBalance(created.tokenBalance);
+        setTaskId(created.taskId);
+        const createdType = (created.type || mode) as TaskType;
+        completed = await pollTask(created.taskId, createdType, runId);
+        finalTaskId = created.taskId;
+        finalTaskType = createdType as ModelTaskType;
+
+        if (mode === "text" && textured) {
+          setState("refining");
+          setProgress(5);
+          setStatusText("Geometrie fertig – Material und Farbe werden erzeugt …");
+          const refineResponse = await fetch("/api/meshy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "refine", previewTaskId: created.taskId, texturePrompt: finalPrompt }),
+          });
+          const refined = await readJson(refineResponse);
+          if (typeof refined.tokenBalance === "number") setTokenBalance(refined.tokenBalance);
+          setTaskId(refined.taskId);
+          finalTaskId = refined.taskId;
+          finalTaskType = "text";
+          completed = await pollTask(refined.taskId, "text", runId);
+        }
       }
 
       if (generationRef.current !== runId) return;
       if (!completed.model_urls?.glb) throw new Error("Die Design Engine hat keine GLB-Datei geliefert. Bitte starte die Generierung erneut.");
       setModelTaskId(finalTaskId);
-      setModelTaskType(mode);
-      setModelUrls(proxiedModelUrls(completed.model_urls, finalTaskId, mode));
+      setModelTaskType(finalTaskType);
+      setModelUrls(proxiedModelUrls(completed.model_urls, finalTaskId, finalTaskType));
       setThumbnail(safeMeshyUrl(completed.thumbnail_url) || "");
       setProgress(100);
       setState("complete");
@@ -629,10 +703,10 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
     }
   };
 
-  const tokenCost = mode === "text" ? (textured ? 2 : 1) : (creativeImage ? 3 : 1);
+  const tokenCost = mode === "text" ? (textured ? 2 : 1) : creativeImage ? 3 : generationMode === "quality" ? 2 : 1;
   const processStages = mode === "text"
     ? (textured ? ["Auftrag", "Geometrie", "Material", "Fertig"] : ["Auftrag", "Geometrie", "Fertig"])
-    : (creativeImage ? ["Upload", "Interpretation", "3D-Modell", "Fertig"] : ["Upload", "3D-Modell", "Fertig"]);
+    : (creativeImage ? ["Upload", "Entwurf", "3D-Modell", "Fertig"] : [imageDatas.length > 1 ? "Ansichten" : "Foto", "Meshy 7", "Fertig"]);
   const activeStage = state === "complete"
     ? processStages.length - 1
     : state === "refining"
@@ -749,23 +823,35 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             </div>
           ) : (
             <>
-              <div className={`upload-zone ${imagePreview ? "has-image" : ""}`} onClick={() => !busy && fileRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!busy) handleImage(event.dataTransfer.files[0]); }} role="button" tabIndex={0} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && !busy) fileRef.current?.click(); }} aria-label="Bild für 3D-Modell hochladen">
-                <input ref={fileRef} type="file" accept="image/jpeg,image/png" onChange={(event) => handleImage(event.target.files?.[0])} hidden />
+              <div className={`upload-zone ${imagePreview ? "has-image" : ""}`} onClick={() => !busy && fileRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!busy) void handleImages(event.dataTransfer.files); }} role="button" tabIndex={0} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && !busy) fileRef.current?.click(); }} aria-label="Bis zu vier Bilder für das 3D-Modell hochladen">
+                <input ref={fileRef} type="file" accept="image/jpeg,image/png" multiple onChange={(event) => { if (event.target.files) void handleImages(event.target.files); }} hidden />
                 {imagePreview ? (
                   <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={imagePreview} alt="Motiv für die 3D-Kreation" />
-                    <div className="upload-replace"><b>{imageName || "KI-Interpretation"}</b><span>Zum Ersetzen klicken</span></div>
+                    <div className={`upload-preview-grid views-${interpretedPreview ? 1 : imageDatas.length}`}>
+                      {interpretedPreview ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={interpretedPreview} alt="KI-Entwurf für die 3D-Kreation" />
+                      ) : imageDatas.map((preview, index) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={preview} alt={index === 0 ? "Frontansicht für das 3D-Modell" : `Zusätzliche Ansicht ${index + 1}`} key={`${imageNames[index]}-${index}`} />
+                      ))}
+                    </div>
+                    <div className="upload-replace"><b>{interpretedPreview ? "KI-Entwurf" : imageDatas.length > 1 ? `${imageDatas.length} Ansichten gewählt` : imageNames[0]}</b><span>Zum Ersetzen klicken</span></div>
                   </>
                 ) : (
-                  <><span className="upload-icon">＋</span><h3>Foto auswählen</h3><p>{selectedTemplate.inputHint}. Ruhiger Hintergrund, gutes Licht, nur ein Hauptmotiv.</p><small>JPG oder PNG · maximal 8 MB</small></>
+                  <><span className="upload-icon">＋</span><h3>1 bis 4 Bilder auswählen</h3><p>{selectedTemplate.inputHint}. Das erste Bild ist die Frontansicht. Weitere Winkel verbessern Rückseite und Proportionen deutlich.</p><small>JPG oder PNG · je maximal 8 MB</small></>
                 )}
               </div>
+              {imageData && <div className="image-strategy" role="radiogroup" aria-label="Bildverarbeitung">
+                <button type="button" role="radio" aria-checked={imageStrategy === "accurate"} className={imageStrategy === "accurate" ? "active" : ""} onClick={() => { setImageStrategy("accurate"); setInterpretedPreview(""); resetResult(); }} disabled={busy}><b>Originalgetreu</b><small>{imageDatas.length > 1 ? "Meshy 7 verbindet alle Ansichten direkt" : "Foto direkt mit Meshy 7 in 3D umwandeln"}</small></button>
+                <button type="button" role="radio" aria-checked={imageStrategy === "creative"} className={imageStrategy === "creative" ? "active" : ""} onClick={() => { setImageStrategy("creative"); setGenerationMode("quality"); setInterpretedPreview(""); resetResult(); }} disabled={busy || imageDatas.length > 1}><b>Kreativ gestalten</b><small>{isCreativeTemplate(selectedTemplate.id) ? `Spezialablauf für ${selectedTemplate.name}` : "Zuerst konsistente Mehransicht gestalten"}</small></button>
+                {imageDatas.length > 1 && <p>Mehrere Ansichten werden immer originalgetreu verarbeitet. So entstehen die zuverlässigsten Proportionen.</p>}
+              </div>}
               <label className="simple-photo-wish"><span>Was soll daraus entstehen?</span><textarea value={customerWish} onChange={(event) => setCustomerWish(event.target.value.slice(0, 180))} rows={3} placeholder={`Zum Beispiel: ${selectedTemplate.examples[0]}`} disabled={busy} /></label>
             </>
           )}
 
-          {(mode === "image" || plannerApproved) && <div className="simple-style-picker">
+          {((mode === "image" && !(imageStrategy === "creative" && isCreativeTemplate(selectedTemplate.id))) || plannerApproved) && <div className="simple-style-picker">
             <h3>Wähle einen Stil</h3>
             <fieldset>
               <div className="visual-choice-grid style-choices">
@@ -776,7 +862,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             </fieldset>
           </div>}
 
-          {(mode === "image" || plannerApproved) && <details className="advanced-settings">
+          {((mode === "image" && !(imageStrategy === "creative" && isCreativeTemplate(selectedTemplate.id))) || plannerApproved) && <details className="advanced-settings">
             <summary>Weitere Einstellungen <span>optional</span></summary>
             <div>
             <fieldset>
@@ -804,7 +890,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           {(mode === "image" || plannerApproved) && <div className="generation-mode-picker">
             <div><span>Wie möchtest du starten?</span></div>
             <div>
-              <button type="button" className={generationMode === "fast" ? "active" : ""} onClick={() => setGenerationMode("fast")} disabled={busy}><b>Schnelle Vorschau</b><small>Form prüfen · etwa 1–3 Minuten</small></button>
+              <button type="button" className={generationMode === "fast" ? "active" : ""} onClick={() => setGenerationMode("fast")} disabled={busy || creativeImage}><b>Schnelle Vorschau</b><small>{creativeImage ? "Im Kreativmodus nicht verfügbar" : "Form prüfen · etwa 1–3 Minuten"}</small></button>
               <button type="button" className={generationMode === "quality" ? "active" : ""} onClick={() => setGenerationMode("quality")} disabled={busy}><b>Finales Modell</b><small>Texturen und feine Details · etwa 3–8 Minuten</small></button>
             </div>
           </div>}
