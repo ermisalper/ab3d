@@ -63,6 +63,8 @@ export default function CappatexStudio({ userName }: { userName?: string | null 
   const [catalogStatus, setCatalogStatus] = useState<"loading" | "ready" | "error">("loading");
   const [canDownloadHd, setCanDownloadHd] = useState(false);
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
+  const [generationEnabled, setGenerationEnabled] = useState<boolean | null>(null);
+  const [pilotOwner, setPilotOwner] = useState(false);
   const [productId, setProductId] = useState("tshirt");
   const [prompt, setPrompt] = useState(examples[0]);
   const [style, setStyle] = useState<(typeof styles)[number]>("Minimal");
@@ -133,6 +135,10 @@ export default function CappatexStudio({ userName }: { userName?: string | null 
       .then((data) => {
         setCanDownloadHd(Boolean(data?.account?.capabilities?.canDownloadHd));
         if (typeof data?.account?.tokenBalance === "number") setTokenBalance(data.account.tokenBalance);
+        if (data?.account?.cappatexGeneration) {
+          setGenerationEnabled(Boolean(data.account.cappatexGeneration.enabled));
+          setPilotOwner(Boolean(data.account.cappatexGeneration.pilotOwner));
+        }
       })
       .catch(() => undefined);
   }, []);
@@ -310,10 +316,12 @@ export default function CappatexStudio({ userName }: { userName?: string | null 
               </div>
               <fieldset className="cappatex-styles"><legend>Bildstil</legend>{styles.map((entry) => <button type="button" key={entry} className={style === entry ? "active" : ""} onClick={() => setStyle(entry)}>{entry}</button>)}</fieldset>
               {error && <div className="cappatex-error" role="alert">{error}</div>}
-              <button className="button primary cappatex-generate" onClick={generate} disabled={busy || prompt.trim().length < 12}>
+              <button className="button primary cappatex-generate" onClick={generate} disabled={busy || prompt.trim().length < 12 || generationEnabled === false}>
                 {busy ? <><i /> Design wird erstellt …</> : <>✦ Design generieren</>}
               </button>
-              <p className="cappatex-wait-note">1 Motivvorschau = 1 Token{tokenBalance !== null ? ` · Dein Guthaben: ${tokenBalance}` : ""}. Die KI benötigt meistens 20–60 Sekunden.</p>
+              <p className="cappatex-wait-note">{pilotOwner
+                ? generationEnabled ? "Betreiber-Testphase: keine Design-Token; pro Generierung entstehen API-Kosten." : "Betreiber-Testphase: Der Bildgenerator wird noch eingerichtet. Es entstehen jetzt keine API-Kosten."
+                : generationEnabled === false ? "Die Bildgenerierung ist derzeit noch nicht freigeschaltet." : `1 Motivvorschau = 1 Token${tokenBalance !== null ? ` · Dein Guthaben: ${tokenBalance}` : ""}. Die KI benötigt meistens 20–60 Sekunden.`}</p>
             </section>
           </div>
 
