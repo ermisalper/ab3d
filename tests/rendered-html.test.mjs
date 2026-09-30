@@ -234,9 +234,10 @@ test("route-aware brand intro prints AB3D and CAPPATEX with reduced-motion suppo
 });
 
 test("CAPPATEX uses guarded OpenAI generation and verified Shopify to Printify fulfillment", async () => {
-  const [generator, catalog, checkout, webhook, studio, envExample] = await Promise.all([
+  const [generator, catalog, printifyCatalog, checkout, webhook, studio, envExample] = await Promise.all([
     read("app/api/cappatex/route.ts"),
     read("app/api/cappatex/catalog/route.ts"),
+    read("app/printify-catalog.ts"),
     read("app/api/cappatex/checkout/route.ts"),
     read("app/api/cappatex/webhooks/shopify/route.ts"),
     read("app/cappatex/cappatex-studio.tsx"),
@@ -248,12 +249,14 @@ test("CAPPATEX uses guarded OpenAI generation and verified Shopify to Printify f
   assert.match(generator, /quality: "low"/);
   assert.match(generator, /output_format: "webp"/);
   assert.match(generator, /CAPPATEX_GENERATION_ENABLED/);
+  assert.match(generator, /generationAccess/);
+  assert.match(generator, /"hoodie", "cap", "case", "swimwear"/);
   assert.match(generator, /moderation_blocked/);
   assert.match(generator, /moderation_stage/);
   assert.doesNotMatch(generator, /icy-cell|CAPPATEX_WORKER_URL/);
   assert.doesNotMatch(generator, /sk-[A-Za-z0-9_-]{12,}/);
 
-  assert.match(catalog, /api\.printify\.com\/v1\/shops/);
+  assert.match(printifyCatalog, /api\.printify\.com\/v1\/shops/);
   assert.match(catalog, /fetchShopifyCollection\(SHOPIFY_COLLECTIONS\.cappatex\)/);
   assert.match(checkout, /cartCreate/);
   assert.match(checkout, /catalog_mismatch/);
@@ -274,6 +277,7 @@ test("CAPPATEX uses guarded OpenAI generation and verified Shopify to Printify f
   assert.doesNotMatch(studio, /demoProducts|source: "demo"|Produktbeispiele/);
   assert.match(studio, /keine erfundenen Produkte oder Preise/);
   assert.match(envExample, /CAPPATEX_GENERATION_ENABLED=false/);
+  assert.match(envExample, /CAPPATEX_GENERATION_AUDIENCE=owner/);
   assert.match(envExample, /CAPPATEX_FULFILLMENT_ENABLED=false/);
   assert.match(envExample, /CAPPATEX_AUTO_PRODUCTION_ENABLED=false/);
 });

@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { LEGAL_VERSION } from "../../../legal-version";
+import { duplicateShopifySkus, fetchPrintifyProducts, matchShopifyProduct, uniquePrintifySkuIndex } from "../../../printify-catalog";
+import { fetchShopifyCollection, SHOPIFY_COLLECTIONS } from "../../../shopify-catalog";
 
 const CART_CREATE = `#graphql
   mutation CappatexCartCreate($input: CartInput!) {
@@ -8,14 +10,6 @@ const CART_CREATE = `#graphql
       cart { id checkoutUrl }
       userErrors { field message code }
       warnings { message code }
-    }
-  }
-`;
-
-const VARIANT_QUERY = `#graphql
-  query CappatexVariant($id: ID!) {
-    node(id: $id) {
-      ... on ProductVariant { id sku availableForSale }
     }
   }
 `;
@@ -90,34 +84,24 @@ export async function POST(request: Request) {
     "SELECT id, email, status FROM cappatex_designs WHERE id = ? AND email = ? LIMIT 1",
   ).bind(designId, user.email).first<{ id: string; email: string; status: string }>();
   if (!design) return error(404, "design_not_found", "Das Design wurde nicht gefunden. Bitte generiere die Vorschau erneut.");
+  if (design.status !== "preview_ready" && design.status !== "checkout_created") {
+    return error(409, "design_not_ready", "Das Design ist noch nicht bereit für den Checkout.");
+  }
 
   try {
-    const productResponse = await fetch(`https://api.printify.com/v1/shops/${encodeURIComponent(printifyShopId)}/products/${encodeURIComponent(printifyProductId)}.json`, {
-      headers: { Authorization: `Bearer ${printifyToken}`, Accept: "application/json" },
-      signal: AbortSignal.timeout(20_000),
-    });
-    const product = await productResponse.json().catch(() => null) as {
-      blueprint_id?: number;
-      print_provider_id?: number;
-      variants?: Array<{ id?: number; sku?: string; is_enabled?: boolean; is_available?: boolean }>;
-    } | null;
-    const printifyVariant = product?.variants?.find((variant) => variant.id === printifyVariantId && variant.is_enabled !== false && variant.is_available !== false);
-    if (!productResponse.ok || !product?.blueprint_id || !product.print_provider_id || !printifyVariant) {
-      return error(409, "variant_unavailable", "Diese Variante ist nicht mehr verfügbar. Bitte aktualisiere den Katalog.");
-    }
-
-    const variantResponse = await fetch(shopify.url, {
-      method: "POST",
-      headers: shopifyHeaders(),
-      body: JSON.stringify({ query: VARIANT_QUERY, variables: { id: shopifyVariantId } }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const variantPayload = await variantResponse.json().catch(() => null) as {
-      data?: { node?: { id?: string; sku?: string; availableForSale?: boolean } };
-      errors?: unknown[];
-    } | null;
-    const shopifyVariant = variantPayload?.data?.node;
-    if (!variantResponse.ok || variantPayload?.errors || !shopifyVariant?.availableForSale || !printifyVariant.sku || shopifyVariant.sku !== printifyVariant.sku) {
+    const [catalog, printifyProducts] = await Promise.all([
+      fetchShopifyCollection(SHOPIFY_COLLECTIONS.cappatex),
+      fetchPrintifyProducts(printifyToken, printifyShopId),
+    ]);
+    const skuIndex = uniquePrintifySkuIndex(printifyProducts);
+    const duplicateSkus = duplicateShopifySkus(catalog.products);
+    const matched = catalog.products
+      .map((product) => matchShopifyProduct(product, skuIndex, duplicateSkus))
+      .find(({ matches }) => matches.some(({ shopify }) => shopify.id === shopifyVariantId));
+    const selected = matched?.matches.find(({ shopify }) => shopify.id === shopifyVariantId);
+    const product = matched?.product;
+    if (!selected?.shopify.available || !selected.printify || !product?.id
+      || product.id !== printifyProductId || selected.printify.variant.id !== printifyVariantId) {
       return error(409, "catalog_mismatch", "Die gewählte Variante konnte nicht bestätigt werden. Bitte aktualisiere den Katalog.");
     }
 

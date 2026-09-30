@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
-import { accountCapabilities, chargeTokens, ensureAccount, hasUnlimitedTokens } from "../../../db/account";
+import { accountCapabilities, chargeTokens, ensureAccount, getTokenBalance, hasUnlimitedTokens } from "../../../db/account";
+import { generationAccess } from "../../cappatex-generation-access";
 
-const PRODUCTS = new Set(["tshirt", "socks", "poster", "notebook", "underwear"]);
+const PRODUCTS = new Set(["tshirt", "hoodie", "cap", "case", "swimwear", "socks", "poster", "notebook", "underwear"]);
 const STYLES = new Set(["Minimal", "Illustrativ", "Retro", "Streetwear"]);
 const OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations";
 const MAX_REQUEST_BYTES = 4_000;
@@ -126,6 +127,17 @@ export async function POST(request: Request) {
   if (process.env.CAPPATEX_GENERATION_ENABLED !== "true") {
     return clientError(503, "generation_disabled", "Der Bildgenerator wartet noch auf die Freigabe des Shopbetreibers.");
   }
+  const access = generationAccess(
+    user.email,
+    process.env.CAPPATEX_GENERATION_AUDIENCE,
+    process.env.CAPPATEX_GENERATION_ALLOWED_EMAILS,
+  );
+  if (!access.allowed) {
+    if (access.reason === "owner_only") {
+      return clientError(403, "owner_only", "Die Bildgenerierung ist während der Testphase nur für den Betreiberaccount freigeschaltet.");
+    }
+    return clientError(503, "generation_access_not_configured", "Die Zugriffsfreigabe für den Bildgenerator ist noch nicht vollständig eingerichtet.");
+  }
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     return clientError(503, "openai_not_configured", "Der Bildgenerator ist noch nicht vollständig eingerichtet.");
@@ -136,10 +148,10 @@ export async function POST(request: Request) {
   const createdAt = Date.now();
   try {
     const account = await ensureAccount(user.email, user.fullName);
-    if (!accountCapabilities(account).canUseCappatex) {
+    if (!access.pilotOwner && !accountCapabilities(account).canUseCappatex) {
       return clientError(403, "plan_required", "CAPPATEX ist im CAPPATEX- oder Complete-Abo enthalten.");
     }
-    if (!hasUnlimitedTokens(user.email) && account.tokenBalance < 1) {
+    if (!access.pilotOwner && !hasUnlimitedTokens(user.email) && account.tokenBalance < 1) {
       return clientError(402, "insufficient_tokens", "Für eine CAPPATEX Motivvorschau brauchst du 1 Design-Token.");
     }
     await env.DB.prepare(
@@ -187,7 +199,9 @@ export async function POST(request: Request) {
     await env.DB.prepare(
       "UPDATE cappatex_designs SET preview_base64 = ?, status = 'preview_ready', updated_at = ? WHERE id = ? AND email = ?",
     ).bind(encoded, Date.now(), designId, user.email).run();
-    const tokenBalance = await chargeTokens(user.email, 1, "CAPPATEX Motivvorschau");
+    const tokenBalance = access.pilotOwner
+      ? await getTokenBalance(user.email)
+      : await chargeTokens(user.email, 1, "CAPPATEX Motivvorschau");
 
     return Response.json({
       image: `data:image/webp;base64,${encoded}`,
