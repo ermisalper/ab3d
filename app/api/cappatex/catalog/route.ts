@@ -1,19 +1,5 @@
 import { fetchShopifyCollection, SHOPIFY_COLLECTIONS } from "../../../shopify-catalog";
-
-type PrintifyVariant = {
-  id?: number;
-  sku?: string;
-  is_enabled?: boolean;
-  is_available?: boolean;
-};
-
-type PrintifyProduct = {
-  id?: string;
-  blueprint_id?: number;
-  print_provider_id?: number;
-  variants?: PrintifyVariant[];
-  visible?: boolean;
-};
+import { duplicateShopifySkus, fetchPrintifyProducts, matchShopifyProduct, uniquePrintifySkuIndex, type PrintifyProduct } from "../../../printify-catalog";
 
 function productKind(title = "", category = "") {
   const value = `${title} ${category}`.toLowerCase();
@@ -26,16 +12,6 @@ function productKind(title = "", category = "") {
   if (/notebook|notiz/.test(value)) return "notebook";
   if (/underwear|brief|boxer|unterwäsche/.test(value)) return "underwear";
   return "tshirt";
-}
-
-async function fetchPrintifyProducts(token: string, shopId: string) {
-  const response = await fetch(`https://api.printify.com/v1/shops/${encodeURIComponent(shopId)}/products.json?limit=50`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    signal: AbortSignal.timeout(20_000),
-  });
-  const payload = await response.json().catch(() => null) as { data?: PrintifyProduct[] } | null;
-  if (!response.ok) throw new Error(`printify_http_${response.status}`);
-  return (payload?.data || []).filter((product) => product.visible !== false);
 }
 
 export async function GET() {
@@ -55,22 +31,11 @@ export async function GET() {
       }
     }
 
-    const printifyVariantBySku = new Map<string, { product: PrintifyProduct; variant: PrintifyVariant }>();
-    for (const product of printifyProducts) {
-      for (const variant of product.variants || []) {
-        const sku = variant.sku?.trim();
-        if (sku && variant.id && variant.is_enabled !== false && variant.is_available !== false) {
-          printifyVariantBySku.set(sku, { product, variant });
-        }
-      }
-    }
+    const printifyVariantBySku = uniquePrintifySkuIndex(printifyProducts);
+    const duplicateSkus = duplicateShopifySkus(catalog.products);
 
     const products = catalog.products.map((product) => {
-      const matches = product.variants.map((variant) => ({
-        shopify: variant,
-        printify: variant.sku ? printifyVariantBySku.get(variant.sku) : undefined,
-      }));
-      const printifyProduct = matches.find((match) => match.printify)?.printify?.product;
+      const { matches, product: printifyProduct } = matchShopifyProduct(product, printifyVariantBySku, duplicateSkus);
       return {
         id: product.handle,
         shopifyProductId: product.shopifyId,
@@ -91,7 +56,7 @@ export async function GET() {
           sku: shopify.sku,
           title: shopify.title,
           available: shopify.available,
-          fulfillmentReady: Boolean(printify?.variant.id && printifyProduct?.id),
+          fulfillmentReady: Boolean(shopify.available && printify?.variant.id && printifyProduct?.id),
           price: { amount: shopify.price.toFixed(2), currencyCode: shopify.currency },
         })),
       };
@@ -104,8 +69,10 @@ export async function GET() {
       fulfillmentConfigured,
       products,
       message: fulfillmentConfigured
-        ? `${products.length} Shopify-Produkte sind live und mit Printify abgeglichen.`
-        : `${products.length} Shopify-Produkte sind live. Die Printify-Varianten werden noch verknüpft.`,
+        ? `${products.length} Shopify-Produkte sind live. Verfügbare Varianten wurden per eindeutiger SKU mit Printify abgeglichen.`
+        : printifyConnected && printifyProducts.length === 0
+          ? `${products.length} Shopify-Produkte sind live. Im verbundenen Printify-Shop sind noch keine Produkte vorhanden.`
+          : `${products.length} Shopify-Produkte sind live. Es gibt noch keine eindeutige SKU-Zuordnung zu Printify.`,
     }, {
       headers: { "Cache-Control": "public, max-age=30, s-maxage=60, stale-while-revalidate=300" },
     });
