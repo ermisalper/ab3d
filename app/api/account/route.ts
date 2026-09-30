@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { accountCapabilities, ensureAccount, hasUnlimitedTokens, isOwnerEmail } from "../../../db/account";
+import { generationAccess } from "../../cappatex-generation-access";
 
 const PLANS = new Set(["3d-studio", "cappatex", "complete"]);
 
@@ -10,6 +11,11 @@ export async function GET() {
 
   try {
     const account = await ensureAccount(user.email, user.fullName);
+    const generation = generationAccess(
+      user.email,
+      process.env.CAPPATEX_GENERATION_AUDIENCE,
+      process.env.CAPPATEX_GENERATION_ALLOWED_EMAILS,
+    );
     return Response.json({
       account: {
         ...account,
@@ -17,6 +23,12 @@ export async function GET() {
         unlimited: hasUnlimitedTokens(user.email),
         capabilities: accountCapabilities(account),
         isOwner: isOwnerEmail(user.email),
+        cappatexGeneration: {
+          enabled: generation.allowed
+            && process.env.CAPPATEX_GENERATION_ENABLED === "true"
+            && Boolean(process.env.OPENAI_API_KEY?.trim()),
+          pilotOwner: generation.allowed && generation.pilotOwner,
+        },
       },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch {

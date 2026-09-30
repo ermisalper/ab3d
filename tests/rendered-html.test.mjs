@@ -272,6 +272,7 @@ test("CAPPATEX uses guarded OpenAI generation and verified Shopify to Printify f
 
   assert.match(studio, /\/api\/cappatex\/catalog/);
   assert.match(studio, /\/api\/cappatex\/checkout/);
+  assert.match(studio, /Betreiber-Testphase: keine Design-Token/);
   assert.match(studio, /Zahlung sicher öffnen/);
   assert.doesNotMatch(studio, /Powered by Meshy|Was soll Meshy/);
   assert.doesNotMatch(studio, /demoProducts|source: "demo"|Produktbeispiele/);
