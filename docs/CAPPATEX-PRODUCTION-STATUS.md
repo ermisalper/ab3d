@@ -1,10 +1,38 @@
 # CAPPATEX: geprüfter Arbeitsstand, 09.10.2026
 
-Ausschliesslich AB3D unter C:\Users\berk1\OneDrive\Desktop\ab3d; GitHub ermisalper/ab3d, Branch codex/cappatex-production. Das Abnahmekriterium ist **noch nicht erfüllt**. Dieser Stand ist keine Verkaufsfreigabe.
+Ausschliesslich AB3D unter C:\Users\berk1\OneDrive\Desktop\ab3d; GitHub ermisalper/ab3d, Branch codex/cappatex-production. Der aktuelle private Generator-/Upload-Pilot ist veröffentlicht. Das Abnahmekriterium für Verkauf und Fulfillment ist **noch nicht erfüllt**; dieser Stand ist keine Verkaufsfreigabe.
+
+## Aktuell am 09.10.2026: privater Generator-/Upload-Pilot, Version 36
+
+Die native Sites-Rückmeldung bestätigt **Deployment succeeded** und **Version 36**. Der neue Designer ist unter [AB3D CAPPATEX](https://ab3d-swiss-design.berk-ermis.chatgpt.site/cappatex) live; die Site bleibt **ausschliesslich für den Betreiber zugänglich**. Die Live-Oberfläche mit der zusätzlichen Kostenbestätigung vor einer Generierung wurde geprüft. Daraus folgt noch kein Nachweis einer tatsächlich ausgeführten Bildgenerierung.
+
+| Nachweis | Bestätigter Wert |
+| --- | --- |
+| Site | `https://ab3d-swiss-design.berk-ermis.chatgpt.site` |
+| Veröffentlichter Quellstand | `e07c78f730df07d1c5e7e4125f7484a7f7a9f907` |
+| Gespeicherte Version | `appgprj_6a69247390f08191811183b6a04bae94~appgver_35ce16f713f08191925d10b7ba5ea7e4` |
+| Deployment | `appgdep_6ac930be43188191844c2570e2c54caf` |
+| Produktionskonfiguration | Revision **10** |
+
+Der frühere Secret-Importblocker ist behoben: Nach separater Betreiberfreigabe wurde der bereits vorhandene lokale `OPENAI_API_KEY` über **Sites → Weitere Aktionen → Einstellungen → Umgebungsvariablen → Variable hinzufügen** als **Geheim** gespeichert. Der Schlüssel wurde ausschliesslich im Speicher an das Passwortfeld übergeben; sein Wert wurde nicht ausgegeben. Das native Lesen der Umgebung bestätigte `is_secret=true` und Revision 10. Es wurde kein neuer Schlüssel angelegt. Die lokale `.env.local` bleibt ignoriert und gehört nicht zum veröffentlichten Paket.
+
+Für diesen Betreiber-Pilot gelten `CAPPATEX_GENERATION_ENABLED=true`, `CAPPATEX_UPLOAD_ENABLED=true` und `CAPPATEX_GENERATION_AUDIENCE=owner`. `CAPPATEX_CHECKOUT_ENABLED`, `CAPPATEX_FULFILLMENT_ENABLED`, `CAPPATEX_AUTO_PRODUCTION_ENABLED` und `OPENAI_ASSISTANT_ENABLED` bleiben **false**. Die eingeschaltete Generatorfunktion ist keine Freigabe für einen kostenpflichtigen Aufruf durch den Agenten: Die gesonderte Zustimmung für einen echten Test mit höchstens **USD 1** steht noch aus. Es wurde noch keine echte Generierung, Bestellung oder Produktion ausgelöst.
+
+**Validierung des veröffentlichten Quellstands:** 86 Tests, Lint, TypeScript-Prüfung und Produktionsbuild bestanden. Der Sites-Quellhelfer hat den Quellstand erfolgreich gepusht. Sein Paketierungsschritt scheiterte unter Windows an fehlendem Bash; das offizielle `prepare-site-build.cjs` und Windows-`tar` erzeugten anschliessend das Paket desselben Quellstands mit **94 Dateien**, ohne Secret-Dateien. Die erfolgreiche native Veröffentlichung bestätigt die Annahme dieses Pakets.
+
+Die Produktionsdatenbank enthält laut nativer Übersicht inzwischen `cappatex_snapshots`, `cappatex_fulfillments` und `cappatex_fulfillment_lines`. Das native Lesen der Live-D1-Datenbank bestätigt in `cappatex_designs` die Spalten `artwork_key`, `artwork_sha256`, `artwork_width`, `artwork_height`, `token_reserved`, `token_refunded`, `preview_key` und `preview_sha256` sowie in `cappatex_fulfillment_lines` die Spalten `printify_product_id` und `printify_image_id`. Damit sind diese erwarteten Schemaergänzungen im veröffentlichten System nachgewiesen. Beide gelesenen Tabellen sind leer; eine tatsächliche Generierung oder Auftragsverarbeitung wurde nicht ausgeführt.
+
+**Der Live-Upload bleibt ungeprüft.** Der dokumentierte Browseraufruf `FileChooser.setFiles` kehrte zurück, übernahm die ausgewählte Datei jedoch nicht in das HTML-Dateieingabefeld. Die Oberfläche blieb unverändert, die Browserkonsole zeigte keine Fehler. Deshalb wurde kein Upload abgesendet; Speicherung und R2-Verarbeitung sind noch nicht Ende-zu-Ende bestätigt. Aus dieser Einschränkung der automatisierten Dateiauswahl lässt sich kein Produktfehler ableiten. Für den kostenfreien Live-Uploadtest muss der Betreiber die Datei selbst auswählen. Die Live-Oberfläche steht inzwischen auf **Mit KI gestalten** bereit; die gesonderte Kostenfreigabe bleibt unbeantwortet und es erfolgte kein OpenAI-Aufruf.
+
+Für Verkauf und Fulfillment bleiben insbesondere die leere Profilfreigabeliste, die Pflichtetikett-Verträglichkeit von OPT OnDemand, der Nachweis eines einzigen Bestellwegs, Produktions-Schreibrechte, Webhookzustellung sowie Shopify-Tarif/Preise/CH-/LI-Checkout offen. Die nachfolgende Historie beschreibt die bisherigen Befunde und begründet diese Sperren. Die dort früher genannten fehlenden Produktions-Secrets, ausgeschalteten Generator-/Upload-Schalter und private Version 35 sind durch den aktuellen Abschnitt abgelöst.
+
+## Historie vor dem privaten Deployment von Version 36
+
+Die folgenden Abschnitte einschliesslich der damaligen Fortsetzung dokumentieren den Stand **vor** dem oben bestätigten Deployment. Zeitabhängige Angaben zu Site-Version, Produktions-Secrets, Schaltern und Migrationen sind historische Prüfbefunde; der aktuelle Stand steht ausschliesslich im Abschnitt oben.
 
 Die Implementierung baut auf Commit `b46cf72` mit 36 bestandenen Tests auf. Die Fortsetzung der Upload- und Bestellarbeiten begann auf dem bereits gesicherten Commit `1793285`; der nachfolgende Codeprüfstand `97064aa` bestand mit 76 Tests. Die heute ergänzten Upload-, Kosten- und Warenkorbprüfungen sind unten gesondert dokumentiert. Der neue Ablauf ist **lokal vorbereitet und mit synthetischen Daten geprüft**, noch nicht als funktionierender Verkaufskanal veröffentlicht. Anschliessend wurden die ersten unveröffentlichten Printify-/Shopify-Blanko-Entwürfe angelegt; diese Kontoarbeit änderte keinen Laufzeitcode. Die Konto- und Anbieterprüfungen ersetzen keinen vollständigen Bestelltest.
 
-## Tatsächlich geprüft
+### Tatsächlich geprüft
 
 Am 08.10. über Shopify und die eingebettete Printify-App:
 
@@ -17,7 +45,7 @@ Am 08.10. über Shopify und die eingebettete Printify-App:
 
 Am 09.10. erneut in der eingebetteten Printify-App bestätigt: Der Shopify-Shop `1hagfh-b0.myshopify.com` ist mit dem Printify-Shop **CAPPATEX, 23104859** verbunden. Bei dieser ersten Tagesprüfung war „My Products“ noch leer. Später am selben Tag wurden ein Printify-Blanko-Entwurf gespeichert und ein separater Shopify-Entwurf manuell angelegt; keine native Produktsynchronisierung oder Veröffentlichung wurde ausgelöst. Die Auftrags- und Routing-Einstellungen oben stammen aus der Prüfung vom 08.10.; die folgenden Berechtigungs-, Markt- und Versandangaben wurden am 09.10. erneut geprüft.
 
-### Berechtigungen, Märkte und Versand – Prüfung vom 09.10.
+#### Berechtigungen, Märkte und Versand – Prüfung vom 09.10.
 
 - Die Shopify-App **Printify** ist seit **28.06.2025** installiert. Die Berechtigungsmatrix zeigt **Anzeigen und Bearbeiten** für Produkte, Bestellungen, benutzerdefinierte Daten, Onlineshop und sonstige Daten. Es war keine neue Berechtigungsanforderung der App sichtbar. Diese Shopify-App-Rechte belegen nicht die Scopes des separaten Printify-API-Tokens.
 - Bei der anfänglichen Prüfung unter Printify **Connections** war ein Token namens **AB3D CAPPATEX Production** aufgeführt; dieser Schlüssel wurde nicht aufgedeckt oder geändert. Später am 09.10. wurde nach tatsächlicher Betreiberfreigabe der separate Token **CAPPATEX Katalogprüfung** mit ausschliesslich `shops.read`, `catalog.read` und `products.read` angelegt und sicher lokal hinterlegt. Die Liste bestätigte danach zwei Tokens. Der Produktionstoken blieb unverändert.
@@ -26,7 +54,7 @@ Am 09.10. erneut in der eingebetteten Printify-App bestätigt: Der Shopify-Shop 
 - Der Shopify-Tarif ist weiterhin **Pause and Build**. Der Markt **Schweiz** ist aktiv, **Liechtenstein** bleibt im Entwurf. Im allgemeinen Versandprofil besitzt die LI-Zone keinen Tarif.
 - In Shopify sind fünf vorhandene Printify-Versandprofile sichtbar, darunter **kein Profil für OPT OnDemand / Provider 30**. Die Schweizer Standardversandstaffel reicht von **CHF 0 bis CHF 9**. Diese bestehenden Shopify-Tarife belegen noch keine korrekte Abdeckung oder Kalkulation für die neuen Blanko-Artikel; die Shopify-Konfiguration bleibt trotz des inzwischen bestätigten Anbieterversands offen.
 
-### Erster Blanko-Entwurf – gespeichert, noch nicht freigegeben
+#### Erster Blanko-Entwurf – gespeichert, noch nicht freigegeben
 
 Am 09.10. geprüft: **Gildan 64000**, Blueprint **145**, Anbieter **OPT OnDemand**, Provider-ID **30**, Druckverfahren **DTG**. Die Anbieterübersicht nennt Standorte in Tschechien und Deutschland sowie eine Bewertung von **9,3**.
 
@@ -57,7 +85,7 @@ Die zusätzlich gemeldete Nacken-DTF-Ebene `text_layer.svg` wurde in der Oberfl�
 
 Die vollständige Tabelle mit SKUs, bestätigten Shopify-GIDs und Printify-API-IDs sowie Editor-, Etikett- und Bildnachweisen steht in [CAPPATEX-FIRST-BLANK.md](CAPPATEX-FIRST-BLANK.md). Die IDs stammen aus dem API-/Oberflächenabgleich, nicht aus einer Interpretation der Mockup-URLs. Die in Printify angezeigten Retail-Vorgaben sind nicht genehmigt; „USD 0 Versand“ in der Oberfläche wurde nicht als Anbieternachweis verwendet. **Die Profilfreigabeliste bleibt leer.**
 
-## Implementierung
+### Implementierung
 
 - Normale Shopify-Kollektion: cappatex. Individuelle Blankos: cappatex-selbst-gestalten plus explizite Freigabe in app/cappatex-profiles.ts. **Diese Freigabeliste ist leer.**
 - Druckprofile enthalten Shop-/Produkt-/Anbieter-/Varianten-IDs, eindeutige SKU, Optionen, Verfahren, Druckfläche in Pixel/mm, DPI, Skalierung, echtes Fotorechteck, CH-/LI-Versandnachweis und Ablaufdatum. Katalog und Checkout prüfen aktuelle Anbieter- und Shopify-Daten erneut. Fehlende, mehrdeutige, abgelaufene oder widersprüchliche Angaben sperren das Produkt.
@@ -71,7 +99,7 @@ Die vollständige Tabelle mit SKUs, bestätigten Shopify-GIDs und Printify-API-I
 - Die tatsächliche Shopify-Antwort wird vor Ausgabe des Checkout-Links gegen den Snapshot geprüft: Varianten-ID, Menge, Währung, Einzelpreis, Positions-Zwischensumme, Positions-Gesamtpreis und Referenzattribute. Warnungen, Abweichungen oder Rabatte sperren die Freigabe des Warenkorbs. Nachträglich in Shopify hinzugefügte Positionsrabatte führen bei Zahlung zur manuellen Prüfung statt zu einem automatisch angelegten Printify-Auftrag. Eine reale Shopify-Checkout- oder Steuer-/Versandabnahme ist damit noch nicht belegt.
 - Shop-Assistent und Produktplaner benötigen zusätzlich `OPENAI_ASSISTANT_ENABLED=true`, bevor ihre bestehenden Responses-API-Aufrufe ausgeführt werden. Ohne diese gesonderte Kostenfreigabe bleiben beide bei ihren kostenfreien Antworten beziehungsweise Produktregeln, auch wenn ein OpenAI-Schlüssel vorhanden ist. CAPPATEX-Flags erteilen diese Freigabe nicht.
 
-## Einziger Weg für individuelle Artikel: AB3D → Printify API
+### Einziger Weg für individuelle Artikel: AB3D → Printify API
 
 Die Shopify-Blanko-Varianten müssen vor Freigabe nachweislich vom nativen Printify-Bestellimport getrennt sein. Der manuelle Shopify-Entwurf und der unveröffentlichte Printify-Entwurf allein beweisen das noch nicht. Bislang ist nur ein auftragsbezogenes natives Unlink-Verfahren belegt; ohne gesonderte Bestellfreigabe wurde hierfür kein Auftrag angelegt. Eine mögliche Trennung über einen eigenen API-Shop ist **nicht implementiert**. Die bestehende fertige Kollektion wird nicht umgestellt. Shopify-Fulfillment-Requests dürfen die manuelle Prüfung nicht umgehen; Fulfillment bleibt gesperrt, bis der einzige Bestellweg tatsächlich verifiziert ist.
 
@@ -91,7 +119,7 @@ Die [offizielle Printify-Anleitung zur Token-Erstellung](https://help.printify.c
 
 Nach unklarer Entwurfserstellung können verwaiste Entwürfe entstehen. Bei creating/manual_review Shopify-Auftrag, Snapshot, gespeicherte IDs und Printify-Auftragsliste anhand external_id manuell abgleichen. Nie blind auf pending zurücksetzen. Geänderte Bestelldaten sperren noch nicht gestartete Aufträge und hinterlassen einen Konfliktvermerk.
 
-## Schlüssel und Produktionsvoraussetzungen
+### Schlüssel und Produktionsvoraussetzungen
 
 - OpenAI-Schlüssel erst nach **tatsächlich genehmigter separater Speicherortfreigabe** erstellt, ausschliesslich als OPENAI_API_KEY in der ignorierten AB3D-.env.local gespeichert. Frühere „not approved“-Antworten nicht umgangen. Keine echte Bildgenerierung ausgeführt.
 - Produktions-OPENAI_API_KEY fehlt. Die verfügbaren Sites-Werkzeuge bieten keinen belegten Import aus der lokalen Secret-Datei; der Schlüssel wurde nicht für den Transfer im Chat/Tool-Ausgaben offengelegt. Sicheren Secret-Eingabekanal bereitstellen; niemals Schlüssel im Chat anfordern.
@@ -100,7 +128,7 @@ Nach unklarer Entwurfserstellung können verwaiste Entwürfe entstehen. Bei crea
 - `SHOPIFY_WEBHOOK_SECRET` und die tatsächliche Registrierung des `orders/paid`-Webhooks bleiben offen. Ein nicht authentifizierter **GET** auf die Live-Route `/api/cappatex/webhooks/shopify` lieferte am 09.10. **401**. Es wurde kein POST, Webhook-Testauftrag oder Kauf ausgelöst. Diese Beobachtung bestätigt die Zugriffssperre, aber keinen funktionsfähigen Webhooktransport: Shopify-HMAC ersetzt nicht die Sites-Zugangsberechtigung für Serveraufrufe. Für die private Site ist weiterhin eine unterstützte Zustellung nachzuweisen; die Zielgruppe wurde nicht geändert. Storefront-Token optional; sein Vorhandensein allein beweist keinen funktionierenden Checkout.
 - R2 BUCKET und D1-Migrationen 0005–0008 vorbereitet, nicht produktiv angewandt. Migration 0006 erhält bei alten unklaren Generierungen eine Sperre pro Konto; zusätzliche Altversuche erhalten generation_legacy_review. Vor neuen kostenpflichtigen Aufrufen abgleichen.
 
-## Kostenfreie Validierung
+### Kostenfreie Validierung
 
 - TypeScript und Lint bestanden. Der direkte Produktionsbuild mit pnpm war erfolgreich; ein vorheriger Startversuch über das Sites-Hilfsskript scheiterte am Windows-Prozessstart, nicht an einem nachgewiesenen Codefehler. Der Build enthält bestehende Hinweise zu Bundlegrösse/Routenklassifikation. Er wurde nicht veröffentlicht.
 - Der Gesamtlauf des früheren Codestands **`97064aa`** bestand mit **76 von 76 Tests**, ohne übersprungene Tests. Die abschliessende Runde einschliesslich der Hintergrundkorrektur bestand mit **81 von 81 Tests über `pnpm test` einschliesslich Build**; auch `pnpm lint` und `pnpm exec tsc --noEmit` bestanden. Fünf neue Regressionstests prüfen die unterschiedlichen S-/M-/L+-Druckflächen, DPI-Sperren, physische Motivgrösse und Variantenauswahl. Der Produktionsentwurf akzeptiert als Hintergrund nur fehlend, `null` oder den tatsächlich auditierten Wert `transparent`; Farbfüllungen und unbekannte Werte werden vor Auftragsanlage abgelehnt. Die Suite deckt ausserdem SKU-Ambiguitäten, Auflösung/Clipping, Profile, HMAC, Manipulation und Rabatte bezahlter Positionen, Tokenreservierung/Rückerstattung, Altdatenmigration, konkurrierende Webhooks, unklare API-Ergebnisse, Snapshot-Isolation und Originalbildbindung ab. Der abschliessende Secret-Scan fand beide lokalen Schlüssel weder in 311 geprüften Quell-/Builddateien noch in zur Versionierung vorgesehenen Dateien; `.env.local` bleibt ignoriert. Weder diese Tests noch die UI-Entwurfsanlage belegen reale Bestell-/Druckabnahme oder die noch fehlende Pflichtetikett-Verträglichkeit.
@@ -109,7 +137,7 @@ Nach unklarer Entwurfserstellung können verwaiste Entwürfe entstehen. Bei crea
 - PNG-Tests: unveränderte Originalbytes, Seitenverhältnis, transparente Kanten, deterministische Ausgabe, Ablehnung ungültiger Dateien. Lokaler Cloudflare-Worker verarbeitete synthetische 2048 × 3072 px / 3.10 MB zu 512 × 768 px in 319 ms. Kein Produktionslasttest.
 - Drei aktuelle Browserprüfungen bestätigen die Kundenbild-Normalisierung hinsichtlich Ausrichtung, Farben und Alphakanal. Die neue Bildoberfläche wurde auf dem Desktop ohne Konsolenfehler geprüft. Der frühere Stand wurde auch bei 390 px geprüft: Aufbau, Eingabe, Formatauswahl, echte fertige Kollektion und gesperrte Aktionen. Diese lokalen Prüfungen bestätigen weder reale Druckqualität noch die massstäbliche Platzierung auf einem tatsächlich freigegebenen Blanko. Echte Bildgenerierung, Shopify-Checkout, Versand und Printify-Fulfillment sind **nicht Ende-zu-Ende bestätigt**.
 
-## Fortsetzung
+### Damals geplante Fortsetzung
 
 1. Die bestätigten zehn SKU-/Shopify-/Printify-Zuordnungen und API-Druckflächen zu einem geprüften Frontprofil je Variante zusammenführen: physische Geometrie, Mindestauflösung, Skalierung und Fotorechteck belegen. Den Pflichtetikett-Blocker im API-Entwurf mit exakter Inhalts-/Layout-Vorgabe, Fingerprint und bestätigter Anbieterantwort beheben; Zusatzebenen nicht pauschal zulassen. Verfügbarkeit vor Freigabe erneut prüfen.
 2. Genehmigte Preise und die nachgewiesene Trennung vom nativen Printify-Bestellimport vorbereiten. Die sechs für Produktion erforderlichen Printify-Scopes einschliesslich `products.write` sicher bestätigen beziehungsweise konfigurieren; der lokale Lesetoken reicht hierfür nicht. Beide Entwürfe und die neue Shopify-Kollektion bis zur vollständigen Prüfung unveröffentlicht lassen.
