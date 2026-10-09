@@ -2,7 +2,21 @@
 
 Ausschliesslich AB3D unter C:\Users\berk1\OneDrive\Desktop\ab3d; GitHub ermisalper/ab3d, Branch codex/cappatex-production. Der aktuelle private Generator-/Upload-Pilot ist veröffentlicht. Das Abnahmekriterium für Verkauf und Fulfillment ist **noch nicht erfüllt**; dieser Stand ist keine Verkaufsfreigabe.
 
-## Aktuell am 09.10.2026: privater Generator-/Upload-Pilot, Version 38
+## Aktuell am 09.10.2026: Blanko-Gestaltung live, Version 39
+
+Die private Site wurde erfolgreich aus Commit **`d99cf2075e7bee7d6302d1ce93cd03fe1324b1a0`** veröffentlicht: Version `appgprj_6a69247390f08191811183b6a04bae94~appgver_4c1fcbbf041c8191af2710f661f3f969`, Deployment `appgdep_6ac942453a508191ba8c42ced5c10323`, bestätigt `2026-10-09T19:37:00.685881Z`, Konfigurationsrevision weiterhin **10**. Quellstand auf GitHub `codex/cappatex-production` gesichert. Das Paket enthielt keine der lokalen OpenAI-/Printify-Schlüssel.
+
+**Im veröffentlichten Browser erfolgreich geprüft:** Das bereits vorhandene Motiv `CPX-A3EBF595EF42` wird ohne neue Generierung geladen und auf dem echten Gildan-64000-Blankofoto gezeigt. Der Betreiberkatalog enthält White/Black, jeweils S/M/L/XL/2XL. Beide Anbieterfotos sind unabhängig kalibriert; siehe [Messnachweis](CAPPATEX-MOCKUP-CALIBRATION.md). Die geladenen Fotos besitzen tatsächlich 1200 × 1200 Pixel, die unveränderte Motivvorschau 512 × 512 Pixel.
+
+Der Wechsel White/S → Black/L erhält die Platzierung und zeigt korrekt die reduzierte Auflösung von 247 DPI. Nach manueller Verkleinerung auf 48 % zeigt die Oberfläche 304 DPI und 171 × 171 mm. Horizontale Position 0,46, vertikale Position 0,40, Menge 2 und Lieferland LI wurden über die tatsächlichen Bedienelemente eingestellt. Nach Neuladen bleiben Motiv, Black/L und alle diese Werte exakt erhalten. Der neue Browser-Tab meldet keine Konsolenfehler. [Sichtnachweis](../outputs/cappatex-v39-blanko-live-black.jpg).
+
+Die zuvor bereits geöffnete Browseransicht hatte unmittelbar nach dem Deployment noch einen veralteten JavaScript-Modulverweis. Ein neu geöffneter Tab und dessen anschliessender Reload verwenden die neue Version erfolgreich. Für den Test die [Gestaltung mit gespeichertem Motiv neu öffnen](https://ab3d-swiss-design.berk-ermis.chatgpt.site/cappatex?designId=CPX-A3EBF595EF42#studio).
+
+**118 Tests, TypeScript-Prüfung, Lint und Produktionsbuild bestanden.** Geprüft sind insbesondere Betreiberzugriff, echte Varianten-/Fotozuordnung, geometrische Grenzen, Auflösung, Wiederherstellung, unveränderte Verkaufsprüfungen sowie Idempotenz mit simulierten Bestellungen. Für diesen Schritt entstanden keine weiteren KI-Aufrufe und keine Aufträge. Die Printify-Messvorlage wurde rückgängig gemacht; das gespeicherte Blanko blieb unverändert.
+
+**Weiterhin offen:** Live-Upload einer vom Betreiber ausgewählten Datei, genehmigte Verkaufspreise und Shopify-CH-/LI-Versandtarife, Freigabe des Shopify-Tarifs, bestätigte API-Auftragsvorlage, Produktions-Schreibrechte, echte Webhookzustellung und der Nachweis eines einzigen Bestellwegs ohne zusätzlichen nativen Printify-Import. Die innere Nackenetikett-Vorgabe ist nur für einen solchen zusätzlichen Druck belegt; sie ist kein Beleg für eine allgemeine Nackendruckpflicht bei diesem Frontmotiv. Gestaltungskandidaten bleiben `purchaseReady=false`, `price=null`; Checkout/Fulfillment/automatische Produktion bleiben deaktiviert. Die Site ist weiterhin nur für den Betreiber freigegeben. Sie ist zum privaten Gestaltungstest, **noch nicht zum Verkaufsstart**, bereit.
+
+## Vorheriger Generator-Nachweis: Version 38
 
 Die native Sites-Rückmeldung bestätigt **Deployment succeeded, Version 38**. Der Designer unter [AB3D CAPPATEX](https://ab3d-swiss-design.berk-ermis.chatgpt.site/cappatex) bleibt **ausschliesslich für den Betreiber zugänglich**. Ein echter Browser-Test hat die Bildgenerierung, das Laden der Vorschau und den Download des unveränderten transparenten Original-PNG erfolgreich bestätigt.
 
