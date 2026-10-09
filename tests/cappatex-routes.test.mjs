@@ -26,17 +26,19 @@ const profile = { id: "local-route-fixture", version: "fixture-v1", verifiedAt: 
   fulfillment: { route: "ab3d-api", nativeImportUnlinked: true, manualApproval: true }, variants: [variant] };
 
 const runtimeKey = "__cappatexOfflineRouteTest";
-const runtime = { env: {}, profiles: [profile], actor: EMAIL };
+const runtime = { env: {}, profiles: [profile], designProfiles: [], actor: EMAIL };
 globalThis[runtimeKey] = runtime;
 const virtualSources = new Map([
   ["cloudflare:workers", `export const env = globalThis.${runtimeKey}.env;`],
   ["next/headers", `export async function headers() { const actor = globalThis.${runtimeKey}.actor; return new Headers(actor ? { "oai-authenticated-user-email": actor } : {}); }`],
   ["next/navigation", "export function redirect() { throw new Error('Unexpected redirect in route test'); }"],
   ["fixture:profiles", `export const CAPPATEX_PRINT_PROFILES = globalThis.${runtimeKey}.profiles;`],
+  ["fixture:design-profiles", `export const CAPPATEX_DESIGN_PROFILES = globalThis.${runtimeKey}.designProfiles;`],
 ]);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const key = /(?:^|\/)cappatex-profiles(?:\.ts)?$/.test(specifier) ? "fixture:profiles" : specifier;
+    const key = /(?:^|\/)cappatex-profiles(?:\.ts)?$/.test(specifier) ? "fixture:profiles"
+      : /(?:^|\/)cappatex-design-profiles(?:\.ts)?$/.test(specifier) ? "fixture:design-profiles" : specifier;
     if (virtualSources.has(key)) return { url: `offline-cappatex:${key}`, shortCircuit: true };
     if (specifier.startsWith(".") && context.parentURL?.startsWith("file:")) {
       const candidate = new URL(`${specifier}.ts`, context.parentURL);
@@ -56,6 +58,8 @@ const { POST: webhook } = await import("../app/api/cappatex/webhooks/shopify/rou
 const { POST: uploadArtwork } = await import("../app/api/cappatex/upload/route.ts");
 const { POST: generateArtwork } = await import("../app/api/cappatex/route.ts");
 const { GET: getArtwork } = await import("../app/api/cappatex/artwork/[id]/route.ts");
+const { GET: getDesignMetadata } = await import("../app/api/cappatex/designs/[id]/route.ts");
+const { GET: getDesignCatalog } = await import("../app/api/cappatex/catalog/route.ts");
 const { sha256 } = await import("../app/cappatex-artwork.ts");
 
 class MemoryD1 {
@@ -121,6 +125,7 @@ function imageBytes(red) {
 
 function templateProduct() {
   return { id: profile.printifyProductId, blueprint_id: profile.blueprintId, print_provider_id: profile.providerId,
+    visible: false, images: [{ src: variant.mockup.url, position: "front", variant_ids: [variant.printifyVariantId] }],
     variants: [{ id: variant.printifyVariantId, sku: variant.sku, price: 1750, is_enabled: true, is_available: true }] };
 }
 
@@ -171,13 +176,19 @@ function offlineFetch(fixture) {
       if (method === "GET" && url.pathname === `${root}/products.json` && url.search === "?limit=50&page=1") {
         return json({ data: [templateProduct(), ...fixture.drafts], last_page: 1 });
       }
-      if (method === "GET" && url.pathname === `${catalog}/variants.json`) return json({ variants: [{ id: variant.printifyVariantId,
+      if (method === "GET" && url.pathname === `${catalog}/variants.json`) {
+        const provider = { variants: [{ id: variant.printifyVariantId,
         options: { color: variant.color, size: variant.size }, placeholders: [{ position: area.position,
-          decoration_method: area.decorationMethod, width: area.widthPx, height: area.heightPx }] }] });
+          decoration_method: area.decorationMethod, width: area.widthPx, height: area.heightPx }] }] };
+        fixture.changeProvider?.(provider);
+        return json(provider);
+      }
       if (method === "GET" && url.pathname === `${catalog}/shipping.json`) return json({ profiles: [{
         variant_ids: [variant.printifyVariantId], countries: ["CH", "LI"],
         first_item: { cost: 100, currency: "USD" }, additional_items: { cost: 50, currency: "USD" } }] });
-      if (method === "GET" && url.pathname === `${root}/products/${profile.printifyProductId}.json`) return json(templateProduct());
+      if (method === "GET" && url.pathname === `${root}/products/${profile.printifyProductId}.json`) {
+        const product = templateProduct(); fixture.changeTemplate?.(product); return json(product);
+      }
       if (method === "POST" && url.pathname === "/v1/uploads/images.json") {
         const bytes = Uint8Array.from(Buffer.from(body.contents, "base64"));
         const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -224,6 +235,8 @@ beforeEach(() => {
   fixture = { db: new MemoryD1(), bucket: new MemoryR2(), requests: [], unexpected: [], carts: [], uploads: [], drafts: [], orders: [] };
   Object.assign(runtime.env, { DB: fixture.db, BUCKET: fixture.bucket });
   runtime.actor = EMAIL;
+  runtime.profiles.splice(0, runtime.profiles.length, profile);
+  runtime.designProfiles.splice(0);
   globalThis.fetch = offlineFetch(fixture);
   fixture.db.sqlite.prepare("INSERT INTO accounts(email,token_balance,created_at,updated_at) VALUES(?,4,?,?)").run(EMAIL, NOW, NOW);
 });
@@ -317,6 +330,11 @@ function callArtwork(id, download = false) {
     { params: Promise.resolve({ id }) });
 }
 
+function callDesignMetadata(id) {
+  return getDesignMetadata(new Request(`${APP_ORIGIN}/api/cappatex/designs/${id}`),
+    { params: Promise.resolve({ id }) });
+}
+
 function uploadRows() {
   return fixture.db.sqlite.prepare("SELECT * FROM cappatex_designs WHERE style = 'Upload' ORDER BY id").all();
 }
@@ -326,6 +344,68 @@ function assertNoTokensOrNetwork() {
   assert.equal(fixture.db.sqlite.prepare("SELECT token_balance FROM accounts WHERE email = ?").get(EMAIL).token_balance, 4);
   assert.equal(fixture.requests.length, 0);
 }
+
+describe("offline private design catalog without sales approval", { concurrency: false }, () => {
+  function previewOnly() {
+    const candidate = structuredClone(profile);
+    candidate.id = "local-preview-only";
+    delete candidate.fulfillment;
+    runtime.profiles.splice(0);
+    runtime.designProfiles.push(candidate);
+    return candidate;
+  }
+
+  test("the owner's real candidate is selectable without Shopify publication or a placeholder price", async () => {
+    const candidate = previewOnly();
+    const response = await getDesignCatalog(), body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.checkoutEnabled, false, "Even an enabled global flag cannot sell a design-only candidate");
+    assert.equal(body.products.length, 1);
+    assert.equal(body.products[0].id, candidate.id);
+    assert.equal(body.products[0].purchaseReady, false);
+    assert.match(body.products[0].blockedReason, /noch geprüft/);
+    assert.equal(body.products[0].variants[0].price, null);
+    assert.equal(body.products[0].variants[0].shopifyVariantId, variant.shopifyVariantId);
+    assert.equal(fixture.requests.length, 2);
+    assert.ok(fixture.requests.every(request => request.method === "GET" && request.url.startsWith("https://api.printify.com/")));
+  });
+
+  for (const actor of [null, "customer@example.test"]) {
+    test(`the unpublished candidate is hidden from ${actor || "anonymous users"} before provider access`, async () => {
+      previewOnly(); runtime.actor = actor;
+      process.env.CAPPATEX_GENERATION_AUDIENCE = "subscribers";
+      const response = await getDesignCatalog(), body = await response.json();
+      assert.equal(response.status, 200);
+      assert.deepEqual(body.products, []);
+      assertNoTokensOrNetwork();
+    });
+  }
+
+  for (const mismatch of ["unavailable", "geometry", "photo", "provider"]) {
+    test(`a ${mismatch} mismatch removes the candidate from the design catalog`, async () => {
+      previewOnly();
+      if (mismatch === "geometry") fixture.changeProvider = provider => { provider.variants[0].placeholders[0].width++; };
+      else fixture.changeTemplate = product => {
+        if (mismatch === "unavailable") product.variants[0].is_available = false;
+        if (mismatch === "photo") product.images[0].src = "https://example.test/changed.png";
+        if (mismatch === "provider") product.print_provider_id++;
+      };
+      const response = await getDesignCatalog(), body = await response.json();
+      assert.deepEqual(body.products, []);
+      assert.equal(body.checkoutEnabled, false);
+    });
+  }
+
+  test("a crafted checkout cannot promote the preview candidate into a paid snapshot", async () => {
+    const candidate = previewOnly(), design = await seedDesign();
+    const response = await callCheckout(design, { profileId: candidate.id, profileVersion: candidate.version });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, "catalog_mismatch");
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_snapshots").get().n, 0);
+    assert.equal(fixture.requests.length, 0);
+    assert.equal(fixture.carts.length, 0);
+  });
+});
 
 function callGeneration(canvas = "square") {
   return generateArtwork(new Request(`${APP_ORIGIN}/api/cappatex`, {
@@ -722,6 +802,64 @@ describe("offline real CAPPATEX upload and owned artwork routes", { concurrency:
     assert.equal(fixture.orders.length, 1);
     assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n, 0);
     assert.equal(fixture.db.sqlite.prepare("SELECT token_balance FROM accounts WHERE email = ?").get(EMAIL).token_balance, 4);
+  });
+});
+
+describe("offline owned design metadata restoration", { concurrency: false }, () => {
+  test("an owner restores the saved original dimensions and deterministic preview without storage writes or requests", async () => {
+    const uploaded = await (await callUpload(oddImageBytes())).json();
+    const before = fixture.db.sqlite.prepare("SELECT * FROM cappatex_designs").all();
+    const accounts = fixture.db.sqlite.prepare("SELECT * FROM accounts").all();
+    fixture.bucket.get = async () => { throw new Error("Metadata must not read image bytes"); };
+    fixture.bucket.put = async () => { throw new Error("Metadata must not write image bytes"); };
+    const response = await callDesignMetadata(uploaded.designId);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+    assert.deepEqual(await response.json(), {
+      designId: uploaded.designId, previewUrl: `/api/cappatex/artwork/${uploaded.designId}`,
+      width: 9, height: 5, previewWidth: 3, previewHeight: 2, source: "upload", canDownloadOriginal: true,
+    });
+    assert.deepEqual(fixture.db.sqlite.prepare("SELECT * FROM cappatex_designs").all(), before);
+    assert.deepEqual(fixture.db.sqlite.prepare("SELECT * FROM accounts").all(), accounts);
+    assertNoTokensOrNetwork();
+  });
+
+  test("metadata hides foreign, absent, invalid and unfinished designs and requires identity", async () => {
+    const uploaded = await (await callUpload(oddImageBytes())).json();
+    const row = uploadRows()[0];
+    runtime.actor = "another@example.test";
+    for (const id of [uploaded.designId, "CPX-ZZZZZZZZZZZZ", "invalid-id"]) {
+      const response = await callDesignMetadata(id);
+      assert.equal(response.status, 404);
+      assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+      assert.deepEqual(await response.json(), { error: "Nicht gefunden" });
+    }
+    runtime.actor = null;
+    assert.equal((await callDesignMetadata(uploaded.designId)).status, 401);
+    runtime.actor = EMAIL;
+    fixture.db.sqlite.prepare("UPDATE cappatex_designs SET status = 'upload_failed' WHERE id = ?").run(row.id);
+    assert.equal((await callDesignMetadata(uploaded.designId)).status, 404);
+    fixture.db.sqlite.prepare("UPDATE cappatex_designs SET status = 'preview_ready', preview_key = NULL WHERE id = ?").run(row.id);
+    assert.equal((await callDesignMetadata(uploaded.designId)).status, 404);
+    assertNoTokensOrNetwork();
+  });
+
+  test("restored generated artwork preserves the existing HD download entitlement without account mutation", async () => {
+    const uploaded = await (await callUpload(oddImageBytes())).json();
+    fixture.db.sqlite.prepare("UPDATE cappatex_designs SET style = 'Minimal' WHERE id = ?").run(uploaded.designId);
+    const accountBefore = fixture.db.sqlite.prepare("SELECT * FROM accounts").get();
+    let result = await (await callDesignMetadata(uploaded.designId)).json();
+    assert.equal(result.source, "generated");
+    assert.equal(result.canDownloadOriginal, false);
+    assert.deepEqual(fixture.db.sqlite.prepare("SELECT * FROM accounts").get(), accountBefore);
+    fixture.db.sqlite.prepare("UPDATE accounts SET plan = 'cappatex', subscription_status = 'active' WHERE email = ?").run(EMAIL);
+    result = await (await callDesignMetadata(uploaded.designId)).json();
+    assert.equal(result.canDownloadOriginal, true);
+    fixture.db.sqlite.prepare("UPDATE accounts SET subscription_status = 'inactive' WHERE email = ?").run(EMAIL);
+    assert.equal((await (await callDesignMetadata(uploaded.designId)).json()).canDownloadOriginal, false);
+    process.env.AB3D_UNLIMITED_EMAILS = EMAIL;
+    assert.equal((await (await callDesignMetadata(uploaded.designId)).json()).canDownloadOriginal, true);
+    assertNoTokensOrNetwork();
   });
 });
 

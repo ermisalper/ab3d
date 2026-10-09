@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { initialPlacement, placementGeometry, profileIsVerified } from "../app/cappatex-print-profile.ts";
+import { initialPlacement, placementGeometry, profileIsVerified, profileGeometryIsVerified } from "../app/cappatex-print-profile.ts";
 import { draftProductPayload, draftMatchesSnapshot } from "../app/cappatex-printify-draft.ts";
 
 // Pixel dimensions reproduce the read-only provider audit. All identities, approval
@@ -56,15 +56,36 @@ test("a fixed physical print width uses each selected size's scale and preserves
   assert.equal(scales[2], scales[3]); assert.equal(scales[3], scales[4]);
 });
 
-test("initial portrait placement fits each selected placeholder's aspect ratio", () => {
+test("initial portrait placement fits each selected placeholder and its minimum DPI", () => {
   const artwork = { width: 2048, height: 3072 };
   for (const variant of variants) {
     const placement = initialPlacement(variant.area, artwork);
     const result = placementGeometry(variant.area, artwork, placement);
-    assert.equal(result.boundsOk, true);
-    near(result.height, .7);
+    assert.equal(result.ok, true);
+    assert.ok(result.height <= .7 + 1e-9);
+    assert.ok(result.dpi >= variant.area.minDpi);
     near(result.heightMm / result.widthMm, 1.5);
   }
+});
+
+test("the real pilot's square pixel dimensions initially fit every size at 300 DPI", () => {
+  const artwork = { width: 2048, height: 2048 };
+  for (const variant of variants) {
+    const placement = initialPlacement(variant.area, artwork);
+    const result = placementGeometry(variant.area, artwork, placement);
+    assert.equal(result.ok, true);
+    assert.ok(result.dpi >= 300);
+    assert.ok(result.widthMm <= 2048 * 25.4 / 300);
+  }
+});
+
+test("geometry approval never substitutes for native unlink or shipping sales approval", () => {
+  const designProfile = { ...profile, fulfillment: undefined, variants: variants.map(variant => ({ ...variant, shipping: [] })) };
+  const now = Date.parse("2026-10-09T00:00:00Z");
+  assert.equal(profileGeometryIsVerified(designProfile, profile.shopId, now), true);
+  assert.equal(profileIsVerified(designProfile, profile.shopId, now), false);
+  const uncalibrated = { ...designProfile, variants: [{ ...variants[0], mockup: { ...variants[0].mockup, printWidth: 9999 } }] };
+  assert.equal(profileGeometryIsVerified(uncalibrated, profile.shopId, now), false);
 });
 
 test("snapshots and product drafts retain the selected size instead of the reference-size variant", () => {

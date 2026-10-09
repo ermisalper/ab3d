@@ -48,15 +48,15 @@ export type ProfileVariant = PrintProfile["variants"][number];
 export type Placement = { x: number; y: number; scale: number };
 export type ArtworkSize = { width: number; height: number };
 
-export function profileIsVerified(profile: PrintProfile, shopId: string, now = Date.now()) {
+/** Geometry approval alone grants no checkout or fulfillment access. */
+export function profileGeometryIsVerified(profile: Omit<PrintProfile, "fulfillment">, shopId: string, now = Date.now()) {
   if (profile.shopId !== shopId || !profile.id || !profile.version || !profile.evidence.length
     || !profile.printifyProductId || !Number.isInteger(profile.blueprintId) || profile.blueprintId <= 0
     || !Number.isInteger(profile.providerId) || profile.providerId <= 0
     || !/^gid:\/\/shopify\/Product\/\d+$/.test(profile.shopifyProductId)
     || !Number.isFinite(Date.parse(profile.verifiedAt)) || Date.parse(profile.verifiedAt) > now
     || !Number.isFinite(Date.parse(profile.validUntil)) || Date.parse(profile.validUntil) <= now
-    || profile.fulfillment.route !== "ab3d-api" || profile.fulfillment.nativeImportUnlinked !== true
-    || profile.fulfillment.manualApproval !== true || !profile.variants.length) return false;
+    || !profile.variants.length) return false;
   const skus = new Set<string>(), shopifyIds = new Set<string>(), printifyIds = new Set<number>();
   return profile.variants.every((variant) => {
     const { area, mockup } = variant;
@@ -71,11 +71,17 @@ export function profileIsVerified(profile: PrintProfile, shopId: string, now = D
       && mockup.url.startsWith("https://") && mockup.left >= 0 && mockup.top >= 0
       && mockup.left + mockup.printWidth <= mockup.width && mockup.top + mockup.printHeight <= mockup.height
       && Math.abs(mockup.printWidth / mockup.printHeight - area.widthPx / area.heightPx) < 0.01
-      && Math.abs((area.widthMm / area.heightMm) / (area.widthPx / area.heightPx) - 1) < 0.001
-      && ["CH", "LI"].every(country => variant.shipping.some(rate => rate.country === country && rate.method === 1
-        && /^[A-Z]{3}$/.test(rate.currency) && Number.isInteger(rate.firstCents) && rate.firstCents >= 0
-        && Number.isInteger(rate.additionalCents) && rate.additionalCents >= 0));
+      && Math.abs((area.widthMm / area.heightMm) / (area.widthPx / area.heightPx) - 1) < 0.001;
   });
+}
+
+export function profileIsVerified(profile: PrintProfile, shopId: string, now = Date.now()) {
+  return profileGeometryIsVerified(profile, shopId, now)
+    && profile.fulfillment?.route === "ab3d-api" && profile.fulfillment.nativeImportUnlinked === true
+    && profile.fulfillment.manualApproval === true
+    && profile.variants.every(variant => ["CH", "LI"].every(country => variant.shipping.some(rate => rate.country === country && rate.method === 1
+      && /^[A-Z]{3}$/.test(rate.currency) && Number.isInteger(rate.firstCents) && rate.firstCents >= 0
+      && Number.isInteger(rate.additionalCents) && rate.additionalCents >= 0)));
 }
 
 /** Printify defines scale as artwork width / placeholder width and x/y as its centre. */
@@ -98,5 +104,8 @@ export function placementGeometry(area: ProfileVariant["area"], image: ArtworkSi
 }
 
 export function initialPlacement(area: ProfileVariant["area"], image: ArtworkSize): Placement {
-  return { x: 0.5, y: 0.5, scale: Math.min(area.maxScale, 0.7, area.heightPx / area.widthPx * image.width / image.height * 0.7) };
+  const resolutionScale = Math.min(image.width * 25.4 / (area.widthMm * area.minDpi),
+    image.width * 25.4 * area.heightPx / (area.widthPx * area.heightMm * area.minDpi));
+  return { x: 0.5, y: 0.5, scale: Math.max(area.minScale, Math.min(area.maxScale, 0.7,
+    area.heightPx / area.widthPx * image.width / image.height * 0.7, resolutionScale * (1 - 1e-9))) };
 }
