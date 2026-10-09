@@ -12,6 +12,7 @@ const OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations";
 const MAX_REQUEST_BYTES = 4_000;
 const MAX_IMAGE_BYTES = 12_000_000;
 const OPENAI_TIMEOUT_MS = 150_000;
+const OPENAI_LOGGABLE_PARAMETERS = new Set(["model", "n", "size", "quality", "output_format", "background", "moderation"]);
 const OPENAI_BILLING_ERRORS = new Map([
   ["credit_balance_exhausted", "Das OpenAI-API-Guthaben ist aufgebraucht. Bitte prüfe die API-Abrechnung des verbundenen OpenAI-Projekts."],
   ["insufficient_quota", "Das OpenAI-Projekt hat kein verfügbares API-Guthaben oder sein Nutzungslimit erreicht. Bitte prüfe API-Abrechnung und Projektlimits."],
@@ -22,6 +23,7 @@ type OpenAIError = {
   error?: {
     code?: string;
     type?: string;
+    param?: string;
     message?: string;
     moderation_details?: {
       moderation_stage?: "input" | "output" | "unknown";
@@ -77,7 +79,7 @@ async function callOpenAI(apiKey: string, prompt: string, size: string) {
   return fetch(OPENAI_IMAGES_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ model: "gpt-image-2", prompt, n: 1, size, quality: "high", output_format: "png", background: "transparent", moderation: "auto" }),
+    body: JSON.stringify({ model: "gpt-image-2.5-flare", prompt, n: 1, size, quality: "high", output_format: "png", background: "transparent", moderation: "auto" }),
     signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
   });
 }
@@ -176,10 +178,12 @@ export async function POST(request: Request) {
     if (!response.ok) {
       const code = data?.error?.code || `openai_${response.status}`;
       const moderationStage = data?.error?.moderation_details?.moderation_stage;
+      const parameter = data?.error?.param;
       console.error("CAPPATEX OpenAI image request failed", {
         requestId,
         status: response.status,
         code,
+        param: typeof parameter === "string" && OPENAI_LOGGABLE_PARAMETERS.has(parameter) ? parameter : undefined,
         moderationStage,
         categories: data?.error?.moderation_details?.categories,
       });
@@ -188,6 +192,9 @@ export async function POST(request: Request) {
       const billingError = OPENAI_BILLING_ERRORS.get(code);
       if (billingError) return clientError(503, "openai_billing_unavailable", access.pilotOwner
         ? `${billingError} Es wurde kein automatischer weiterer Versuch gestartet.`
+        : "Der Bildgenerator ist derzeit nicht verfügbar. Bitte wende dich bei Bedarf an den Shopbetreiber.");
+      if (code === "invalid_value") return clientError(503, "openai_configuration_error", access.pilotOwner
+        ? "Der Bilddienst hat die serverseitige Bildkonfiguration abgelehnt. Bitte prüfe Modell und Bildparameter. Es wurde kein automatischer weiterer Versuch gestartet."
         : "Der Bildgenerator ist derzeit nicht verfügbar. Bitte wende dich bei Bedarf an den Shopbetreiber.");
       if (response.status === 429) return clientError(429, "rate_limited", "Der Bildgenerator ist gerade ausgelastet. Bitte warte kurz und versuche es erneut.");
       return clientError(502, "image_service_error", "Der Bilddienst ist gerade nicht erreichbar. Bitte versuche es später erneut.");

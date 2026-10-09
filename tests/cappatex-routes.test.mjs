@@ -141,7 +141,8 @@ function offlineFetch(fixture) {
     fixture.requests.push({ method, url: url.href, body });
     const json = payload => Response.json(payload);
     if (url.href === "https://api.openai.com/v1/images/generations" && method === "POST" && fixture.generationError) {
-      return Response.json({ error: { code: fixture.generationError.code, message: "Synthetic provider error; never show this raw message" } },
+      return Response.json({ error: { code: fixture.generationError.code, param: fixture.generationError.param,
+        message: "Synthetic provider error; never show this raw message" } },
         { status: fixture.generationError.status });
     }
     if (url.href === "https://api.openai.com/v1/images/generations" && method === "POST" && fixture.generatedImage) {
@@ -326,11 +327,19 @@ function assertNoTokensOrNetwork() {
   assert.equal(fixture.requests.length, 0);
 }
 
-function callGeneration() {
+function callGeneration(canvas = "square") {
   return generateArtwork(new Request(`${APP_ORIGIN}/api/cappatex`, {
     method: "POST", headers: { Origin: APP_ORIGIN, Host: new URL(APP_ORIGIN).host, "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: "An alpine flower in warm colors", style: "Minimal", canvas: "square", confirmGeneration: true }),
+    body: JSON.stringify({ prompt: "An alpine flower in warm colors", style: "Minimal", canvas, confirmGeneration: true }),
   }));
+}
+
+function assertImageRequest(canvas = "square") {
+  const { prompt, ...configuration } = fixture.requests[0].body;
+  assert.equal(typeof prompt, "string");
+  assert.deepEqual(configuration, { model: "gpt-image-2.5-flare", n: 1,
+    size: { square: "2048x2048", portrait: "2048x3072", landscape: "3072x2048" }[canvas],
+    quality: "high", output_format: "png", background: "transparent", moderation: "auto" });
 }
 
 let generatedImage;
@@ -365,7 +374,7 @@ describe("offline real CAPPATEX generation storage gates", { concurrency: false 
     assert.equal(row.artwork_sha256, await sha256(generatedImage));
     assert.equal(fixture.bucket.objects.size, 2);
     assert.equal(fixture.requests.length, 1);
-    assert.equal(fixture.requests[0].body.n, 1);
+    assertImageRequest();
     assert.equal((await callArtwork(result.designId)).status, 200);
     assert.equal(fixture.db.sqlite.prepare("SELECT token_balance FROM accounts WHERE email = ?").get(EMAIL).token_balance, 4);
     assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n, 0);
@@ -404,7 +413,7 @@ describe("offline real CAPPATEX generation storage gates", { concurrency: false 
   });
 });
 
-describe("offline real CAPPATEX generation billing classification", { concurrency: false }, () => {
+describe("offline real CAPPATEX generation failure classification", { concurrency: false }, () => {
   function configureFailure(code, pilotOwner) {
     process.env.CAPPATEX_GENERATION_ENABLED = "true";
     process.env.CAPPATEX_GENERATION_AUDIENCE = pilotOwner ? "owner" : "subscribers";
@@ -412,9 +421,10 @@ describe("offline real CAPPATEX generation billing classification", { concurrenc
     fixture.generationError = { status: 429, code };
   }
 
-  function assertSingleFailedAttempt(pilotOwner) {
+  function assertSingleFailedAttempt(pilotOwner, canvas = "square") {
     assert.equal(fixture.requests.length, 1, "No automatic image retry or billing request");
     assert.equal(fixture.requests[0].url, "https://api.openai.com/v1/images/generations");
+    assertImageRequest(canvas);
     assert.equal(fixture.bucket.objects.size, 0);
     const rows = fixture.db.sqlite.prepare("SELECT status, token_reserved, token_refunded FROM cappatex_designs").all();
     assert.deepEqual(rows.map(row => ({ ...row })), [{ status: "generation_failed", token_reserved: pilotOwner ? 0 : 1, token_refunded: 1 }]);
@@ -451,6 +461,44 @@ describe("offline real CAPPATEX generation billing classification", { concurrenc
     assert.match(result.error, /ausgelastet/);
     assert.doesNotMatch(result.error, /Guthaben|Abrechnung|Synthetic/);
     assertSingleFailedAttempt(false);
+  });
+
+  for (const canvas of ["square", "portrait", "landscape"]) {
+    for (const pilotOwner of [true, false]) {
+      test(`a rejected transparent ${canvas} request gives ${pilotOwner ? "the owner a configuration hint" : "customers a neutral error and refund"}`, async t => {
+        configureFailure("invalid_value", pilotOwner);
+        fixture.generationError = { status: 400, code: "invalid_value", param: "background" };
+        const log = t.mock.method(console, "error", () => {});
+        const response = await callGeneration(canvas), result = await response.json();
+        assert.equal(response.status, 503);
+        assert.equal(result.code, "openai_configuration_error");
+        if (pilotOwner) {
+          assert.match(result.error, /serverseitige Bildkonfiguration/);
+          assert.match(result.error, /kein automatischer weiterer Versuch/);
+        } else {
+          assert.match(result.error, /nicht verfügbar/);
+          assert.doesNotMatch(result.error, /Modell|Bildparameter|Guthaben|erneut/);
+        }
+        assert.equal(log.mock.calls.length, 1);
+        assert.equal(log.mock.calls[0].arguments[1].param, "background");
+        assert.doesNotMatch(JSON.stringify(log.mock.calls[0].arguments), /Synthetic|Customer brief|alpine flower/);
+        assert.doesNotMatch(result.error, /Synthetic|alpine flower/);
+        assertSingleFailedAttempt(pilotOwner, canvas);
+      });
+    }
+  }
+
+  test("an unrecognized provider parameter is neither logged nor returned", async t => {
+    configureFailure("invalid_value", true);
+    fixture.generationError = { status: 400, code: "invalid_value", param: "private-prompt-marker" };
+    const log = t.mock.method(console, "error", () => {});
+    const response = await callGeneration(), result = await response.json();
+    assert.equal(response.status, 503);
+    assert.equal(result.code, "openai_configuration_error");
+    assert.equal(log.mock.calls[0].arguments[1].param, undefined);
+    assert.doesNotMatch(JSON.stringify(log.mock.calls[0].arguments), /private-prompt-marker|Synthetic/);
+    assert.doesNotMatch(result.error, /private-prompt-marker|Synthetic/);
+    assertSingleFailedAttempt(true);
   });
 });
 
