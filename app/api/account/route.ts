@@ -29,6 +29,7 @@ export async function GET() {
             && Boolean(process.env.OPENAI_API_KEY?.trim()),
           pilotOwner: generation.allowed && generation.pilotOwner,
         },
+        cappatexUpload: { enabled: generation.allowed && process.env.CAPPATEX_UPLOAD_ENABLED === "true" },
       },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch {

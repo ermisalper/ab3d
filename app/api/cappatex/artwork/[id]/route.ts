@@ -10,12 +10,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (!/^CPX-[A-Z0-9]{12}$/.test(id)) return new Response("Nicht gefunden", { status: 404 });
   try {
     const download = new URL(request.url).searchParams.get("download") === "1";
-    if (download && !accountCapabilities(await ensureAccount(user.email, user.fullName)).canDownloadHd) {
+    const row = await env.DB.prepare("SELECT artwork_key, artwork_sha256, preview_key, preview_sha256, style FROM cappatex_designs WHERE id = ? AND email = ? AND status = 'preview_ready'")
+      .bind(id, user.email).first<{ artwork_key: string; artwork_sha256: string; preview_key: string; preview_sha256: string; style: string }>();
+    if (!row?.artwork_key) return new Response("Nicht gefunden", { status: 404 });
+    if (download && row.style !== "Upload" && !accountCapabilities(await ensureAccount(user.email, user.fullName)).canDownloadHd) {
       return new Response("HD-Dateiexport erfordert ein CAPPATEX- oder Complete-Abo.", { status: 403 });
     }
-    const row = await env.DB.prepare("SELECT artwork_key, artwork_sha256, preview_key, preview_sha256 FROM cappatex_designs WHERE id = ? AND email = ? AND status = 'preview_ready'")
-      .bind(id, user.email).first<{ artwork_key: string; artwork_sha256: string; preview_key: string; preview_sha256: string }>();
-    if (!row?.artwork_key) return new Response("Nicht gefunden", { status: 404 });
     const key = download ? row.artwork_key : row.preview_key;
     if (!key) return new Response("Vorschau nicht verfügbar", { status: 503 });
     const object = await env.BUCKET.get(key);

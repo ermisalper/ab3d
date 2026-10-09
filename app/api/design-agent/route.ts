@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
     // The construction rules remain deterministic. AI may improve only the visual
     // interpretation after every required functional answer is present.
-    if (!plan.complete || !user || !apiKey) {
+    if (process.env.OPENAI_ASSISTANT_ENABLED !== "true" || !plan.complete || !user || !apiKey) {
       return Response.json({ plan, mode: "product-rules" }, { headers: { "Cache-Control": "no-store" } });
     }
 

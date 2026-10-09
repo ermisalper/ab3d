@@ -139,6 +139,7 @@ export async function POST(request: Request) {
           shipping_method: 1, send_shipping_notification: false,
           address_to: { first_name: a.first_name, last_name: a.last_name, email: order.email || "",
             phone: a.phone || order.phone || "", country: a.country_code, region: a.province_code || "",
+            ...(typeof a.company === "string" && a.company.trim() ? { company: a.company } : {}),
             address1: a.address1, address2: a.address2 || "", city: a.city, zip: a.zip } };
       },
       beginCreate: async payload => Boolean(await env.DB.prepare(BEGIN_CREATE).bind(await sha256(JSON.stringify(payload)), Date.now(), id).first()),

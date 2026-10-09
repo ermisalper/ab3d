@@ -5,10 +5,29 @@ import { verifiedCatalog } from "../../../cappatex-verified-catalog";
 import { placementGeometry } from "../../../cappatex-print-profile";
 import { sha256 } from "../../../cappatex-artwork";
 import type { CheckoutSnapshot } from "../../../cappatex-snapshot";
+import { cartMatchesSnapshot, type CappatexCheckoutCart } from "../../../cappatex-checkout-cart";
 import { shopifyStorefrontConfig, shopifyStorefrontRequest } from "../../../shopify-catalog";
 
 const CART_CREATE = `mutation CappatexCartCreate($input: CartInput!) {
-  cartCreate(input: $input) { cart { id checkoutUrl } userErrors { message } }
+  cartCreate(input: $input) {
+    cart {
+      id checkoutUrl totalQuantity
+      lines(first: 10) {
+        pageInfo { hasNextPage }
+        nodes {
+          quantity attributes { key value }
+          merchandise { ... on ProductVariant { id } }
+          cost {
+            amountPerQuantity { amount currencyCode }
+            subtotalAmount { amount currencyCode }
+            totalAmount { amount currencyCode }
+          }
+        }
+      }
+    }
+    userErrors { message }
+    warnings { code }
+  }
 }`;
 
 function error(status: number, code: string, message: string) {
@@ -51,7 +70,7 @@ export async function POST(request: Request) {
     await env.DB.prepare("INSERT INTO cappatex_snapshots (id,email,design_id,payload_json,payload_sha256,created_at) VALUES (?,?,?,?,?,?)")
       .bind(snapshot.id, user.email, snapshot.designId, payloadJson, await sha256(payloadJson), snapshot.consentAt).run();
     const response = await shopifyStorefrontRequest<{
-      data?: { cartCreate?: { cart?: { id: string; checkoutUrl: string }; userErrors?: unknown[] } }; errors?: unknown[];
+      data?: { cartCreate?: { cart?: CappatexCheckoutCart; userErrors?: unknown[]; warnings?: unknown[] } }; errors?: unknown[];
     }>(CART_CREATE, { input: {
       lines: [{ merchandiseId: variant.shopifyVariantId, quantity: snapshot.quantity, attributes: [
         { key: "CAPPATEX_SNAPSHOT_ID", value: snapshot.id }, { key: "CAPPATEX_DESIGN_ID", value: snapshot.designId },
@@ -62,6 +81,9 @@ export async function POST(request: Request) {
     } });
     const cart = response.data?.cartCreate?.cart;
     if (response.errors?.length || response.data?.cartCreate?.userErrors?.length || !cart) throw new Error("cart_failed");
+    if (response.data?.cartCreate?.warnings?.length || !cartMatchesSnapshot(cart, snapshot)) {
+      return error(409, "cart_changed", "Shopify hat Warenkorb, Preis oder Verfügbarkeit geändert. Bitte starte den Checkout erneut.");
+    }
     const checkoutUrl = new URL(cart.checkoutUrl);
     if (checkoutUrl.protocol !== "https:" || checkoutUrl.hostname !== shopifyStorefrontConfig().domain) throw new Error("checkout_url_invalid");
     await env.DB.prepare("UPDATE cappatex_snapshots SET cart_id = ?, state = 'checkout_created' WHERE id = ? AND state = 'prepared'")

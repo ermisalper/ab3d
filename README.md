@@ -31,7 +31,7 @@ pnpm install
 pnpm dev
 ```
 
-Für lokale KI-Aufrufe wird eine nicht versionierte `.env` benötigt:
+Für lokale KI-Aufrufe wird die ignorierte `.env.local` dieses AB3D-Projekts benötigt:
 
 ```text
 MESHY_API_KEY=...
@@ -41,47 +41,80 @@ OPENAI_API_KEY=...
 Secrets niemals committen. Produktionswerte werden ausschließlich als
 geschützte Hosting-Umgebungsvariablen verwaltet.
 
-`MESHY_API_KEY` ist für die Generierung erforderlich. Ohne `OPENAI_API_KEY`
-antwortet der Design-Guide weiterhin mit kuratiertem Shopwissen. Mit gesetztem
-OpenAI-Schlüssel nutzt er für angemeldete Nutzer die Responses API.
+`MESHY_API_KEY` ist für die 3D-Generierung erforderlich. Design-Guide und
+Produktplaner verwenden kostenfreie Shopinformationen beziehungsweise Produktregeln,
+solange `OPENAI_ASSISTANT_ENABLED` nicht ausdrücklich `true` ist. Erst mit diesem
+separaten Kostenschalter, gesetztem `OPENAI_API_KEY` und angemeldetem Nutzer wird
+die Responses API verwendet. Die CAPPATEX-Schalter ersetzen diese Freigabe nicht.
 
 ## CAPPATEX: OpenAI, Shopify und Printify
 
-CAPPATEX verwendet OpenAI nur serverseitig. Eine Vorschau wird über
-`gpt-image-2` als WebP mit niedriger Qualität erzeugt. Nach einem verifizierten
-Shopify-Webhook kann dieselbe Vorschau über die Image-Edit-API zu einer
-hochwertigen PNG-Druckdatei verfeinert und an Printify übertragen werden.
+CAPPATEX verwendet OpenAI nur serverseitig. Ein freigegebener Bildaufruf erzeugt
+das Original-PNG; Originalbytes und SHA-256 werden gespeichert. Die Vorschau
+wird deterministisch verkleinert. Nach Zahlung wird das Motiv weder neu erzeugt
+noch durch einen weiteren KI-Aufruf verändert.
 
-Erforderliche Produktions-Secrets:
+Die bestehende Kollektion `cappatex` enthält fertige Motive. Individuell gestaltbare
+Blankos gehören in `cappatex-selbst-gestalten` und benötigen ein geprüftes Profil
+in `app/cappatex-profiles.ts`: eindeutige Shopify-/Printify-IDs und SKU,
+verifizierte Varianten, Druckgeometrie, Auflösung, echtes Produktfoto sowie
+Versandnachweise für Schweiz und Liechtenstein. Ohne vollständige Freigabe sind
+sie nicht bestellbar. Der aktuelle Prüfstand und offene Konto-Voraussetzungen
+stehen in [CAPPATEX-PRODUCTION-STATUS.md](docs/CAPPATEX-PRODUCTION-STATUS.md).
+
+Produktions-Secrets (ausschliesslich über einen sicheren Secret-Eingabekanal):
 
 ```text
 OPENAI_API_KEY=...
 PRINTIFY_API_TOKEN=...
-PRINTIFY_SHOP_ID=...
-SHOPIFY_STORE_DOMAIN=cappatex.myshopify.com
-SHOPIFY_STOREFRONT_ACCESS_TOKEN=...
 SHOPIFY_WEBHOOK_SECRET=...
 ```
 
-Kostenpflichtige Schritte sind standardmäßig gesperrt. Die Schalter werden erst
-nach Betreiberfreigabe aktiviert:
+Der Storefront-Token ist optional und bleibt, falls verwendet, serverseitig.
+Nicht geheime Konfiguration: `PRINTIFY_SHOP_ID=23104859`,
+`SHOPIFY_STORE_DOMAIN=1hagfh-b0.myshopify.com`, `SHOPIFY_API_VERSION=2026-07`.
+Der Printify-Token benötigt `shops.read`, `catalog.read`, `products.read`,
+`products.write`, `uploads.write` und `orders.write`.
+
+Alle Freigaben beginnen deaktiviert:
 
 ```text
-CAPPATEX_GENERATION_ENABLED=true
-CAPPATEX_FULFILLMENT_ENABLED=true
-CAPPATEX_AUTO_PRODUCTION_ENABLED=true
+OPENAI_ASSISTANT_ENABLED=false
+CAPPATEX_GENERATION_ENABLED=false
+CAPPATEX_GENERATION_AUDIENCE=owner
+CAPPATEX_GENERATION_ALLOWED_EMAILS=
+CAPPATEX_UPLOAD_ENABLED=false
+CAPPATEX_CHECKOUT_ENABLED=false
+CAPPATEX_FULFILLMENT_ENABLED=false
+CAPPATEX_AUTO_PRODUCTION_ENABLED=false
 ```
 
-`CAPPATEX_GENERATION_ENABLED` erlaubt Vorschauen. `CAPPATEX_FULFILLMENT_ENABLED`
-erlaubt nach bezahlten Shopify-Bestellungen die finale OpenAI-Datei und einen
-Printify-Auftrag. `CAPPATEX_AUTO_PRODUCTION_ENABLED` sendet diesen Auftrag
-tatsächlich in Produktion und sollte zuletzt aktiviert werden.
+`CAPPATEX_GENERATION_ENABLED` erlaubt nach separater API-Kostenfreigabe die
+Bildgenerierung für die konfigurierte Zielgruppe. Der Betreiber-Pilot benötigt
+eine bestätigte E-Mail-Adresse in `CAPPATEX_GENERATION_ALLOWED_EMAILS`.
+Upload und Checkout werden unabhängig freigegeben. Vor jedem Warenkorb wird
+ein unveränderlicher Snapshot von Originaldatei, Profil, Variante, Preis,
+Menge, Land und bestätigter Platzierung gespeichert.
+
+Der einzige Fulfillment-Weg für individuelle Artikel ist AB3D → Printify API.
+`CAPPATEX_FULFILLMENT_ENABLED` erlaubt nach verifizierter Zahlung einen
+Printify-Auftragsentwurf mit der unveränderten Originaldatei. Atomare D1-Zustände
+sperren doppelte Verarbeitung und unklare API-Ergebnisse; unklare Aufträge
+werden manuell abgeglichen. Der Handler sendet keinen Auftrag in Produktion.
+`CAPPATEX_AUTO_PRODUCTION_ENABLED` bleibt `false`; ein Wert `true` sperrt den
+aktuellen Fulfillment-Weg vorsorglich.
 
 In Shopify wird ein `orders/paid`-Webhook auf
-`/api/cappatex/webhooks/shopify` eingerichtet. Die Printify-Produkte müssen in
-Shopify veröffentlicht sein und identische SKUs besitzen. Die automatische
-Printify-Bestellweiterleitung für diese personalisierten Artikel darf nicht
-parallel aktiv sein, sonst kann eine Doppelbestellung entstehen.
+`/api/cappatex/webhooks/shopify` eingerichtet. Der Handler prüft HMAC über die
+Rohbytes, Shop, Thema, Zahlung und Snapshot. Vor Aktivierung müssen die
+Blanko-Varianten vom nativen Printify-Import entkoppelt sein. Die fertige
+Kollektion wird dadurch nicht umgestellt. Produktionsfreigabe bleibt manuell.
+
+Die Zustellung an die derzeit private Site ist noch zu verifizieren:
+Shopify-HMAC ersetzt nicht die Sites-Zugangsberechtigung für Serveraufrufe.
+Die Zielgruppe der Site wird für einen Webhook nicht eigenmächtig geändert.
+Testbestellungen, Druckkosten und Produktionsfreigabe benötigen jeweils die
+gesonderte Bestätigung des Betreibers.
 
 ## Datenmodell
 

@@ -206,6 +206,7 @@ export async function POST(request: Request) {
     return Response.json({
       image: `/api/cappatex/artwork/${designId}`,
       width: size.width, height: size.height, sha256: hash,
+      previewWidth: preview.width, previewHeight: preview.height,
       designId,
       format: "png",
       quality: "high",

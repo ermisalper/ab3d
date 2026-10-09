@@ -586,3 +586,5 @@ section[id],:target{scroll-margin-top:132px}
 .cappatex-ready>.button{width:100%}
 .cappatex-customize{grid-template-columns:1fr!important}
 @media(max-width:760px){.cappatex-verified-preview{min-height:260px;padding:12px}.cappatex-preview-placeholder{padding:25px 15px}}
+
+.cappatex-source{grid-template-columns:1fr 1fr;margin-bottom:22px}.cappatex-upload>p{font-size:13px;line-height:1.6;color:#697169}.cappatex-upload input[type=file]{max-width:100%;padding:12px 0;font-size:13px}

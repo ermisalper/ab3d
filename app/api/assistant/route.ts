@@ -70,7 +70,7 @@ export async function POST(request: Request) {
 
     const user = await getChatGPTUser();
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!user || !apiKey) {
+    if (process.env.OPENAI_ASSISTANT_ENABLED !== "true" || !user || !apiKey) {
       return Response.json({
         answer: fallbackAnswer(message),
         mode: "guide",

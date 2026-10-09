@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { initialPlacement, placementGeometry, type ArtworkSize, type Placement } from "../cappatex-print-profile";
 import type { VerifiedCatalogProduct } from "../cappatex-verified-catalog";
+import { prepareCustomerImage } from "../cappatex-upload-client";
 
 const styles = ["Minimal", "Illustrativ", "Retro", "Streetwear"];
 const money = (amount: number, currency: string) => new Intl.NumberFormat("de-CH", { style: "currency", currency }).format(amount);
@@ -13,6 +14,12 @@ export default function CappatexDesigner() {
   const [message, setMessage] = useState("Blanko-Produkte werden geprüft …");
   const [checkoutEnabled, setCheckoutEnabled] = useState(false);
   const [generationEnabled, setGenerationEnabled] = useState(false);
+  const [uploadEnabled, setUploadEnabled] = useState(false);
+  const [source, setSource] = useState("prompt");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [imageRights, setImageRights] = useState(false);
+  const [uploadedArtwork, setUploadedArtwork] = useState(false);
+  const [previewSize, setPreviewSize] = useState<ArtworkSize>({ width: 512, height: 768 });
   const [canDownloadHd, setCanDownloadHd] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("Minimal");
@@ -47,7 +54,7 @@ export default function CappatexDesigner() {
       setCheckoutEnabled(data.checkoutEnabled === true);
     }).catch(() => active && setMessage("Die Blanko-Produkte konnten gerade nicht geladen werden."));
     fetch("/api/account", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(data => {
-      if (active) { setGenerationEnabled(data?.account?.cappatexGeneration?.enabled === true); setCanDownloadHd(data?.account?.capabilities?.canDownloadHd === true); }
+      if (active) { setGenerationEnabled(data?.account?.cappatexGeneration?.enabled === true); setUploadEnabled(data?.account?.cappatexUpload?.enabled === true); setCanDownloadHd(data?.account?.capabilities?.canDownloadHd === true); }
     }).catch(() => {});
     return () => { active = false; };
   }, []);
@@ -66,9 +73,27 @@ export default function CappatexDesigner() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Das Motiv konnte nicht erstellt werden.");
       setImage(data.image); setDesignId(data.designId); setArtwork({ width: data.width, height: data.height });
+      setPreviewSize({ width: data.previewWidth ?? Math.ceil(data.width / 4), height: data.previewHeight ?? Math.ceil(data.height / 4) });
+      setUploadedArtwork(false); setLoadedArtwork("");
       if (variant) setPlacement(initialPlacement(variant.area, { width: data.width, height: data.height }));
       setTerms(false);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Bilddienst nicht erreichbar."); }
+    finally { setBusy(""); }
+  }
+  async function upload() {
+    if (!uploadFile || !imageRights || !uploadEnabled || busy) return;
+    setBusy("upload"); setError("");
+    try {
+      const file = await prepareCustomerImage(uploadFile);
+      const response = await fetch("/api/cappatex/upload", { method: "POST", headers: { "Content-Type": "image/png", "X-Cappatex-Image-Rights": "confirmed" }, body: file });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Das Bild konnte nicht gespeichert werden.");
+      const size = { width: data.width, height: data.height };
+      setImage(data.image); setDesignId(data.designId); setArtwork(size);
+      setPreviewSize({ width: data.previewWidth, height: data.previewHeight });
+      setUploadedArtwork(true); setLoadedArtwork(""); setTerms(false);
+      if (variant) setPlacement(initialPlacement(variant.area, size));
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Das Bild konnte nicht verarbeitet werden."); }
     finally { setBusy(""); }
   }
   async function checkout() {
@@ -92,6 +117,11 @@ export default function CappatexDesigner() {
       <div className="cappatex-controls">
         <section className="cappatex-step">
           <div className="cappatex-step-heading"><span>1</span><div><h3>Dein Motiv</h3><p>Was möchtest du tragen?</p></div></div>
+          <fieldset className="cappatex-styles cappatex-source"><legend>Wie möchtest du starten?</legend>
+            <button type="button" aria-pressed={source === "prompt"} className={source === "prompt" ? "active" : ""} disabled={Boolean(busy)} onClick={() => setSource("prompt")}>Mit KI gestalten</button>
+            <button type="button" aria-pressed={source === "upload"} className={source === "upload" ? "active" : ""} disabled={Boolean(busy)} onClick={() => setSource("upload")}>Eigenes Bild verwenden</button>
+          </fieldset>
+          {source === "prompt" ? <>
           <label className="cappatex-prompt"><span>Idee beschreiben</span><textarea value={prompt} maxLength={500}
             onChange={e => setPrompt(e.target.value)} placeholder="Zum Beispiel: Eine alpine Blume als ruhige Linienzeichnung in Terracotta und Creme, ohne Text" />
             <small>{prompt.length}/500 Zeichen</small></label>
@@ -106,6 +136,15 @@ export default function CappatexDesigner() {
             {busy === "generation" ? "Motiv wird erstellt …" : "Motiv erstellen"}</button>
           <p className="cappatex-wait-note">{generationEnabled ? "Die Vorschau ist eine verkleinerte Ansicht deiner Druckdatei. Es gibt keine automatische zweite Generierung."
             : "Die KI-Generierung wartet auf den freigegebenen Test. Du kannst deine Idee bereits formulieren; es entstehen keine API-Kosten."}</p>
+          </> : <div className="cappatex-upload">
+            <label className="cappatex-field">Bild auswählen<input type="file" accept="image/png,image/jpeg" disabled={Boolean(busy)} onChange={e => { setUploadFile(e.target.files?.[0] || null); setImageRights(false); setError(""); }} /></label>
+            <p>PNG oder JPG, bis 12 MB und 6,29 Megapixel. Dein Bild wird ohne KI-Bearbeitung und ohne Verkleinerung als PNG-Druckdatei gespeichert. Bitte prüfe danach Farben, Ausrichtung und Platzierung in der Vorschau.</p>
+            <label className="legal-consent cappatex-consent"><input type="checkbox" checked={imageRights} onChange={e => setImageRights(e.target.checked)} />
+              <span>Ich darf dieses Bild verwenden und bedrucken lassen.</span></label>
+            <button className="button primary cappatex-generate" onClick={upload} disabled={!uploadFile || !imageRights || !uploadEnabled || Boolean(busy)}>{busy === "upload" ? "Bild wird geprüft …" : "Eigenes Bild übernehmen"}</button>
+            <p className="cappatex-wait-note">{uploadEnabled ? "Keine KI-Kosten und kein Design-Token. Bis zu zehn Upload-Versuche innerhalb von 24 Stunden."
+              : "Der Upload ist noch nicht freigegeben. Für den Test ist ein angemeldetes Betreiberkonto erforderlich."}</p>
+          </div>}
         </section>
         <section className="cappatex-step">
           <div className="cappatex-step-heading"><span>2</span><div><h3>Blanko-Artikel wählen</h3><p>Dein Motiv bekommt seinen Platz.</p></div></div>
@@ -137,14 +176,15 @@ export default function CappatexDesigner() {
             <div className="cappatex-verified-area" style={{ left: `${100 * variant.mockup.left / variant.mockup.width}%`, top: `${100 * variant.mockup.top / variant.mockup.height}%`,
               width: `${100 * variant.mockup.printWidth / variant.mockup.width}%`, height: `${100 * variant.mockup.printHeight / variant.mockup.height}%` }}>
               {image && <img key={image} src={image} alt="Dein unverändertes Motiv in der Druckfläche"
-                onLoad={e => { if (e.currentTarget.naturalWidth === artwork.width / 4 && e.currentTarget.naturalHeight === artwork.height / 4) setLoadedArtwork(image); else setError("Die Motivdatei stimmt nicht mit der Druckdatei überein."); }}
+                onLoad={e => { if (e.currentTarget.naturalWidth === previewSize.width && e.currentTarget.naturalHeight === previewSize.height) setLoadedArtwork(image); else setError("Die Motivdatei stimmt nicht mit der Druckdatei überein."); }}
                 onError={() => { setLoadedArtwork(""); setTerms(false); setError("Das Motiv konnte nicht geladen werden. Die Bestellung bleibt gesperrt."); }} style={{ position: "absolute", maxWidth: "none", width: `${placement.scale * 100}%`,
-                height: "auto", left: `${placement.x * 100}%`, top: `${placement.y * 100}%`, transform: "translate(-50%, -50%)" }} />}
+                height: `${100 * placement.scale * variant.area.widthPx / variant.area.heightPx * artwork.height / artwork.width}%`, left: `${placement.x * 100}%`, top: `${placement.y * 100}%`, transform: "translate(-50%, -50%)" }} />}
             </div>
-          </div> : image ? <img className="cappatex-artwork-only" src={image} alt="Dein fertiges Motiv" /> :
-            <div className="cappatex-preview-placeholder"><span aria-hidden="true">✦</span><b>Hier beginnt dein Einzelstück</b><p>Beschreibe deine Idee links. Nach der Generierung erscheint dein Motiv hier.</p></div>}
+          </div> : image ? <div style={{ width: "100%", maxWidth: 460 * artwork.width / artwork.height, aspectRatio: `${artwork.width}/${artwork.height}`, margin: "auto" }}>
+            <img className="cappatex-artwork-only" src={image} style={{ width: "100%", height: "100%", objectFit: "fill" }} alt="Dein fertiges Motiv" /></div> :
+            <div className="cappatex-preview-placeholder"><span aria-hidden="true">✦</span><b>Hier beginnt dein Einzelstück</b><p>Beschreibe deine Idee oder wähle ein eigenes Bild. Dein Motiv erscheint hier.</p></div>}
         </div>
-        {image && canDownloadHd && <a className="text-link" href={`${image}?download=1`}>Unveränderte HD-Druckdatei herunterladen →</a>}
+        {image && (canDownloadHd || uploadedArtwork) && <a className="text-link" href={`${image}?download=1`}>Freigegebene PNG-Druckdatei herunterladen →</a>}
         {variant && <>
           <p className="cappatex-profile-note">Druckfläche: {variant.area.position} · {Math.round(variant.area.widthMm)} × {Math.round(variant.area.heightMm)} mm.
             Die gestrichelte Linie markiert die erlaubte Fläche. Stoffstruktur und Bildschirmfarben können vom Druck abweichen.</p>

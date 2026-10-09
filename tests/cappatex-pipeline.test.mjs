@@ -57,6 +57,23 @@ test("paid lines cannot alter variant, quantity, identity, SKU or destination", 
   assert.equal(validatePaidLine(snapshot,line,{...order,email:"someone@example.test"}),false);
   assert.equal(snapshotId({...line,properties:[...line.properties,...line.properties]}),null);
 });
+test("paid prices reject fractional cents and malformed decimal money", () => {
+  for(const price of ["29.999","30.001","3e1","","NaN","Infinity","-30.00","9007199254740991"])
+    assert.equal(validatePaidLine(snapshot,{...line,price},order),false,price);
+  for(const price of ["30","30.0","30.00","30.0000"])
+    assert.equal(validatePaidLine(snapshot,{...line,price},order),true,price);
+});
+test("discounted paid lines require manual review even when the original unit price matches", () => {
+  assert.equal(validatePaidLine(snapshot,{...line,total_discount:"0.00",discount_allocations:[]},order),true);
+  assert.equal(validatePaidLine(snapshot,{...line,discount_allocations:[{amount:"0.00"}]},order),true);
+  for(const discount of [
+    {total_discount:"1.00"}, {total_discount:"0.001"}, {total_discount:""}, {total_discount:null},
+    {discount_allocations:[{amount:"6.00"}]},
+    {total_discount:"0.00",discount_allocations:[{amount:"0.01"}]},
+    {discount_allocations:[{amount:"0.00"},{amount:"0.01"}]},
+    {discount_allocations:[{}]}, {discount_allocations:[null]}, {discount_allocations:null},
+  ]) assert.equal(validatePaidLine(snapshot,{...line,...discount},order),false,JSON.stringify(discount));
+});
 test("Shopify HMAC verifies raw bytes and rejects changes or invalid encoding", async () => {
   const raw=new TextEncoder().encode('{"id":1}').buffer;
   const key=await crypto.subtle.importKey("raw",new TextEncoder().encode("test-secret"),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
