@@ -54,6 +54,7 @@ const hooks = registerHooks({
 const { POST: checkout } = await import("../app/api/cappatex/checkout/route.ts");
 const { POST: webhook } = await import("../app/api/cappatex/webhooks/shopify/route.ts");
 const { POST: uploadArtwork } = await import("../app/api/cappatex/upload/route.ts");
+const { POST: generateArtwork } = await import("../app/api/cappatex/route.ts");
 const { GET: getArtwork } = await import("../app/api/cappatex/artwork/[id]/route.ts");
 const { sha256 } = await import("../app/cappatex-artwork.ts");
 
@@ -139,6 +140,9 @@ function offlineFetch(fixture) {
     const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
     fixture.requests.push({ method, url: url.href, body });
     const json = payload => Response.json(payload);
+    if (url.href === "https://api.openai.com/v1/images/generations" && method === "POST" && fixture.generatedImage) {
+      return json({ data: [{ b64_json: Buffer.from(fixture.generatedImage).toString("base64") }] });
+    }
     if (url.href === `https://${STORE_DOMAIN}/api/2026-07/graphql.json` && method === "POST") {
       if (body.query.includes("query Ab3dCollection")) return json(storefrontCollection());
       if (body.query.includes("mutation CappatexCartCreate")) {
@@ -199,6 +203,7 @@ function offlineFetch(fixture) {
 }
 
 const configured = { CAPPATEX_CHECKOUT_ENABLED: "true", CAPPATEX_FULFILLMENT_ENABLED: "true",
+  CAPPATEX_GENERATION_ENABLED: "false", OPENAI_API_KEY: "local-fixture-not-a-real-openai-key",
   CAPPATEX_UPLOAD_ENABLED: "true", CAPPATEX_GENERATION_AUDIENCE: "owner", CAPPATEX_GENERATION_ALLOWED_EMAILS: EMAIL,
   CAPPATEX_AUTO_PRODUCTION_ENABLED: "false", PRINTIFY_SHOP_ID: profile.shopId,
   PRINTIFY_API_TOKEN: "local-fixture-not-a-real-token", SHOPIFY_WEBHOOK_SECRET: WEBHOOK_SECRET,
@@ -316,6 +321,84 @@ function assertNoTokensOrNetwork() {
   assert.equal(fixture.db.sqlite.prepare("SELECT token_balance FROM accounts WHERE email = ?").get(EMAIL).token_balance, 4);
   assert.equal(fixture.requests.length, 0);
 }
+
+function callGeneration() {
+  return generateArtwork(new Request(`${APP_ORIGIN}/api/cappatex`, {
+    method: "POST", headers: { Origin: APP_ORIGIN, Host: new URL(APP_ORIGIN).host, "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: "An alpine flower in warm colors", style: "Minimal", canvas: "square", confirmGeneration: true }),
+  }));
+}
+
+let generatedImage;
+function allowOfflineGeneration() {
+  process.env.CAPPATEX_GENERATION_ENABLED = "true";
+  generatedImage ??= encode({ width: 2048, height: 2048, channels: 4, depth: 8,
+    data: new Uint8Array(2048 * 2048 * 4).fill(127) });
+  fixture.generatedImage = generatedImage;
+}
+
+describe("offline real CAPPATEX generation storage gates", { concurrency: false }, () => {
+  for (const column of ["artwork_width", "preview_key"]) {
+    test(`missing ${column} prevents an image request before a reservation or debit`, async () => {
+      process.env.CAPPATEX_GENERATION_ENABLED = "true";
+      fixture.db.sqlite.exec(`ALTER TABLE cappatex_designs DROP COLUMN ${column}`);
+      const response = await callGeneration(), result = await response.json();
+      assert.equal(response.status, 503);
+      assert.equal(result.code, "design_storage_unavailable");
+      assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_designs").get().n, 0);
+      assert.equal(fixture.bucket.objects.size, 0);
+      assertNoTokensOrNetwork();
+    });
+  }
+
+  test("a pilot owner saves one original and preview without spending a design token", async () => {
+    allowOfflineGeneration();
+    const response = await callGeneration(), result = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(result));
+    const row = fixture.db.sqlite.prepare("SELECT * FROM cappatex_designs WHERE id = ?").get(result.designId);
+    assert.equal(row.status, "preview_ready");
+    assert.equal(row.token_reserved, 0);
+    assert.equal(row.artwork_sha256, await sha256(generatedImage));
+    assert.equal(fixture.bucket.objects.size, 2);
+    assert.equal(fixture.requests.length, 1);
+    assert.equal(fixture.requests[0].body.n, 1);
+    assert.equal((await callArtwork(result.designId)).status, 200);
+    assert.equal(fixture.db.sqlite.prepare("SELECT token_balance FROM accounts WHERE email = ?").get(EMAIL).token_balance, 4);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n, 0);
+  });
+
+  test("an ignored final update cannot return a successful preview", async () => {
+    allowOfflineGeneration();
+    fixture.db.sqlite.exec("CREATE TRIGGER ignore_artwork_save BEFORE UPDATE OF artwork_key ON cappatex_designs BEGIN SELECT RAISE(IGNORE); END");
+    const response = await callGeneration(), result = await response.json();
+    assert.equal(response.status, 500);
+    assert.equal(result.code, "generation_failed");
+    assert.equal(result.image, undefined);
+    assert.equal(fixture.db.sqlite.prepare("SELECT status FROM cappatex_designs").get().status, "generation_failed");
+    assert.equal(fixture.requests.length, 1);
+  });
+
+  test("an unknown update result fails closed without refunding a persisted successful image", async () => {
+    allowOfflineGeneration();
+    const prepare = fixture.db.prepare.bind(fixture.db);
+    fixture.db.prepare = sql => {
+      const statement = prepare(sql);
+      if (!sql.startsWith("UPDATE cappatex_designs SET artwork_key")) return statement;
+      return { bind: (...args) => ({ run: async () => {
+        await statement.bind(...args).run();
+        return { success: true, meta: {} };
+      } }) };
+    };
+    const response = await callGeneration(), result = await response.json();
+    assert.equal(response.status, 500);
+    assert.equal(result.image, undefined);
+    const row = fixture.db.sqlite.prepare("SELECT * FROM cappatex_designs").get();
+    assert.equal(row.status, "preview_ready");
+    assert.equal(row.token_refunded, 0);
+    assert.equal((await callArtwork(row.id)).status, 200);
+    assert.equal(fixture.requests.length, 1);
+  });
+});
 
 describe("offline real CAPPATEX upload and owned artwork routes", { concurrency: false }, () => {
   test("a colored odd-sized PNG keeps original bytes and hash, a deterministic ceil preview and free own-file download", async () => {

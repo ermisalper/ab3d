@@ -14,6 +14,7 @@ export default function CappatexDesigner() {
   const [message, setMessage] = useState("Blanko-Produkte werden geprüft …");
   const [checkoutEnabled, setCheckoutEnabled] = useState(false);
   const [generationEnabled, setGenerationEnabled] = useState(false);
+  const [pilotOwner, setPilotOwner] = useState(false);
   const [uploadEnabled, setUploadEnabled] = useState(false);
   const [source, setSource] = useState("prompt");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -54,7 +55,12 @@ export default function CappatexDesigner() {
       setCheckoutEnabled(data.checkoutEnabled === true);
     }).catch(() => active && setMessage("Die Blanko-Produkte konnten gerade nicht geladen werden."));
     fetch("/api/account", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(data => {
-      if (active) { setGenerationEnabled(data?.account?.cappatexGeneration?.enabled === true); setUploadEnabled(data?.account?.cappatexUpload?.enabled === true); setCanDownloadHd(data?.account?.capabilities?.canDownloadHd === true); }
+      if (active) {
+        setGenerationEnabled(data?.account?.cappatexGeneration?.enabled === true);
+        setPilotOwner(data?.account?.cappatexGeneration?.pilotOwner === true);
+        setUploadEnabled(data?.account?.cappatexUpload?.enabled === true);
+        setCanDownloadHd(data?.account?.capabilities?.canDownloadHd === true);
+      }
     }).catch(() => {});
     return () => { active = false; };
   }, []);
@@ -131,7 +137,7 @@ export default function CappatexDesigner() {
             <option value="portrait">Hochformat · 2048 × 3072 px</option><option value="square">Quadratisch · 2048 × 2048 px</option><option value="landscape">Querformat · 3072 × 2048 px</option>
           </select></label>
           <label className="legal-consent cappatex-consent"><input type="checkbox" checked={confirmed} disabled={!generationEnabled} onChange={e => setConfirmed(e.target.checked)} />
-            <span>Ein Motiv für 1 Design-Token erstellen.</span></label>
+            <span>{pilotOwner ? "Ein Testmotiv als Betreiber erstellen. Es entstehen OpenAI-API-Kosten; kein Design-Token wird abgezogen." : "Ein Motiv für 1 Design-Token erstellen."}</span></label>
           <button className="button primary cappatex-generate" onClick={generate} disabled={!confirmed || !generationEnabled || prompt.trim().length < 12 || Boolean(busy)}>
             {busy === "generation" ? "Motiv wird erstellt …" : "Motiv erstellen"}</button>
           <p className="cappatex-wait-note">{generationEnabled ? "Die Vorschau ist eine verkleinerte Ansicht deiner Druckdatei. Es gibt keine automatische zweite Generierung."

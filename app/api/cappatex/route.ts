@@ -129,6 +129,10 @@ export async function POST(request: Request) {
   const createdAt = Date.now();
   try {
     if (!env.BUCKET) throw new Error("artwork_storage_missing");
+    // Validate the complete persistence schema before making a paid image request.
+    await env.DB.prepare(
+      "SELECT artwork_key, artwork_sha256, artwork_width, artwork_height, preview_key, preview_sha256 FROM cappatex_designs LIMIT 0",
+    ).first();
     const account = await ensureAccount(user.email, user.fullName);
     if (!access.pilotOwner && !accountCapabilities(account).canUseCappatex) {
       return clientError(403, "plan_required", "CAPPATEX ist im CAPPATEX- oder Complete-Abo enthalten.");
@@ -197,9 +201,10 @@ export async function POST(request: Request) {
     const previewHash = await sha256(preview.bytes);
     const previewKey = `cappatex/${designId}/${hash}.preview-v1.png`;
     await env.BUCKET.put(previewKey, preview.bytes, { httpMetadata: { contentType: "image/png" } });
-    await env.DB.prepare(
+    const saved = await env.DB.prepare(
       "UPDATE cappatex_designs SET artwork_key = ?, artwork_sha256 = ?, artwork_width = ?, artwork_height = ?, preview_key = ?, preview_sha256 = ?, preview_format = 'png', status = 'preview_ready', updated_at = ? WHERE id = ? AND email = ? AND status = 'generating'",
     ).bind(artworkKey, hash, size.width, size.height, previewKey, previewHash, Date.now(), designId, user.email).run();
+    if (saved.meta?.changes !== 1) throw new Error("artwork_save_not_confirmed");
     completed = true;
     const tokenBalance = await getTokenBalance(user.email).catch(() => null);
 

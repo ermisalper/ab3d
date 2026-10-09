@@ -165,11 +165,12 @@ test("a saved successful generation is never refunded after a lost database resp
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n,1);
   db.close();
 });
-test("legacy generating duplicates migrate while keeping paid retries blocked",()=>{
+test("explicit legacy repair precedes the schema-only migration and keeps paid retries blocked",()=>{
   const db=database(db=>{
     db.prepare("INSERT INTO accounts(email,token_balance,created_at,updated_at) VALUES(?,2,0,0)").run(testEmail);
     const insert=db.prepare("INSERT INTO cappatex_designs(id,email,prompt,production_prompt,style,product_key,preview_base64,status,created_at,updated_at) VALUES(?,?,'','','','','','generating',0,0)");
     insert.run("old-a",testEmail); insert.run("old-b",testEmail);
+    db.exec(readFileSync(new URL("../scripts/sql/cappatex-legacy-generation-repair.sql",import.meta.url),"utf8"));
   });
   assert.deepEqual(db.prepare("SELECT status FROM cappatex_designs ORDER BY id").all().map(row=>row.status),["generation_uncertain","generation_legacy_review"]);
   assert.throws(()=>reserve(db,"new-call"),/UNIQUE/);
