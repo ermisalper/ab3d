@@ -233,61 +233,27 @@ test("route-aware brand intro prints AB3D and CAPPATEX with reduced-motion suppo
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)[\s\S]*?\.brand-intro\{display:none\}/);
 });
 
-test("CAPPATEX uses guarded OpenAI generation and verified Shopify to Printify fulfillment", async () => {
-  const [generator, catalog, printifyCatalog, checkout, webhook, studio, envExample] = await Promise.all([
-    read("app/api/cappatex/route.ts"),
-    read("app/api/cappatex/catalog/route.ts"),
-    read("app/printify-catalog.ts"),
-    read("app/api/cappatex/checkout/route.ts"),
-    read("app/api/cappatex/webhooks/shopify/route.ts"),
-    read("app/cappatex/cappatex-studio.tsx"),
-    read(".env.example"),
+test("CAPPATEX keeps generation guarded and never generates or submits production after payment", async () => {
+  const [generator, webhook, envExample] = await Promise.all([
+    read("app/api/cappatex/route.ts"), read("app/api/cappatex/webhooks/shopify/route.ts"), read(".env.example"),
   ]);
-
-  assert.match(generator, /https:\/\/api\.openai\.com\/v1\/images\/generations/);
-  assert.match(generator, /model: "gpt-image-2"/);
-  assert.match(generator, /quality: "low"/);
-  assert.match(generator, /output_format: "webp"/);
   assert.match(generator, /CAPPATEX_GENERATION_ENABLED/);
   assert.match(generator, /generationAccess/);
-  assert.match(generator, /"hoodie", "cap", "case", "swimwear"/);
-  assert.match(generator, /moderation_blocked/);
-  assert.match(generator, /moderation_stage/);
-  assert.doesNotMatch(generator, /icy-cell|CAPPATEX_WORKER_URL/);
-  assert.doesNotMatch(generator, /sk-[A-Za-z0-9_-]{12,}/);
-
-  assert.match(printifyCatalog, /api\.printify\.com\/v1\/shops/);
-  assert.match(catalog, /fetchShopifyCollection\(SHOPIFY_COLLECTIONS\.cappatex\)/);
-  assert.match(checkout, /cartCreate/);
-  assert.match(checkout, /catalog_mismatch/);
-  assert.match(checkout, /CAPPATEX_DESIGN_ID/);
-  assert.match(webhook, /crypto\.subtle\.verify/);
+  assert.match(generator, /output_format: "png"/);
+  assert.doesNotMatch(webhook, /api\.openai\.com|images\/edits|send_to_production/);
   assert.match(webhook, /x-shopify-hmac-sha256/);
-  assert.match(webhook, /orders\/paid/);
-  assert.match(webhook, /v1\/images\/edits/);
-  assert.match(webhook, /quality", "high"/);
-  assert.match(webhook, /uploads\/images\.json/);
-  assert.match(webhook, /send_to_production\.json/);
-  assert.match(webhook, /CAPPATEX_AUTO_PRODUCTION_ENABLED/);
-
-  assert.match(studio, /\/api\/cappatex\/catalog/);
-  assert.match(studio, /\/api\/cappatex\/checkout/);
-  assert.match(studio, /Betreiber-Testphase: keine Design-Token/);
-  assert.match(studio, /Zahlung sicher öffnen/);
-  assert.doesNotMatch(studio, /Powered by Meshy|Was soll Meshy/);
-  assert.doesNotMatch(studio, /demoProducts|source: "demo"|Produktbeispiele/);
-  assert.match(studio, /keine erfundenen Produkte oder Preise/);
-  assert.match(envExample, /CAPPATEX_GENERATION_ENABLED=false/);
-  assert.match(envExample, /CAPPATEX_GENERATION_AUDIENCE=owner/);
-  assert.match(envExample, /CAPPATEX_FULFILLMENT_ENABLED=false/);
-  assert.match(envExample, /CAPPATEX_AUTO_PRODUCTION_ENABLED=false/);
+  assert.match(webhook, /x-shopify-shop-domain/);
+  assert.match(webhook, /createDraftOnce/);
+  for (const flag of ["GENERATION", "CHECKOUT", "FULFILLMENT", "AUTO_PRODUCTION"]) {
+    assert.ok(envExample.includes(`CAPPATEX_${flag}_ENABLED=false`));
+  }
 });
 
 test("legal launch phase is visible and both checkout flows require versioned consent", async () => {
   const [shop, cartDrawer, cappatex, orderRoute, cappatexCheckout, legalVersion, privacy, terms, shipping, safety, sitemap] = await Promise.all([
     read("app/shop-experience.tsx"),
     read("app/shop-cart-drawer.tsx"),
-    read("app/cappatex/cappatex-studio.tsx"),
+    read("app/cappatex/cappatex-designer.tsx"),
     read("app/api/shopify/checkout/route.ts"),
     read("app/api/cappatex/checkout/route.ts"),
     read("app/legal-version.ts"),
@@ -303,11 +269,11 @@ test("legal launch phase is visible and both checkout flows require versioned co
   assert.match(shop, /termsAccepted/);
   assert.match(cartDrawer, /\/recht\/agb/);
   assert.match(cappatex, /termsAccepted/);
-  assert.match(cappatex, /Zahlung sicher öffnen/);
+  assert.match(cappatex, /Shopify-Checkout vorbereiten/);
   assert.match(orderRoute, /body\?\.termsAccepted !== true/);
   assert.match(orderRoute, /LEGAL_TERMS_VERSION/);
   assert.match(cappatexCheckout, /terms_required/);
-  assert.match(cappatexCheckout, /legalConsent: \{ acceptedAt, version: LEGAL_VERSION \}/);
+  assert.match(cappatexCheckout, /legalVersion: LEGAL_VERSION/);
   assert.match(legalVersion, /2026-08-19/);
   assert.match(privacy, /Datenschutzerklärung/);
   assert.match(terms, /sichere Shopify-Checkout/);

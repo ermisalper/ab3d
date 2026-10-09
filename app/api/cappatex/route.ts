@@ -1,9 +1,12 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
-import { accountCapabilities, chargeTokens, ensureAccount, getTokenBalance, hasUnlimitedTokens } from "../../../db/account";
+import { accountCapabilities, ensureAccount, getTokenBalance, hasUnlimitedTokens } from "../../../db/account";
 import { generationAccess } from "../../cappatex-generation-access";
+import { decodeBase64, pngSize, sha256 } from "../../cappatex-artwork";
+import { createArtworkPreview } from "../../cappatex-preview";
+import { RESERVE_DESIGN, DEBIT_DESIGN, LOG_DESIGN, REFUND_DESIGN, LOG_REFUND, FINISH_FAILURE } from "../../../db/cappatex-generation";
 
-const PRODUCTS = new Set(["tshirt", "hoodie", "cap", "case", "swimwear", "socks", "poster", "notebook", "underwear"]);
+const CANVASES: Record<string, string> = { square: "2048x2048", portrait: "2048x3072", landscape: "3072x2048" };
 const STYLES = new Set(["Minimal", "Illustrativ", "Retro", "Streetwear"]);
 const OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations";
 const MAX_REQUEST_BYTES = 4_000;
@@ -41,10 +44,10 @@ function sameOrigin(request: Request) {
   }
 }
 
-function buildProductionPrompt(product: string, style: string, prompt: string) {
+function buildProductionPrompt(canvas: string, style: string, prompt: string) {
   return [
     "Create exactly one original, professional, print-on-demand artwork.",
-    `Product context: ${product}. Visual direction: ${style}.`,
+    `Artwork format: ${canvas}. Visual direction: ${style}.`,
     `Customer brief: ${prompt}`,
     "Return only the isolated flat artwork, centered and completely visible.",
     "Do not show garments, products, people wearing the product, mockups, rooms, hands, frames, watermarks, signatures, UI, borders, or presentation scenes.",
@@ -64,36 +67,14 @@ function clientError(status: number, code: string, error: string, extra: Record<
   return Response.json({ error, code, ...extra }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-async function callOpenAI(apiKey: string, prompt: string) {
-  let lastResponse: Response | null = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await fetch(OPENAI_IMAGES_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-image-2",
-        prompt,
-        n: 1,
-        size: "1024x1024",
-        quality: "low",
-        output_format: "webp",
-        output_compression: 82,
-        moderation: "low",
-      }),
-      signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
-    });
-    lastResponse = response;
-    if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt === 1) return response;
-
-    const retryAfter = Number(response.headers.get("retry-after") || 0);
-    const waitMs = Math.min(Math.max(retryAfter * 1_000, 750), 5_000);
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-  }
-  return lastResponse!;
+async function callOpenAI(apiKey: string, prompt: string, size: string) {
+  // One explicit request only. An ambiguous timeout must never trigger another paid request.
+  return fetch(OPENAI_IMAGES_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ model: "gpt-image-2", prompt, n: 1, size, quality: "high", output_format: "png", background: "transparent", moderation: "auto" }),
+    signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
+  });
 }
 
 export async function POST(request: Request) {
@@ -107,19 +88,19 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null) as {
     prompt?: unknown;
-    product?: unknown;
+    canvas?: unknown;
     style?: unknown;
     confirmGeneration?: unknown;
   } | null;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-  const product = typeof body?.product === "string" ? body.product : "";
+  const canvas = typeof body?.canvas === "string" ? body.canvas : "";
   const style = typeof body?.style === "string" ? body.style : "";
 
   if (prompt.length < 12 || prompt.length > 500) {
     return clientError(400, "invalid_prompt", "Bitte beschreibe dein Motiv mit 12 bis 500 Zeichen.");
   }
-  if (!PRODUCTS.has(product) || !STYLES.has(style)) {
-    return clientError(400, "invalid_configuration", "Bitte wähle ein gültiges Produkt und einen Bildstil.");
+  if (!Object.hasOwn(CANVASES, canvas) || !STYLES.has(style)) {
+    return clientError(400, "invalid_configuration", "Bitte wähle ein gültiges Bildformat und einen Bildstil.");
   }
   if (body?.confirmGeneration !== true) {
     return clientError(409, "confirmation_required", "Bitte bestätige die kostenpflichtige KI-Generierung.");
@@ -143,10 +124,11 @@ export async function POST(request: Request) {
     return clientError(503, "openai_not_configured", "Der Bildgenerator ist noch nicht vollständig eingerichtet.");
   }
 
-  const productionPrompt = buildProductionPrompt(product, style, prompt);
+  const productionPrompt = buildProductionPrompt(canvas, style, prompt);
   const designId = `CPX-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
   const createdAt = Date.now();
   try {
+    if (!env.BUCKET) throw new Error("artwork_storage_missing");
     const account = await ensureAccount(user.email, user.fullName);
     if (!access.pilotOwner && !accountCapabilities(account).canUseCappatex) {
       return clientError(403, "plan_required", "CAPPATEX ist im CAPPATEX- oder Complete-Abo enthalten.");
@@ -154,18 +136,26 @@ export async function POST(request: Request) {
     if (!access.pilotOwner && !hasUnlimitedTokens(user.email) && account.tokenBalance < 1) {
       return clientError(402, "insufficient_tokens", "Für eine CAPPATEX Motivvorschau brauchst du 1 Design-Token.");
     }
-    await env.DB.prepare(
-      `INSERT INTO cappatex_designs
-        (id, email, prompt, production_prompt, style, product_key, preview_base64,
-         preview_format, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, '', 'webp', 'generating', ?, ?)`,
-    ).bind(designId, user.email, prompt, productionPrompt, style, product, createdAt, createdAt).run();
+    const exempt = access.pilotOwner || hasUnlimitedTokens(user.email);
+    const results = await env.DB.batch([
+      env.DB.prepare(RESERVE_DESIGN)
+        .bind(designId,user.email,prompt,productionPrompt,style,canvas,createdAt,createdAt,exempt ? 0 : 1,user.email,exempt ? 1 : 0),
+      env.DB.prepare(DEBIT_DESIGN)
+        .bind(createdAt,user.email,designId),
+      env.DB.prepare(LOG_DESIGN)
+        .bind(user.email,designId,createdAt,designId),
+    ]);
+    if (!results[0].meta.changes) return clientError(402, "insufficient_tokens", "Für ein Motiv brauchst du 1 Design-Token.");
+
   } catch {
-    return clientError(503, "design_storage_unavailable", "Der sichere Designspeicher ist noch nicht verfügbar. Es wurde keine kostenpflichtige Generierung gestartet.");
+    return clientError(503, "design_storage_unavailable", "Der Designspeicher ist nicht bereit oder eine vorherige Generierung wird noch geprüft. Es wurde keine weitere kostenpflichtige Generierung gestartet.");
   }
 
+  let completed = false;
+  let outcomeKnown = false;
   try {
-    const response = await callOpenAI(apiKey, productionPrompt);
+    const response = await callOpenAI(apiKey, productionPrompt, CANVASES[canvas]);
+    outcomeKnown = true;
     const requestId = response.headers.get("x-request-id") || undefined;
     const responseLength = Number(response.headers.get("content-length") || 0);
     if (responseLength > MAX_IMAGE_BYTES * 1.4) {
@@ -196,18 +186,29 @@ export async function POST(request: Request) {
       return clientError(502, "invalid_image", "Der Bilddienst hat kein gültiges Motiv geliefert.");
     }
 
+    const bytes = decodeBase64(encoded);
+    const size = pngSize(bytes);
+    const [expectedWidth, expectedHeight] = CANVASES[canvas].split("x").map(Number);
+    if (size.width !== expectedWidth || size.height !== expectedHeight) throw new Error("unexpected_image_size");
+    const hash = await sha256(bytes);
+    const artworkKey = `cappatex/${designId}/${hash}.png`;
+    await env.BUCKET.put(artworkKey, bytes, { httpMetadata: { contentType: "image/png" } });
+    const preview = createArtworkPreview(bytes);
+    const previewHash = await sha256(preview.bytes);
+    const previewKey = `cappatex/${designId}/${hash}.preview-v1.png`;
+    await env.BUCKET.put(previewKey, preview.bytes, { httpMetadata: { contentType: "image/png" } });
     await env.DB.prepare(
-      "UPDATE cappatex_designs SET preview_base64 = ?, status = 'preview_ready', updated_at = ? WHERE id = ? AND email = ?",
-    ).bind(encoded, Date.now(), designId, user.email).run();
-    const tokenBalance = access.pilotOwner
-      ? await getTokenBalance(user.email)
-      : await chargeTokens(user.email, 1, "CAPPATEX Motivvorschau");
+      "UPDATE cappatex_designs SET artwork_key = ?, artwork_sha256 = ?, artwork_width = ?, artwork_height = ?, preview_key = ?, preview_sha256 = ?, preview_format = 'png', status = 'preview_ready', updated_at = ? WHERE id = ? AND email = ? AND status = 'generating'",
+    ).bind(artworkKey, hash, size.width, size.height, previewKey, previewHash, Date.now(), designId, user.email).run();
+    completed = true;
+    const tokenBalance = await getTokenBalance(user.email).catch(() => null);
 
     return Response.json({
-      image: `data:image/webp;base64,${encoded}`,
+      image: `/api/cappatex/artwork/${designId}`,
+      width: size.width, height: size.height, sha256: hash,
       designId,
-      format: "webp",
-      quality: "low",
+      format: "png",
+      quality: "high",
       tokenBalance,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -215,6 +216,19 @@ export async function POST(request: Request) {
     console.error("CAPPATEX image generation exception", { type: error instanceof Error ? error.name : "unknown" });
     return clientError(timedOut ? 504 : 500, timedOut ? "generation_timeout" : "generation_failed", timedOut
       ? "Die Generierung dauert länger als erwartet. Es wurde kein automatischer weiterer Versuch gestartet."
-      : "Die Generierung konnte nicht gestartet werden.");
+      : "Das Motiv konnte nicht vollständig gespeichert werden. Bitte prüfe den Vorgang vor einem weiteren Versuch.");
+  } finally {
+    if (!completed) {
+      try {
+        await env.DB.batch([
+          env.DB.prepare(REFUND_DESIGN)
+            .bind(user.email, designId),
+          env.DB.prepare(LOG_REFUND)
+            .bind(user.email, designId, Date.now(), designId),
+          env.DB.prepare(FINISH_FAILURE)
+            .bind(outcomeKnown ? "generation_failed" : "generation_uncertain", Date.now(), designId),
+        ]);
+      } catch { /* A pending row keeps further paid calls blocked until storage is recovered. */ }
+    }
   }
 }

@@ -451,7 +451,6 @@ export async function POST(request: Request) {
         colorMood: String(body.visualDirection?.colorMood || "").slice(0, 80),
         printReady: body.printReady,
       }).slice(0, MAX_PROMPT_LENGTH);
-      const quality = body.quality === "quality" ? "quality" : "fast";
       if (prompt.length < 12 || prompt.length > MAX_PROMPT_LENGTH) {
         return Response.json({ error: "Der Prompt muss zwischen 12 und 800 Zeichen enthalten." }, { status: 400 });
       }

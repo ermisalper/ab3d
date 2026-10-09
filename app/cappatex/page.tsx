@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import CappatexStudio from "./cappatex-studio";
 import { getChatGPTUser } from "../chatgpt-auth";
+import { fetchShopifyCollection, SHOPIFY_COLLECTIONS, shopifyStorefrontConfig } from "../shopify-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,8 @@ export const metadata: Metadata = {
 };
 
 export default async function CappatexPage() {
-  const user = await getChatGPTUser();
-  return <CappatexStudio userName={user?.fullName || null} />;
+  const [user, catalog] = await Promise.all([
+    getChatGPTUser(), fetchShopifyCollection(SHOPIFY_COLLECTIONS.cappatex).catch(() => null),
+  ]);
+  return <CappatexStudio userName={user?.fullName || null} finishedProducts={catalog?.products || []} storeDomain={shopifyStorefrontConfig().domain} />;
 }

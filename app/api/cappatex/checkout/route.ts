@@ -1,174 +1,73 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { LEGAL_VERSION } from "../../../legal-version";
-import { duplicateShopifySkus, fetchPrintifyProducts, matchShopifyProduct, uniquePrintifySkuIndex } from "../../../printify-catalog";
-import { fetchShopifyCollection, SHOPIFY_COLLECTIONS } from "../../../shopify-catalog";
+import { verifiedCatalog } from "../../../cappatex-verified-catalog";
+import { placementGeometry } from "../../../cappatex-print-profile";
+import { sha256 } from "../../../cappatex-artwork";
+import type { CheckoutSnapshot } from "../../../cappatex-snapshot";
+import { shopifyStorefrontConfig, shopifyStorefrontRequest } from "../../../shopify-catalog";
 
-const CART_CREATE = `#graphql
-  mutation CappatexCartCreate($input: CartInput!) {
-    cartCreate(input: $input) {
-      cart { id checkoutUrl }
-      userErrors { field message code }
-      warnings { message code }
-    }
-  }
-`;
-
-function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (!origin || !host) return request.headers.get("sec-fetch-site") === "same-origin";
-  try { return new URL(origin).host === host; } catch { return false; }
-}
-
-function shopifyEndpoint() {
-  const domain = process.env.SHOPIFY_STORE_DOMAIN?.trim().toLowerCase();
-  if (!domain || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(domain)) return null;
-  const version = /^20\d{2}-(01|04|07|10)$/.test(process.env.SHOPIFY_API_VERSION || "")
-    ? process.env.SHOPIFY_API_VERSION
-    : "2026-07";
-  return { domain, url: `https://${domain}/api/${version}/graphql.json` };
-}
-
-function shopifyHeaders() {
-  const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
-  const token = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN?.trim();
-  if (token) headers["X-Shopify-Storefront-Access-Token"] = token;
-  return headers;
-}
+const CART_CREATE = `mutation CappatexCartCreate($input: CartInput!) {
+  cartCreate(input: $input) { cart { id checkoutUrl } userErrors { message } }
+}`;
 
 function error(status: number, code: string, message: string) {
   return Response.json({ error: message, code }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
-  if (!sameOrigin(request)) return error(403, "invalid_origin", "Unzulässige Anfrage.");
-  if (Number(request.headers.get("content-length") || 0) > 8_000) return error(413, "request_too_large", "Die Anfrage ist zu gross.");
+  if (request.headers.get("origin") !== new URL(request.url).origin) return error(403, "invalid_origin", "Unzulässige Anfrage.");
+  if (process.env.CAPPATEX_CHECKOUT_ENABLED !== "true") return error(503, "checkout_disabled", "Der Checkout wartet auf den abgeschlossenen Produkt- und Versandtest.");
   const user = await getChatGPTUser();
   if (!user) return error(401, "sign_in_required", "Bitte melde dich für den Checkout an.");
-
-  const body = await request.json().catch(() => null) as {
-    designId?: unknown;
-    printifyProductId?: unknown;
-    printifyVariantId?: unknown;
-    shopifyVariantId?: unknown;
-    quantity?: unknown;
-    termsAccepted?: unknown;
-    placement?: { scale?: unknown; y?: unknown };
-  } | null;
-  const designId = typeof body?.designId === "string" && /^CPX-[A-Z0-9]{12}$/.test(body.designId) ? body.designId : "";
-  const printifyProductId = typeof body?.printifyProductId === "string" && /^[a-zA-Z0-9_-]{6,80}$/.test(body.printifyProductId) ? body.printifyProductId : "";
-  const printifyVariantId = Number(body?.printifyVariantId);
-  const shopifyVariantId = typeof body?.shopifyVariantId === "string" && /^gid:\/\/shopify\/ProductVariant\/\d+$/.test(body.shopifyVariantId) ? body.shopifyVariantId : "";
-  const quantity = Number(body?.quantity);
-  const scale = Number(body?.placement?.scale);
-  const y = Number(body?.placement?.y);
-  if (body?.termsAccepted !== true) {
-    return error(400, "terms_required", "Bitte bestätige die AGB und Datenschutzerklärung.");
-  }
-  if (!designId || !printifyProductId || !Number.isInteger(printifyVariantId) || !shopifyVariantId || !Number.isInteger(quantity) || quantity < 1 || quantity > 5) {
-    return error(400, "invalid_checkout", "Produkt, Variante oder Design ist ungültig.");
-  }
-  if (!Number.isFinite(scale) || scale < 35 || scale > 110 || !Number.isFinite(y) || y < 28 || y > 72) {
-    return error(400, "invalid_placement", "Die Motivplatzierung ist ungültig.");
-  }
-
-  const printifyToken = process.env.PRINTIFY_API_TOKEN?.trim();
-  const printifyShopId = process.env.PRINTIFY_SHOP_ID?.trim();
-  const shopify = shopifyEndpoint();
-  if (!printifyToken || !printifyShopId || !shopify) {
-    return error(503, "commerce_not_configured", "Der sichere Checkout wird noch eingerichtet.");
-  }
-
-  const design = await env.DB.prepare(
-    "SELECT id, email, status FROM cappatex_designs WHERE id = ? AND email = ? LIMIT 1",
-  ).bind(designId, user.email).first<{ id: string; email: string; status: string }>();
-  if (!design) return error(404, "design_not_found", "Das Design wurde nicht gefunden. Bitte generiere die Vorschau erneut.");
-  if (design.status !== "preview_ready" && design.status !== "checkout_created") {
-    return error(409, "design_not_ready", "Das Design ist noch nicht bereit für den Checkout.");
-  }
+  const raw = await request.text();
+  if (raw.length > 8000) return error(413, "request_too_large", "Die Anfrage ist zu gross.");
+  let body;
+  try { body = JSON.parse(raw); } catch { return error(400, "invalid_json", "Ungültige Anfrage."); }
+  if (body?.termsAccepted !== true) return error(400, "terms_required", "Bitte bestätige AGB und Datenschutz.");
+  if (!/^CPX-[A-Z0-9]{12}$/.test(body.designId || "") || !Number.isInteger(body.quantity) || body.quantity < 1 || body.quantity > 5
+    || !["CH", "LI"].includes(body.country)) return error(400, "invalid_checkout", "Design, Menge oder Lieferland ist ungültig.");
 
   try {
-    const [catalog, printifyProducts] = await Promise.all([
-      fetchShopifyCollection(SHOPIFY_COLLECTIONS.cappatex),
-      fetchPrintifyProducts(printifyToken, printifyShopId),
-    ]);
-    const skuIndex = uniquePrintifySkuIndex(printifyProducts);
-    const duplicateSkus = duplicateShopifySkus(catalog.products);
-    const matched = catalog.products
-      .map((product) => matchShopifyProduct(product, skuIndex, duplicateSkus))
-      .find(({ matches }) => matches.some(({ shopify }) => shopify.id === shopifyVariantId));
-    const selected = matched?.matches.find(({ shopify }) => shopify.id === shopifyVariantId);
-    const product = matched?.product;
-    if (!selected?.shopify.available || !selected.printify || !product?.id
-      || product.id !== printifyProductId || selected.printify.variant.id !== printifyVariantId) {
-      return error(409, "catalog_mismatch", "Die gewählte Variante konnte nicht bestätigt werden. Bitte aktualisiere den Katalog.");
-    }
-
-    const cartResponse = await fetch(shopify.url, {
-      method: "POST",
-      headers: shopifyHeaders(),
-      body: JSON.stringify({
-        query: CART_CREATE,
-        variables: {
-          input: {
-            lines: [{
-              merchandiseId: shopifyVariantId,
-              quantity,
-              attributes: [
-                { key: "CAPPATEX_DESIGN_ID", value: designId },
-                { key: "CAPPATEX_PLACEMENT", value: `scale:${Math.round(scale)};y:${Math.round(y)}` },
-              ],
-            }],
-            buyerIdentity: { email: user.email, countryCode: "CH" },
-            attributes: [
-              { key: "CAPPATEX_ORDER", value: "true" },
-              { key: "LEGAL_TERMS_VERSION", value: LEGAL_VERSION },
-            ],
-          },
-        },
-      }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const payload = await cartResponse.json().catch(() => null) as {
-      data?: { cartCreate?: { cart?: { id?: string; checkoutUrl?: string }; userErrors?: Array<{ message?: string }> } };
-      errors?: unknown[];
-    } | null;
-    const cart = payload?.data?.cartCreate?.cart;
-    if (!cartResponse.ok || payload?.errors || payload?.data?.cartCreate?.userErrors?.length || !cart?.id || !cart.checkoutUrl) {
-      console.error("CAPPATEX Shopify cart creation failed", {
-        status: cartResponse.status,
-        graphQLErrors: Boolean(payload?.errors?.length),
-        userErrors: payload?.data?.cartCreate?.userErrors?.map((entry) => entry.message),
-      });
-      return error(502, "checkout_failed", "Der sichere Checkout konnte nicht vorbereitet werden.");
-    }
+    const design = await env.DB.prepare(
+      "SELECT artwork_key, artwork_sha256, artwork_width, artwork_height FROM cappatex_designs WHERE id = ? AND email = ? AND status = 'preview_ready'",
+    ).bind(body.designId, user.email).first<{ artwork_key: string; artwork_sha256: string; artwork_width: number; artwork_height: number }>();
+    if (!design?.artwork_key || !design.artwork_sha256) return error(409, "design_not_ready", "Für dieses Motiv fehlt eine geprüfte Druckdatei.");
+    const products = await verifiedCatalog();
+    const product = products.find(p => p.id === body.profileId && p.profileVersion === body.profileVersion);
+    const variant = product?.variants.find(v => v.shopifyVariantId === body.shopifyVariantId);
+    if (!product || !variant) return error(409, "catalog_mismatch", "Diese Variante ist derzeit nicht für die Produktion freigegeben.");
+    const artwork = { key: design.artwork_key, sha256: design.artwork_sha256, width: design.artwork_width, height: design.artwork_height, format: "png" as const };
+    const placement = { x: Number(body.placement?.x), y: Number(body.placement?.y), scale: Number(body.placement?.scale) };
+    const geometry = placementGeometry(variant.area, artwork, placement);
+    if (!geometry.ok) return error(400, "invalid_placement", geometry.reason);
+    const object = await env.BUCKET.get(artwork.key);
+    if (!object || await sha256(new Uint8Array(await object.arrayBuffer())) !== artwork.sha256) return error(409, "artwork_changed", "Die Druckdatei konnte nicht bestätigt werden.");
+    const snapshot: CheckoutSnapshot = { id: `CPS-${crypto.randomUUID().replaceAll("-", "")}`, email: user.email,
+      designId: body.designId, artwork, profile: product.profile, variant, placement, quantity: body.quantity, country: body.country,
+      unitPriceCents: Math.round(Number(variant.price.amount) * 100), currency: variant.price.currencyCode,
+      legalVersion: LEGAL_VERSION, consentAt: Date.now() };
+    const payloadJson = JSON.stringify(snapshot);
+    await env.DB.prepare("INSERT INTO cappatex_snapshots (id,email,design_id,payload_json,payload_sha256,created_at) VALUES (?,?,?,?,?,?)")
+      .bind(snapshot.id, user.email, snapshot.designId, payloadJson, await sha256(payloadJson), snapshot.consentAt).run();
+    const response = await shopifyStorefrontRequest<{
+      data?: { cartCreate?: { cart?: { id: string; checkoutUrl: string }; userErrors?: unknown[] } }; errors?: unknown[];
+    }>(CART_CREATE, { input: {
+      lines: [{ merchandiseId: variant.shopifyVariantId, quantity: snapshot.quantity, attributes: [
+        { key: "CAPPATEX_SNAPSHOT_ID", value: snapshot.id }, { key: "CAPPATEX_DESIGN_ID", value: snapshot.designId },
+        { key: "Motiv", value: `${Math.round(geometry.widthMm!)} × ${Math.round(geometry.heightMm!)} mm · ${variant.area.position}` },
+      ] }],
+      buyerIdentity: { email: user.email, countryCode: snapshot.country },
+      attributes: [{ key: "CAPPATEX_ORDER", value: "true" }, { key: "LEGAL_TERMS_VERSION", value: LEGAL_VERSION }],
+    } });
+    const cart = response.data?.cartCreate?.cart;
+    if (response.errors?.length || response.data?.cartCreate?.userErrors?.length || !cart) throw new Error("cart_failed");
     const checkoutUrl = new URL(cart.checkoutUrl);
-    const storeDomain = process.env.SHOPIFY_STORE_DOMAIN?.trim().toLowerCase();
-    if (checkoutUrl.protocol !== "https:" || !storeDomain || checkoutUrl.hostname.toLowerCase() !== storeDomain) {
-      return error(502, "invalid_checkout_url", "Der sichere Checkout konnte nicht geöffnet werden.");
-    }
-
-    const acceptedAt = Date.now();
-    const placementJson = JSON.stringify({
-      scale: Math.round(scale),
-      y: Math.round(y),
-      legalConsent: { acceptedAt, version: LEGAL_VERSION },
-    });
-    await env.DB.prepare(
-      `UPDATE cappatex_designs SET
-        printify_product_id = ?, printify_variant_id = ?, printify_blueprint_id = ?,
-        printify_provider_id = ?, shopify_variant_id = ?, shopify_cart_id = ?,
-        placement_json = ?, status = 'checkout_created', updated_at = ?
-       WHERE id = ? AND email = ?`,
-    ).bind(
-      printifyProductId, printifyVariantId, product.blueprint_id, product.print_provider_id,
-      shopifyVariantId, cart.id, placementJson, acceptedAt, designId, user.email,
-    ).run();
-
-    return Response.json({ checkoutUrl: checkoutUrl.toString(), designId }, { headers: { "Cache-Control": "no-store" } });
-  } catch (caught) {
-    console.error("CAPPATEX checkout exception", { type: caught instanceof Error ? caught.name : "unknown" });
-    return error(502, "checkout_failed", "Der Checkout konnte gerade nicht vorbereitet werden.");
+    if (checkoutUrl.protocol !== "https:" || checkoutUrl.hostname !== shopifyStorefrontConfig().domain) throw new Error("checkout_url_invalid");
+    await env.DB.prepare("UPDATE cappatex_snapshots SET cart_id = ?, state = 'checkout_created' WHERE id = ? AND state = 'prepared'")
+      .bind(cart.id, snapshot.id).run();
+    return Response.json({ checkoutUrl: checkoutUrl.toString(), snapshotId: snapshot.id }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return error(502, "checkout_failed", "Der Checkout konnte nicht sicher vorbereitet werden. Bitte versuche es später erneut.");
   }
 }

@@ -32,7 +32,7 @@ export async function fetchPrintifyProducts(token: string, shopId: string) {
       last_page?: number;
     } | null;
     if (!response.ok || !Array.isArray(payload?.data)) throw new Error(`printify_http_${response.status}`);
-    products.push(...payload.data.filter((product) => product.visible !== false));
+    products.push(...payload.data);
     if (page >= (payload.last_page || 1)) return products;
   }
   throw new Error("printify_catalog_too_large");

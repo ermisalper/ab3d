@@ -1,231 +1,162 @@
 import { env } from "cloudflare:workers";
 import { recordPaidShopifyOrder, type ShopifyOrderPayload } from "../../../../../db/commerce";
+import { CLAIM_FULFILLMENT, BEGIN_CREATE, FINISH_CREATE, createDraftOnce } from "../../../../../db/cappatex-fulfillment";
+import { CAPPATEX_PRINT_PROFILES } from "../../../../cappatex-profiles";
+import { profileIsVerified, placementGeometry } from "../../../../cappatex-print-profile";
+import { verifiedCatalog } from "../../../../cappatex-verified-catalog";
+import { sha256, encodeBase64 } from "../../../../cappatex-artwork";
+import { draftProductPayload, draftMatchesSnapshot } from "../../../../cappatex-printify-draft";
+import { snapshotId, validatePaidLine, verifyShopifyHmac, type CheckoutSnapshot, type PaidLine } from "../../../../cappatex-snapshot";
 
-type DesignRow = {
-  id: string;
-  production_prompt: string;
-  preview_base64: string;
-  preview_format: string;
-  printify_variant_id: number;
-  printify_blueprint_id: number;
-  printify_provider_id: number;
-  placement_json: string | null;
-  status: string;
-};
-
-const encoder = new TextEncoder();
-
-function decodeBase64(value: string) {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-async function verifyShopifyHmac(rawBody: ArrayBuffer, received: string, secret: string) {
-  try {
-    const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
-    return crypto.subtle.verify("HMAC", key, decodeBase64(received), rawBody);
-  } catch {
-    return false;
-  }
-}
-
-async function generatePrintFile(apiKey: string, design: DesignRow) {
-  const previewBytes = decodeBase64(design.preview_base64);
-  const form = new FormData();
-  form.set("model", "gpt-image-2");
-  form.set("image", new File([previewBytes], `preview.${design.preview_format}`, { type: `image/${design.preview_format}` }));
-  form.set("prompt", `${design.production_prompt} Preserve the approved preview's subject, composition, palette, and identity as closely as possible. Refine edges and details for the final print file. Return isolated artwork only.`);
-  form.set("size", "1024x1024");
-  form.set("quality", "high");
-  form.set("output_format", "png");
-  form.set("moderation", "low");
-
-  const response = await fetch("https://api.openai.com/v1/images/edits", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-    body: form,
-    signal: AbortSignal.timeout(150_000),
-  });
-  const requestId = response.headers.get("x-request-id") || undefined;
-  const payload = await response.json().catch(() => null) as {
-    data?: Array<{ b64_json?: string }>;
-    error?: { code?: string; moderation_details?: { moderation_stage?: string } };
-  } | null;
-  if (!response.ok || !payload?.data?.[0]?.b64_json) {
-    console.error("CAPPATEX final image generation failed", {
-      requestId,
-      status: response.status,
-      code: payload?.error?.code,
-      moderationStage: payload?.error?.moderation_details?.moderation_stage,
-    });
-    throw new Error("final_image_failed");
-  }
-  return payload.data[0].b64_json;
-}
-
-async function uploadToPrintify(token: string, designId: string, base64: string) {
-  const response = await fetch("https://api.printify.com/v1/uploads/images.json", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ file_name: `${designId}.png`, contents: base64 }),
-    signal: AbortSignal.timeout(60_000),
-  });
-  const payload = await response.json().catch(() => null) as { id?: string; preview_url?: string } | null;
-  if (!response.ok || !payload?.id || !payload.preview_url) {
-    console.error("CAPPATEX Printify upload failed", { status: response.status, designId });
-    throw new Error("printify_upload_failed");
-  }
-  return payload;
-}
-
-function property(line: NonNullable<ShopifyOrderPayload["line_items"]>[number], name: string) {
-  return line.properties?.find((entry) => entry.name === name)?.value || "";
-}
+type PaidOrder = Omit<ShopifyOrderPayload, "line_items"> & { test?: boolean; cancelled_at?: string | null; line_items: PaidLine[] };
+const reply = (status: string) => Response.json({ ok: true, status }, { headers: { "Cache-Control": "no-store" } });
 
 export async function POST(request: Request) {
   const secret = process.env.SHOPIFY_WEBHOOK_SECRET?.trim();
-  const signature = request.headers.get("x-shopify-hmac-sha256") || "";
-  const topic = request.headers.get("x-shopify-topic") || "";
-  const webhookId = request.headers.get("x-shopify-webhook-id") || "";
-  if (!secret || !signature || topic !== "orders/paid" || !/^[a-zA-Z0-9-]{8,100}$/.test(webhookId)) {
-    return Response.json({ error: "Ungültiger Webhook." }, { status: 401 });
-  }
-  if (Number(request.headers.get("content-length") || 0) > 1_000_000) {
-    return Response.json({ error: "Webhook zu gross." }, { status: 413 });
-  }
-  const rawBody = await request.arrayBuffer();
-  if (!(await verifyShopifyHmac(rawBody, signature, secret))) {
-    return Response.json({ error: "Ungültige Webhook-Signatur." }, { status: 401 });
-  }
-  const existing = await env.DB.prepare("SELECT id FROM cappatex_webhook_events WHERE id = ? LIMIT 1").bind(webhookId).first();
-  if (existing) return Response.json({ ok: true, duplicate: true });
-
-  let order: ShopifyOrderPayload;
-  try {
-    order = JSON.parse(new TextDecoder().decode(rawBody)) as ShopifyOrderPayload;
-  } catch {
-    return Response.json({ error: "Ungültiger Webhook-Inhalt." }, { status: 400 });
-  }
-  if (!order.id || order.financial_status !== "paid" || !order.shipping_address || !Array.isArray(order.line_items)) {
-    return Response.json({ error: "Unvollständige bezahlte Bestellung." }, { status: 400 });
-  }
-
+  const domain = process.env.SHOPIFY_STORE_DOMAIN?.trim().toLowerCase();
+  const topic = request.headers.get("x-shopify-topic");
+  const eventId = request.headers.get("x-shopify-webhook-id") || "";
+  if (!secret || !domain || request.headers.get("x-shopify-shop-domain")?.toLowerCase() !== domain
+    || topic !== "orders/paid" || !/^[a-zA-Z0-9-]{8,100}$/.test(eventId)) return new Response("Invalid webhook", { status: 401 });
+  const raw = await request.arrayBuffer();
+  if (raw.byteLength > 1_000_000) return new Response("Payload too large", { status: 413 });
+  if (!await verifyShopifyHmac(raw, request.headers.get("x-shopify-hmac-sha256") || "", secret)) return new Response("Invalid signature", { status: 401 });
+  let order: PaidOrder;
+  try { order = JSON.parse(new TextDecoder().decode(raw)); } catch { return new Response("Invalid JSON", { status: 400 }); }
+  if (!order.id || order.financial_status !== "paid" || !Array.isArray(order.line_items) || !order.shipping_address
+    || order.cancelled_at || order.test) return new Response("Order not eligible", { status: 400 });
   try {
     await recordPaidShopifyOrder(order);
-  } catch (caught) {
-    console.error("Shopify order persistence failed", { type: caught instanceof Error ? caught.message : "unknown", shopifyOrderId: order.id });
-    return Response.json({ error: "Die bezahlte Bestellung konnte nicht sicher gespeichert werden." }, { status: 500 });
-  }
-
-  const designLines = order.line_items.map((line) => ({ line, designId: property(line, "CAPPATEX_DESIGN_ID") }))
-    .filter((entry) => /^CPX-[A-Z0-9]{12}$/.test(entry.designId));
-  if (designLines.length === 0) {
-    await env.DB.prepare("INSERT INTO cappatex_webhook_events (id, topic, received_at) VALUES (?, ?, ?)").bind(webhookId, topic, Date.now()).run();
-    return Response.json({ ok: true, status: "order_recorded" });
-  }
-  if (designLines.length > 5) return Response.json({ error: "Zu viele CAPPATEX Designs in einer Bestellung." }, { status: 400 });
-
-  if (process.env.CAPPATEX_FULFILLMENT_ENABLED !== "true") {
-    return Response.json({ error: "CAPPATEX Fulfillment wartet auf Betreiberfreigabe." }, { status: 503 });
-  }
-  const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  const printifyToken = process.env.PRINTIFY_API_TOKEN?.trim();
-  const printifyShopId = process.env.PRINTIFY_SHOP_ID?.trim();
-  if (!openaiKey || !printifyToken || !printifyShopId) {
-    return Response.json({ error: "Fulfillment ist nicht vollständig konfiguriert." }, { status: 503 });
-  }
-
-  try {
-    const printifyLines = [];
-    const designIds: string[] = [];
-    for (const { line, designId } of designLines) {
-      const design = await env.DB.prepare(
-        `SELECT id, production_prompt, preview_base64, preview_format, printify_variant_id,
-                printify_blueprint_id, printify_provider_id, placement_json, status
-         FROM cappatex_designs WHERE id = ? LIMIT 1`,
-      ).bind(designId).first<DesignRow>();
-      if (!design || !design.printify_variant_id || !design.printify_blueprint_id || !design.printify_provider_id) throw new Error("design_not_ready");
-
-      const finalBase64 = await generatePrintFile(openaiKey, design);
-      const uploaded = await uploadToPrintify(printifyToken, design.id, finalBase64);
-      const placement = JSON.parse(design.placement_json || "{}") as { scale?: number; y?: number };
-      printifyLines.push({
-        print_provider_id: design.printify_provider_id,
-        blueprint_id: design.printify_blueprint_id,
-        variant_id: design.printify_variant_id,
-        quantity: Math.min(Math.max(Number(line.quantity) || 1, 1), 5),
-        external_id: design.id,
-        print_areas: {
-          front: [{
-            src: uploaded.preview_url,
-            scale: Math.min(Math.max((Number(placement.scale) || 72) / 100, 0.35), 1),
-            x: 0.5,
-            y: Math.min(Math.max((Number(placement.y) || 50) / 100, 0.28), 0.72),
-            angle: 0,
-          }],
-        },
-      });
-      designIds.push(design.id);
+    const customLines = order.line_items.filter(line => line.properties?.some(p => /^(CAPPATEX_|_CAPPATEX_)/.test(p.name))
+      || CAPPATEX_PRINT_PROFILES.some(p => p.variants.some(v => v.shopifyVariantId === `gid://shopify/ProductVariant/${line.variant_id}`)));
+    if (!customLines.length) return reply("order_recorded");
+    const id = `${domain}:${order.id}`;
+    const inputHash = await sha256(JSON.stringify({ id, lines: customLines, address: order.shipping_address,
+      email: order.email, currency: order.currency }));
+    const existing = await env.DB.prepare("SELECT input_sha256,state FROM cappatex_fulfillments WHERE id = ?").bind(id)
+      .first<{ input_sha256: string; state: string }>();
+    if (existing && (existing.input_sha256 !== inputHash || existing.state !== "pending")) {
+      if (existing.input_sha256 !== inputHash) await env.DB.prepare(
+        "UPDATE cappatex_fulfillments SET state = CASE WHEN state IN ('pending','preparing') THEN 'manual_review' ELSE state END, error_code = 'order_changed', updated_at = ? WHERE id = ?",
+      ).bind(Date.now(), id).run();
+      return reply(existing.input_sha256 === inputHash ? existing.state : "order_changed_manual_review");
     }
-
-    const address = order.shipping_address;
-    const printifyResponse = await fetch(`https://api.printify.com/v1/shops/${encodeURIComponent(printifyShopId)}/orders.json`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${printifyToken}`, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        external_id: `shopify-${order.id}`,
-        label: order.name || `Shopify ${order.id}`,
-        line_items: printifyLines,
-        shipping_method: 1,
-        send_shipping_notification: true,
-        address_to: {
-          first_name: address.first_name || "Kunde",
-          last_name: address.last_name || "CAPPATEX",
-          company: address.company || undefined,
-          email: order.email || "",
-          phone: address.phone || order.phone || "",
-          country: address.country_code || "CH",
-          region: address.province_code || "",
-          address1: address.address1 || "",
-          address2: address.address2 || "",
-          city: address.city || "",
-          zip: address.zip || "",
-        },
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
-    const printifyOrder = await printifyResponse.json().catch(() => null) as { id?: string } | null;
-    if (!printifyResponse.ok || !printifyOrder?.id) {
-      console.error("CAPPATEX Printify order creation failed", { status: printifyResponse.status, shopifyOrderId: order.id });
-      throw new Error("printify_order_failed");
+    const shopId = process.env.PRINTIFY_SHOP_ID?.trim() || "";
+    const snapshots: CheckoutSnapshot[] = [];
+    let valid = customLines.length <= 5;
+    for (const line of customLines) {
+      const sid = snapshotId(line);
+      const row = sid ? await env.DB.prepare("SELECT payload_json,payload_sha256,state FROM cappatex_snapshots WHERE id = ?")
+        .bind(sid).first<{ payload_json: string; payload_sha256: string; state: string }>() : null;
+      if (!row || row.state !== "checkout_created" || await sha256(row.payload_json) !== row.payload_sha256) { valid = false; break; }
+      const snapshot = JSON.parse(row.payload_json) as CheckoutSnapshot;
+      const current = CAPPATEX_PRINT_PROFILES.find(p => p.id === snapshot.profile.id && p.version === snapshot.profile.version);
+      if (!current || JSON.stringify(current) !== JSON.stringify(snapshot.profile) || !profileIsVerified(current, shopId)
+        || !validatePaidLine(snapshot, line, { currency: order.currency, email: order.email, country: order.shipping_address.country_code })
+        || !placementGeometry(snapshot.variant.area, snapshot.artwork, snapshot.placement).ok) { valid = false; break; }
+      snapshots.push(snapshot);
     }
-
-    let status = "printify_draft_ready";
-    if (process.env.CAPPATEX_AUTO_PRODUCTION_ENABLED === "true") {
-      const productionResponse = await fetch(`https://api.printify.com/v1/shops/${encodeURIComponent(printifyShopId)}/orders/${encodeURIComponent(printifyOrder.id)}/send_to_production.json`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${printifyToken}`, Accept: "application/json" },
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!productionResponse.ok) {
-        console.error("CAPPATEX send to production failed", { status: productionResponse.status, printifyOrderId: printifyOrder.id });
-        throw new Error("send_to_production_failed");
-      }
-      status = "production_submitted";
-    }
-
     const now = Date.now();
-    await env.DB.batch([
-      ...designIds.map((designId) => env.DB.prepare(
-        "UPDATE cappatex_designs SET shopify_order_id = ?, printify_order_id = ?, status = ?, updated_at = ? WHERE id = ?",
-      ).bind(String(order.id), printifyOrder.id, status, now, designId)),
-      env.DB.prepare("INSERT INTO cappatex_webhook_events (id, topic, received_at) VALUES (?, ?, ?)").bind(webhookId, topic, now),
-    ]);
-    return Response.json({ ok: true, status });
-  } catch (caught) {
-    console.error("CAPPATEX fulfillment failed", { type: caught instanceof Error ? caught.message : "unknown", shopifyOrderId: order.id });
-    return Response.json({ error: "Fulfillment konnte noch nicht abgeschlossen werden." }, { status: 500 });
+    const enabled = process.env.CAPPATEX_FULFILLMENT_ENABLED === "true"
+      && process.env.CAPPATEX_AUTO_PRODUCTION_ENABLED !== "true";
+    const state = valid && enabled ? "pending" : "manual_review";
+    try {
+      if (!existing) await env.DB.batch([
+        env.DB.prepare("INSERT INTO cappatex_fulfillments (id,external_id,input_sha256,state,created_at,updated_at) VALUES (?,?,?,?,?,?)")
+          .bind(id, `ab3d-${order.id}`, inputHash, state, now, now),
+        ...(valid ? snapshots.map((snapshot, index) => env.DB.prepare(
+          "INSERT INTO cappatex_fulfillment_lines (snapshot_id,fulfillment_id,shopify_line_id) VALUES (?,?,?)",
+        ).bind(snapshot.id, id, String(customLines[index].id))) : []),
+      ]);
+    } catch {
+      const duplicate = await env.DB.prepare("SELECT input_sha256,state FROM cappatex_fulfillments WHERE id = ?").bind(id).first<{ input_sha256: string; state: string }>();
+      if (duplicate && duplicate.input_sha256 !== inputHash) {
+        await env.DB.prepare("UPDATE cappatex_fulfillments SET state = CASE WHEN state IN ('pending','preparing') THEN 'manual_review' ELSE state END, error_code = 'order_changed', updated_at = ? WHERE id = ?").bind(Date.now(), id).run();
+        return reply("order_changed_manual_review");
+      }
+      if (duplicate && duplicate.state !== "pending") return reply(duplicate.state);
+      if (!duplicate) {
+      // Persist an actual review case only for a proven consumed snapshot.
+      let consumed = false;
+      for (const snapshot of snapshots) {
+        consumed ||= Boolean(await env.DB.prepare("SELECT snapshot_id FROM cappatex_fulfillment_lines WHERE snapshot_id = ?").bind(snapshot.id).first());
+      }
+      if (!consumed) throw new Error("fulfillment_storage_failed");
+      await env.DB.prepare("INSERT INTO cappatex_fulfillments (id,external_id,input_sha256,state,error_code,created_at,updated_at) VALUES (?,?,?,'manual_review','snapshot_already_consumed',?,?)")
+        .bind(id, `ab3d-${order.id}`, inputHash, now, now).run();
+      return reply("snapshot_already_consumed_manual_review");
+      }
+    }
+    await env.DB.prepare("INSERT OR IGNORE INTO cappatex_webhook_events (id,topic,received_at) VALUES (?,?,?)")
+      .bind(eventId, topic, now).run();
+    if (state !== "pending") {
+      await env.DB.prepare("UPDATE cappatex_fulfillments SET state = 'manual_review', updated_at = ? WHERE id = ? AND state = 'pending'").bind(now, id).run();
+      return reply("manual_review");
+    }
+    const token = process.env.PRINTIFY_API_TOKEN?.trim();
+    const result = await createDraftOnce({
+      claim: async () => Boolean(await env.DB.prepare(CLAIM_FULFILLMENT).bind(Date.now(), id).first()),
+      prepare: async () => {
+        if (!token) throw new Error("printify_unconfigured");
+        const live = await verifiedCatalog();
+        const lines = [];
+        for (const snapshot of snapshots) {
+          if (!live.some(p => p.id === snapshot.profile.id && p.variants.some(v => v.shopifyVariantId === snapshot.variant.shopifyVariantId)))
+            throw new Error("availability_changed");
+          const object = await env.BUCKET.get(snapshot.artwork.key);
+          if (!object) throw new Error("artwork_missing");
+          const bytes = new Uint8Array(await object.arrayBuffer());
+          if (await sha256(bytes) !== snapshot.artwork.sha256) throw new Error("artwork_changed");
+          const upload = await fetch("https://api.printify.com/v1/uploads/images.json", {
+            method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ file_name: `${snapshot.designId}.png`, contents: encodeBase64(bytes) }), signal: AbortSignal.timeout(60_000),
+          });
+          const image = await upload.json() as { id?: string; width?: number; height?: number };
+          if (!upload.ok || !image.id || image.width !== snapshot.artwork.width || image.height !== snapshot.artwork.height) throw new Error("upload_failed");
+          const productRoot = `https://api.printify.com/v1/shops/${encodeURIComponent(shopId)}/products`;
+          const templateResponse = await fetch(`${productRoot}/${encodeURIComponent(snapshot.profile.printifyProductId)}.json`, {
+            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, signal: AbortSignal.timeout(20_000),
+          });
+          const template = await templateResponse.json() as { id?: string; blueprint_id?: number; print_provider_id?: number; variants?: Array<{ id: number; price: number }> };
+          const price = template.variants?.find(variant => variant.id === snapshot.variant.printifyVariantId)?.price;
+          if (!templateResponse.ok || template.id !== snapshot.profile.printifyProductId || template.blueprint_id !== snapshot.profile.blueprintId
+            || template.print_provider_id !== snapshot.profile.providerId || price === undefined) throw new Error("template_changed");
+          // Use the uploaded original's ID, never Printify's preview URL. Each snapshot owns its own unpublished draft.
+          const draftResponse = await fetch(`${productRoot}.json`, {
+            method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify(draftProductPayload(snapshot, image.id, price)), signal: AbortSignal.timeout(60_000),
+          });
+          const draft = await draftResponse.json();
+          if (!draftResponse.ok || !draftMatchesSnapshot(draft, snapshot, image.id)) throw new Error("draft_mismatch");
+          await env.DB.prepare("UPDATE cappatex_fulfillment_lines SET printify_product_id = ?, printify_image_id = ? WHERE snapshot_id = ? AND fulfillment_id = ?")
+            .bind(draft.id, image.id, snapshot.id, id).run();
+          lines.push({ product_id: draft.id, variant_id: snapshot.variant.printifyVariantId,
+            quantity: snapshot.quantity, external_id: snapshot.id });
+        }
+        const a = order.shipping_address!;
+        if (!a.first_name || !a.last_name || !a.address1 || !a.city || !a.zip || !["CH","LI"].includes(a.country_code || "")) throw new Error("invalid_address");
+        return { external_id: `ab3d-${order.id}`, label: order.name || `Shopify ${order.id}`, line_items: lines,
+          shipping_method: 1, send_shipping_notification: false,
+          address_to: { first_name: a.first_name, last_name: a.last_name, email: order.email || "",
+            phone: a.phone || order.phone || "", country: a.country_code, region: a.province_code || "",
+            address1: a.address1, address2: a.address2 || "", city: a.city, zip: a.zip } };
+      },
+      beginCreate: async payload => Boolean(await env.DB.prepare(BEGIN_CREATE).bind(await sha256(JSON.stringify(payload)), Date.now(), id).first()),
+      create: async payload => {
+        const response = await fetch(`https://api.printify.com/v1/shops/${encodeURIComponent(shopId)}/orders.json`, {
+          method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload), signal: AbortSignal.timeout(60_000),
+        });
+        const created = await response.json() as { id?: string };
+        if (!response.ok || !created.id) throw new Error("order_creation_uncertain");
+        return created.id;
+      },
+      finish: async printifyId => { await env.DB.prepare(FINISH_CREATE).bind(printifyId, Date.now(), id).run(); },
+      hold: async () => { await env.DB.prepare("UPDATE cappatex_fulfillments SET state = 'manual_review', error_code = 'preparation_failed', updated_at = ? WHERE id = ? AND state = 'preparing'").bind(Date.now(), id).run(); },
+    });
+    // Production always requires manual approval. This route has no production-submit action.
+    return reply(result);
+  } catch {
+    return Response.json({ error: "Bestellung konnte noch nicht sicher verarbeitet werden." }, { status: 503 });
   }
 }

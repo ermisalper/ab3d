@@ -36,6 +36,34 @@
       "when": 1787174502950,
       "tag": "0004_chemical_hemingway",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791490159429,
+      "tag": "0005_open_marrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791491548132,
+      "tag": "0006_bitter_jackpot",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791493552234,
+      "tag": "0007_moaning_young_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791499512478,
+      "tag": "0008_misty_fallen_one",
+      "breakpoints": true
     }
   ]
 }

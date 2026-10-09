@@ -1,6 +1,7 @@
 export const SHOPIFY_COLLECTIONS = {
   ab3d: "ab3d-3d-produkte",
   cappatex: "cappatex",
+  cappatexBlanks: "cappatex-selbst-gestalten",
 } as const;
 
 export type ShopifyMoney = {
@@ -66,7 +67,7 @@ type StorefrontProduct = {
   productType?: string;
   description?: string;
   featuredImage?: { url?: string; altText?: string | null } | null;
-  variants?: { nodes?: StorefrontVariant[] };
+  variants?: { nodes?: StorefrontVariant[]; pageInfo?: { hasNextPage?: boolean } };
 };
 
 type StorefrontCollectionPayload = {
@@ -76,7 +77,7 @@ type StorefrontCollectionPayload = {
       handle?: string;
       title?: string;
       updatedAt?: string;
-      products?: { nodes?: StorefrontProduct[] };
+      products?: { nodes?: StorefrontProduct[]; pageInfo?: { hasNextPage?: boolean } };
     } | null;
   };
   errors?: Array<{ message?: string }>;
@@ -90,6 +91,7 @@ const COLLECTION_QUERY = `#graphql
       title
       updatedAt
       products(first: 100) {
+        pageInfo { hasNextPage }
         nodes {
           id
           handle
@@ -99,6 +101,7 @@ const COLLECTION_QUERY = `#graphql
           description
           featuredImage { url altText }
           variants(first: 100) {
+            pageInfo { hasNextPage }
             nodes {
               id
               title
@@ -238,6 +241,9 @@ export async function fetchShopifyCollection(handle: string): Promise<ShopifyCol
   if (payload.errors?.length) throw new Error("shopify_graphql_error");
   const collection = payload.data?.collection;
   if (!collection?.id || !collection.handle || !collection.title) throw new Error("shopify_collection_missing");
+  if (collection.products?.pageInfo?.hasNextPage || collection.products?.nodes?.some(product => product.variants?.pageInfo?.hasNextPage)) {
+    throw new Error("shopify_catalog_incomplete");
+  }
   return {
     id: collection.id,
     handle: collection.handle,

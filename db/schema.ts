@@ -1,4 +1,5 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 export const accounts = sqliteTable("accounts", {
   email: text("email").primaryKey(),
@@ -165,6 +166,14 @@ export const cappatexDesigns = sqliteTable(
     productKey: text("product_key").notNull(),
     previewBase64: text("preview_base64").notNull(),
     previewFormat: text("preview_format").notNull().default("webp"),
+    artworkKey: text("artwork_key"),
+    artworkSha256: text("artwork_sha256"),
+    artworkWidth: integer("artwork_width"),
+    previewKey: text("preview_key"),
+    previewSha256: text("preview_sha256"),
+    artworkHeight: integer("artwork_height"),
+    tokenReserved: integer("token_reserved").notNull().default(0),
+    tokenRefunded: integer("token_refunded").notNull().default(0),
     printifyProductId: text("printify_product_id"),
     printifyVariantId: integer("printify_variant_id"),
     printifyBlueprintId: integer("printify_blueprint_id"),
@@ -181,6 +190,7 @@ export const cappatexDesigns = sqliteTable(
   (table) => [
     index("cappatex_designs_email_created_idx").on(table.email, table.createdAt),
     index("cappatex_designs_shopify_order_idx").on(table.shopifyOrderId),
+    uniqueIndex("cappatex_one_generation_per_email").on(table.email).where(sql`${table.status} IN ('generating', 'generation_uncertain')`),
   ],
 );
 
@@ -188,4 +198,36 @@ export const cappatexWebhookEvents = sqliteTable("cappatex_webhook_events", {
   id: text("id").primaryKey(),
   topic: text("topic").notNull(),
   receivedAt: integer("received_at").notNull(),
+});
+
+// Immutable snapshot payload; only cart/status columns may change after INSERT.
+export const cappatexSnapshots = sqliteTable("cappatex_snapshots", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().references(() => accounts.email),
+  designId: text("design_id").notNull().references(() => cappatexDesigns.id),
+  payloadJson: text("payload_json").notNull(),
+  payloadSha256: text("payload_sha256").notNull(),
+  cartId: text("cart_id"),
+  state: text("state").notNull().default("prepared"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const cappatexFulfillments = sqliteTable("cappatex_fulfillments", {
+  id: text("id").primaryKey(), // trusted shop domain + Shopify order id
+  externalId: text("external_id").notNull().unique(),
+  inputSha256: text("input_sha256").notNull(),
+  state: text("state").notNull().default("pending"),
+  requestSha256: text("request_sha256"),
+  printifyOrderId: text("printify_order_id"),
+  errorCode: text("error_code"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const cappatexFulfillmentLines = sqliteTable("cappatex_fulfillment_lines", {
+  snapshotId: text("snapshot_id").primaryKey().references(() => cappatexSnapshots.id),
+  fulfillmentId: text("fulfillment_id").notNull().references(() => cappatexFulfillments.id),
+  shopifyLineId: text("shopify_line_id").notNull(),
+  printifyProductId: text("printify_product_id"),
+  printifyImageId: text("printify_image_id"),
 });
