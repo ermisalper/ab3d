@@ -140,6 +140,10 @@ function offlineFetch(fixture) {
     const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
     fixture.requests.push({ method, url: url.href, body });
     const json = payload => Response.json(payload);
+    if (url.href === "https://api.openai.com/v1/images/generations" && method === "POST" && fixture.generationError) {
+      return Response.json({ error: { code: fixture.generationError.code, message: "Synthetic provider error; never show this raw message" } },
+        { status: fixture.generationError.status });
+    }
     if (url.href === "https://api.openai.com/v1/images/generations" && method === "POST" && fixture.generatedImage) {
       return json({ data: [{ b64_json: Buffer.from(fixture.generatedImage).toString("base64") }] });
     }
@@ -397,6 +401,56 @@ describe("offline real CAPPATEX generation storage gates", { concurrency: false 
     assert.equal(row.token_refunded, 0);
     assert.equal((await callArtwork(row.id)).status, 200);
     assert.equal(fixture.requests.length, 1);
+  });
+});
+
+describe("offline real CAPPATEX generation billing classification", { concurrency: false }, () => {
+  function configureFailure(code, pilotOwner) {
+    process.env.CAPPATEX_GENERATION_ENABLED = "true";
+    process.env.CAPPATEX_GENERATION_AUDIENCE = pilotOwner ? "owner" : "subscribers";
+    fixture.db.sqlite.prepare("UPDATE accounts SET plan = 'cappatex', subscription_status = 'active' WHERE email = ?").run(EMAIL);
+    fixture.generationError = { status: 429, code };
+  }
+
+  function assertSingleFailedAttempt(pilotOwner) {
+    assert.equal(fixture.requests.length, 1, "No automatic image retry or billing request");
+    assert.equal(fixture.requests[0].url, "https://api.openai.com/v1/images/generations");
+    assert.equal(fixture.bucket.objects.size, 0);
+    const rows = fixture.db.sqlite.prepare("SELECT status, token_reserved, token_refunded FROM cappatex_designs").all();
+    assert.deepEqual(rows.map(row => ({ ...row })), [{ status: "generation_failed", token_reserved: pilotOwner ? 0 : 1, token_refunded: 1 }]);
+    assert.equal(fixture.db.sqlite.prepare("SELECT token_balance FROM accounts WHERE email = ?").get(EMAIL).token_balance, 4);
+    assert.deepEqual(fixture.db.sqlite.prepare("SELECT delta FROM token_ledger ORDER BY id").all().map(row => row.delta), pilotOwner ? [] : [-1, 1]);
+  }
+
+  for (const code of ["credit_balance_exhausted", "insufficient_quota", "billing_hard_limit_reached"]) {
+    for (const pilotOwner of [true, false]) {
+      test(`${code} gives ${pilotOwner ? "the owner an API billing explanation" : "customers a generic service error and token refund"}`, async () => {
+        configureFailure(code, pilotOwner);
+        const response = await callGeneration(), result = await response.json();
+        assert.equal(response.status, 503);
+        assert.equal(result.code, "openai_billing_unavailable");
+        if (pilotOwner) {
+          assert.match(result.error, /API-Abrechnung/);
+          assert.match(result.error, /kein automatischer weiterer Versuch/);
+          assert.match(result.error, code === "credit_balance_exhausted" ? /Guthaben ist aufgebraucht/ : /limit/i);
+        } else {
+          assert.match(result.error, /nicht verfügbar/);
+          assert.doesNotMatch(result.error, /OpenAI|Guthaben|Abrechnung|bezahlen|erneut|Synthetic/);
+        }
+        assert.equal(result.image, undefined);
+        assertSingleFailedAttempt(pilotOwner);
+      });
+    }
+  }
+
+  test("a transient rate limit stays distinct and refunds exactly once without retrying", async () => {
+    configureFailure("rate_limit_exceeded", false);
+    const response = await callGeneration(), result = await response.json();
+    assert.equal(response.status, 429);
+    assert.equal(result.code, "rate_limited");
+    assert.match(result.error, /ausgelastet/);
+    assert.doesNotMatch(result.error, /Guthaben|Abrechnung|Synthetic/);
+    assertSingleFailedAttempt(false);
   });
 });
 

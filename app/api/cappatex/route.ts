@@ -12,6 +12,11 @@ const OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations";
 const MAX_REQUEST_BYTES = 4_000;
 const MAX_IMAGE_BYTES = 12_000_000;
 const OPENAI_TIMEOUT_MS = 150_000;
+const OPENAI_BILLING_ERRORS = new Map([
+  ["credit_balance_exhausted", "Das OpenAI-API-Guthaben ist aufgebraucht. Bitte prüfe die API-Abrechnung des verbundenen OpenAI-Projekts."],
+  ["insufficient_quota", "Das OpenAI-Projekt hat kein verfügbares API-Guthaben oder sein Nutzungslimit erreicht. Bitte prüfe API-Abrechnung und Projektlimits."],
+  ["billing_hard_limit_reached", "Das Ausgabenlimit für die OpenAI-API ist erreicht. Bitte prüfe die API-Abrechnung und die Limits des verbundenen OpenAI-Projekts."],
+]);
 
 type OpenAIError = {
   error?: {
@@ -180,6 +185,10 @@ export async function POST(request: Request) {
       });
       if (code === "moderation_blocked") return clientError(400, code, moderationMessage(moderationStage), { moderationStage });
       if (response.status === 401) return clientError(503, "openai_auth_error", "Der Bildgenerator ist serverseitig nicht korrekt autorisiert.");
+      const billingError = OPENAI_BILLING_ERRORS.get(code);
+      if (billingError) return clientError(503, "openai_billing_unavailable", access.pilotOwner
+        ? `${billingError} Es wurde kein automatischer weiterer Versuch gestartet.`
+        : "Der Bildgenerator ist derzeit nicht verfügbar. Bitte wende dich bei Bedarf an den Shopbetreiber.");
       if (response.status === 429) return clientError(429, "rate_limited", "Der Bildgenerator ist gerade ausgelastet. Bitte warte kurz und versuche es erneut.");
       return clientError(502, "image_service_error", "Der Bilddienst ist gerade nicht erreichbar. Bitte versuche es später erneut.");
     }
