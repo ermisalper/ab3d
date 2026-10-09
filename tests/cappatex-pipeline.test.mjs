@@ -203,7 +203,7 @@ test("migrations keep snapshots independent and prevent a second order consuming
   db.close();
 });
 
-test("Printify draft references the original upload and rejects changed artwork or placement",()=>{
+test("Printify draft references the original upload and rejects changed artwork, placement or background",()=>{
   const approved={...snapshot,placement:{x:.4,y:.6,scale:.3}};
   const payload=draftProductPayload(approved,"original-upload",2500);
   assert.deepEqual(payload.print_areas[0].placeholders[0].images,[{id:"original-upload",x:.4,y:.6,scale:.3,angle:0}]);
@@ -211,6 +211,11 @@ test("Printify draft references the original upload and rejects changed artwork 
   const draft={...payload,id:"test-draft",visible:false,
     print_areas:payload.print_areas.map(area=>({...area,placeholders:area.placeholders.map(p=>({...p,decoration_method:"dtg"}))}))};
   assert.equal(draftMatchesSnapshot(draft,approved,"original-upload"),true);
+  const withBackground=background=>({...draft,print_areas:draft.print_areas.map(area=>({...area,background}))});
+  assert.equal(draftMatchesSnapshot(withBackground(null),approved,"original-upload"),true);
+  assert.equal(draftMatchesSnapshot(withBackground("transparent"),approved,"original-upload"),true);
+  for(const background of ["#fff","#f00","#ffffff","#ff0000",""," "," transparent ","unknown"])
+    assert.equal(draftMatchesSnapshot(withBackground(background),approved,"original-upload"),false);
   assert.equal(draftMatchesSnapshot({...draft,visible:true},approved,"original-upload"),false);
   assert.equal(draftMatchesSnapshot(draft,{...approved,placement:{...approved.placement,scale:.5}},"original-upload"),false);
   assert.equal(draftMatchesSnapshot(draft,approved,"different-upload"),false);
