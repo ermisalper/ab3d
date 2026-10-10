@@ -1,8 +1,24 @@
-# CAPPATEX: geprüfter Arbeitsstand, 09.10.2026
+# CAPPATEX: geprüfter Arbeitsstand, 10.10.2026
 
 Ausschliesslich AB3D unter C:\Users\berk1\OneDrive\Desktop\ab3d; GitHub ermisalper/ab3d, Branch codex/cappatex-production. Der aktuelle private Generator-/Upload-Pilot ist veröffentlicht. Das Abnahmekriterium für Verkauf und Fulfillment ist **noch nicht erfüllt**; dieser Stand ist keine Verkaufsfreigabe.
 
-## Aktuell am 09.10.2026: Blanko-Gestaltung live, Version 39
+## Aktuell am 10.10.2026: erweiterter Privatkatalog, Version 44
+
+Live-Quellstand **fe504e93813edcfaa6fff1f8bd483356f78deb44**, Version `appgprj_6a69247390f08191811183b6a04bae94~appgver_78030510241c819199d1888126d8b1bc`, Deployment `appgdep_6aca5ddd85f08191a08b10006b1bde04`, bestätigt 2026-10-10T15:46:56.290598+00:00, Konfigurationsrevision 10. Owner-private; Checkout, Fulfillment und automatische Produktion bleiben false. GitHub-Branch codex/cappatex-production. Keine neuen KI-Aufrufe, Aufträge, Abos oder Shopify-Tarifänderungen.
+
+**Tatsächlich eingerichtet:** sechs echte Modelle mit 60 eindeutig über SKU zugeordneten Varianten: T-Shirt 10, Hoodie 10, Tanktop 7, B&C WUI23 Pullover 15, Gildan 2400 Langarmshirt 14, Poster EU 4. Die neuen Artikel sind zu Shopify synchronisiert und als Entwürfe ohne Vertriebskanäle gespeichert. Jedes Modell hat eigene geprüfte Anbieterfotos, Druckmasse und CH-/LI-Anbieterraten. Poster haben eine echte Papierauswahl Glossy/Matte und zwei Hochformate. Details und alle IDs stehen in CAPPATEX-CATALOG-EXPANSION.md und CAPPATEX-MOCKUP-CALIBRATION.md.
+
+**Live geprüft, mit vorhandenem Motiv CPX-A3EBF595EF42:** gleichzeitiger Produktvergleich, Farb-/Grössen-/Papierwechsel, Platzierung und DPI-Warnung. Pullover White/2XL bei 44 % ergibt 303 dpi und 172 × 172 mm; Langarmshirt Black/5XL bei 48 % ergibt 304 dpi; Poster 8.3 × 11.7 Zoll bei 59 % ergibt 418 dpi. Produktwechsel und Reload behalten gespeicherte Konfigurationen. Der temporäre Ausfall eines Produktkatalogeintrags löscht dessen Einstellungen nicht mehr; nicht bestätigte Varianten werden weiterhin nicht angeboten. Alle sechs waren auf Version 41/42 gemeinsam sichtbar; daraus folgt kein dauerhaft stabiler Live-Katalog.
+
+**Offener Hosting-Blocker:** Nach weiteren Reloads fehlen wechselnde Produkte. Die neuen datensparsamen Serverdiagnosen zeigen HTTP 403 für Anbieter-Katalogabfragen (zuletzt Blueprint 80 und 443, Provider 30); gespeicherte lokale Abfragen mit dem separat genehmigten Lesetoken bestätigen alle sechs Modelle und 60 Varianten. Der erforderliche User-Agent wurde gemäss [Printify API Authentication](https://developers.printify.com/#authentication) in allen Printify-Requests ergänzt, 403 besteht beim bisherigen Hosting-Zugriff fort. Der historische Produktionstoken hatte kein catalog.read; seine aktuellen Scopes sind nicht verifiziert. Kein Berechtigungsfehler wird automatisch wiederholt oder durch ungeprüfte Daten ersetzt. Wiederholung erfolgt nur einmal bei Netzwerk-/429-/5xx-Lesefehlern.
+
+**Vorbereitete nächste Änderung:** optionales geheimes PRINTIFY_CATALOG_API_TOKEN für ausschliesslich lesende Katalogabfragen. Der vorhandene PRINTIFY_API_TOKEN bleibt für Produktion unverändert. Dieser zusätzliche Hosting-Speicherort benötigt noch die tatsächliche Betreiberfreigabe, da die Lesetoken-Freigabe bisher ausschliesslich für die lokale AB3D-.env.local galt. Das Secret wurde nicht übertragen. Code einschliesslich Trennung besteht 144 Tests, Lint, TypeScript und Build; veröffentlichte Version 44 besteht 143 Tests. Zugriff durch 403 bleibt bis zur Konfiguration und erneuten Live-Prüfung offen.
+
+**Weitere offene Grenzen:** Tassen und Handyhüllen sind recherchiert, aber wegen unbestätigter Zylinder-/Ausschnitt-/Randprojektion nicht registriert. Shopify-Checkout, echte Versandtarife, genehmigte Verkaufspreise, nativer Import-Unlink, Produktionsrechte und End-to-End-Auftragsprüfung sind nicht freigegeben. Der bestehende Uploadpfad wurde in diesem Schritt nicht mit einer neuen Datei live getestet. Mobile Sichtprüfung nicht bestätigt: die Browser-Viewport-Einstellung 390 × 844 wurde vom Tool nicht angewendet (weiterhin gemessene 1280 × 720); Override zurückgesetzt. Desktop-Konsole im frischen Tab fehlerfrei. Ein älterer Tab musste nach Deployment wegen eines veralteten JavaScript-Modulverweises neu geöffnet werden.
+
+Die nachfolgenden Abschnitte sind historische Zustände; diese Zusammenfassung hat Vorrang.
+
+## Historie am 09.10.2026: Blanko-Gestaltung live, Version 39
 
 Die private Site wurde erfolgreich aus Commit **`d99cf2075e7bee7d6302d1ce93cd03fe1324b1a0`** veröffentlicht: Version `appgprj_6a69247390f08191811183b6a04bae94~appgver_4c1fcbbf041c8191af2710f661f3f969`, Deployment `appgdep_6ac942453a508191ba8c42ced5c10323`, bestätigt `2026-10-09T19:37:00.685881Z`, Konfigurationsrevision weiterhin **10**. Quellstand auf GitHub `codex/cappatex-production` gesichert. Das Paket enthielt keine der lokalen OpenAI-/Printify-Schlüssel.
 

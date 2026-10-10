@@ -5,7 +5,7 @@ import { fetchShopifyCollection, SHOPIFY_COLLECTIONS } from "./shopify-catalog";
 
 export async function verifiedCatalog() {
   const shopId = process.env.PRINTIFY_SHOP_ID?.trim() || "";
-  const token = process.env.PRINTIFY_API_TOKEN?.trim();
+  const token = process.env.PRINTIFY_CATALOG_API_TOKEN?.trim() || process.env.PRINTIFY_API_TOKEN?.trim();
   const profiles = CAPPATEX_PRINT_PROFILES.filter(profile => profileIsVerified(profile, shopId));
   if (!token || !profiles.length) return [];
   const [catalog, products] = await Promise.all([

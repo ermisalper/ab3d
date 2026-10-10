@@ -27,7 +27,7 @@ type ProviderProduct = { id: string; blueprint_id: number; print_provider_id: nu
 export async function designCatalog(email: string): Promise<CappatexDesignProduct[]> {
   if (!generationAccess(email, "owner", process.env.CAPPATEX_GENERATION_ALLOWED_EMAILS).allowed) return [];
   const shopId = process.env.PRINTIFY_SHOP_ID?.trim() || "";
-  const token = process.env.PRINTIFY_API_TOKEN?.trim();
+  const token = process.env.PRINTIFY_CATALOG_API_TOKEN?.trim() || process.env.PRINTIFY_API_TOKEN?.trim();
   const profiles = CAPPATEX_DESIGN_PROFILES.filter(profile => profileGeometryIsVerified(profile, shopId));
   if (!token || !profiles.length) return [];
   // Required by https://developers.printify.com/#authentication, also on Worker fetch.

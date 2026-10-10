@@ -147,6 +147,9 @@ function offlineFetch(fixture) {
       assert.equal(new Headers(init.headers).get("User-Agent"), "AB3D-CAPPATEX/1.0",
         "Printify requires an explicit application User-Agent, including on Worker fetch");
     }
+    if (url.origin === "https://api.printify.com" && fixture.expectedReadToken && method === "GET") {
+      assert.equal(new Headers(init.headers).get("Authorization"), `Bearer ${fixture.expectedReadToken}`);
+    }
     fixture.requests.push({ method, url: url.href, body });
     const intercepted = fixture.interceptFetch?.(url, method);
     if (intercepted !== undefined) return await intercepted;
@@ -228,7 +231,7 @@ const configured = { CAPPATEX_CHECKOUT_ENABLED: "true", CAPPATEX_FULFILLMENT_ENA
   CAPPATEX_GENERATION_ENABLED: "false", OPENAI_API_KEY: "local-fixture-not-a-real-openai-key",
   CAPPATEX_UPLOAD_ENABLED: "true", CAPPATEX_GENERATION_AUDIENCE: "owner", CAPPATEX_GENERATION_ALLOWED_EMAILS: EMAIL,
   CAPPATEX_AUTO_PRODUCTION_ENABLED: "false", PRINTIFY_SHOP_ID: profile.shopId,
-  PRINTIFY_API_TOKEN: "local-fixture-not-a-real-token", SHOPIFY_WEBHOOK_SECRET: WEBHOOK_SECRET,
+  PRINTIFY_API_TOKEN: "local-fixture-not-a-real-token", PRINTIFY_CATALOG_API_TOKEN: "", SHOPIFY_WEBHOOK_SECRET: WEBHOOK_SECRET,
   SHOPIFY_STORE_DOMAIN: STORE_DOMAIN, SHOPIFY_API_VERSION: "2026-07", SHOPIFY_STOREFRONT_ACCESS_TOKEN: "local-fixture-only",
   AB3D_OWNER_EMAILS: "", AB3D_UNLIMITED_EMAILS: "" };
 const previousEnv = Object.fromEntries(Object.keys(configured).map(key => [key, process.env[key]]));
@@ -394,6 +397,18 @@ describe("offline private design catalog without sales approval", { concurrency:
     assert.equal(body.products[0].variants[0].shopifyVariantId, variant.shopifyVariantId);
     assert.equal(fixture.requests.length, 2);
     assert.ok(fixture.requests.every(request => request.method === "GET" && request.url.startsWith("https://api.printify.com/")));
+  });
+
+  test("private catalog reads can use a separate read-only token without replacing the production credential", async () => {
+    previewOnly();
+    process.env.PRINTIFY_CATALOG_API_TOKEN = "separate-local-read-only-fixture";
+    fixture.expectedReadToken = process.env.PRINTIFY_CATALOG_API_TOKEN;
+    const body = await (await getDesignCatalog()).json();
+    assert.equal(body.products.length, 1);
+    assert.equal(body.checkoutEnabled, false);
+    assert.equal(process.env.PRINTIFY_API_TOKEN, configured.PRINTIFY_API_TOKEN);
+    assert.ok(fixture.requests.every(request => request.method === "GET"));
+    assert.equal(JSON.stringify(body).includes(fixture.expectedReadToken), false);
   });
 
   for (const [optionKey, optionLabel] of [["paper", "Papier"], ["surface", "Oberfläche"]]) {
