@@ -143,6 +143,10 @@ function offlineFetch(fixture) {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init.method || (input instanceof Request ? input.method : "GET");
     const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
+    if (url.origin === "https://api.printify.com") {
+      assert.equal(new Headers(init.headers).get("User-Agent"), "AB3D-CAPPATEX/1.0",
+        "Printify requires an explicit application User-Agent, including on Worker fetch");
+    }
     fixture.requests.push({ method, url: url.href, body });
     const intercepted = fixture.interceptFetch?.(url, method);
     if (intercepted !== undefined) return await intercepted;

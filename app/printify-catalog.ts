@@ -23,7 +23,7 @@ export async function fetchPrintifyProducts(token: string, shopId: string) {
     const response = await fetch(
       `https://api.printify.com/v1/shops/${encodeURIComponent(shopId)}/products.json?limit=50&page=${page}`,
       {
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "AB3D-CAPPATEX/1.0" },
         signal: AbortSignal.timeout(20_000),
       },
     );

@@ -30,7 +30,8 @@ export async function designCatalog(email: string): Promise<CappatexDesignProduc
   const token = process.env.PRINTIFY_API_TOKEN?.trim();
   const profiles = CAPPATEX_DESIGN_PROFILES.filter(profile => profileGeometryIsVerified(profile, shopId));
   if (!token || !profiles.length) return [];
-  const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+  // Required by https://developers.printify.com/#authentication, also on Worker fetch.
+  const headers = { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "AB3D-CAPPATEX/1.0" };
   async function readJson<T>(url: string): Promise<T | null> {
     // Retry only transient read failures, never accept stale or mismatched product data.
     for (let attempt = 0; attempt < 2; attempt++) {

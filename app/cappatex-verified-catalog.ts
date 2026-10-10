@@ -19,7 +19,7 @@ export async function verifiedCatalog() {
     if (!product) continue;
     // Check today's provider geometry and shipping instead of trusting an old saved SKU.
     const root = `https://api.printify.com/v1/catalog/blueprints/${profile.blueprintId}/print_providers/${profile.providerId}`;
-    const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+    const headers = { Authorization: `Bearer ${token}`, "User-Agent": "AB3D-CAPPATEX/1.0", Accept: "application/json" };
     const [variantResponse, shippingResponse] = await Promise.all([
       fetch(`${root}/variants.json`, { headers, signal: AbortSignal.timeout(20_000) }),
       fetch(`${root}/shipping.json`, { headers, signal: AbortSignal.timeout(20_000) }),

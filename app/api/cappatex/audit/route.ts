@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   if ((blueprint || provider) && (!/^\d{1,6}$/.test(blueprint || "") || !/^\d{1,6}$/.test(provider || ""))) return new Response("Invalid catalog IDs", { status: 400 });
   try {
     const get = async (path: string) => {
-      const response = await fetch(`https://api.printify.com/v1/${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
+      const response = await fetch(`https://api.printify.com/v1/${path}`, { headers: { Authorization: `Bearer ${token}`, "User-Agent": "AB3D-CAPPATEX/1.0", Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
       if (!response.ok) return { status: response.status };
       return response.json();
     };

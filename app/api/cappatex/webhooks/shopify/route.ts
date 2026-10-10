@@ -108,14 +108,14 @@ export async function POST(request: Request) {
           const bytes = new Uint8Array(await object.arrayBuffer());
           if (await sha256(bytes) !== snapshot.artwork.sha256) throw new Error("artwork_changed");
           const upload = await fetch("https://api.printify.com/v1/uploads/images.json", {
-            method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            method: "POST", headers: { Authorization: `Bearer ${token}`, "User-Agent": "AB3D-CAPPATEX/1.0", "Content-Type": "application/json" },
             body: JSON.stringify({ file_name: `${snapshot.designId}.png`, contents: encodeBase64(bytes) }), signal: AbortSignal.timeout(60_000),
           });
           const image = await upload.json() as { id?: string; width?: number; height?: number };
           if (!upload.ok || !image.id || image.width !== snapshot.artwork.width || image.height !== snapshot.artwork.height) throw new Error("upload_failed");
           const productRoot = `https://api.printify.com/v1/shops/${encodeURIComponent(shopId)}/products`;
           const templateResponse = await fetch(`${productRoot}/${encodeURIComponent(snapshot.profile.printifyProductId)}.json`, {
-            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, signal: AbortSignal.timeout(20_000),
+            headers: { Authorization: `Bearer ${token}`, "User-Agent": "AB3D-CAPPATEX/1.0", Accept: "application/json" }, signal: AbortSignal.timeout(20_000),
           });
           const template = await templateResponse.json() as { id?: string; blueprint_id?: number; print_provider_id?: number; variants?: Array<{ id: number; price: number }> };
           const price = template.variants?.find(variant => variant.id === snapshot.variant.printifyVariantId)?.price;
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
             || template.print_provider_id !== snapshot.profile.providerId || price === undefined) throw new Error("template_changed");
           // Use the uploaded original's ID, never Printify's preview URL. Each snapshot owns its own unpublished draft.
           const draftResponse = await fetch(`${productRoot}.json`, {
-            method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            method: "POST", headers: { Authorization: `Bearer ${token}`, "User-Agent": "AB3D-CAPPATEX/1.0", "Content-Type": "application/json" },
             body: JSON.stringify(draftProductPayload(snapshot, image.id, price)), signal: AbortSignal.timeout(60_000),
           });
           const draft = await draftResponse.json();
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
       beginCreate: async payload => Boolean(await env.DB.prepare(BEGIN_CREATE).bind(await sha256(JSON.stringify(payload)), Date.now(), id).first()),
       create: async payload => {
         const response = await fetch(`https://api.printify.com/v1/shops/${encodeURIComponent(shopId)}/orders.json`, {
-          method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          method: "POST", headers: { Authorization: `Bearer ${token}`, "User-Agent": "AB3D-CAPPATEX/1.0", "Content-Type": "application/json" },
           body: JSON.stringify(payload), signal: AbortSignal.timeout(60_000),
         });
         const created = await response.json() as { id?: string };
