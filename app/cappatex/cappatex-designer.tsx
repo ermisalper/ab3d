@@ -5,7 +5,7 @@ import Link from "next/link";
 import { initialPlacement, placementGeometry, type ArtworkSize, type Placement } from "../cappatex-print-profile";
 import type { CappatexDesignProduct } from "../cappatex-design-catalog";
 import { prepareCustomerImage } from "../cappatex-upload-client";
-import { designStateUrl, readDesignState, retainedPlacement, verifiedDesignSelection, rememberConfiguration, rememberedConfiguration,
+import { designStateUrl, readDesignState, retainedPlacement, verifiedDesignSelection, rememberConfiguration, rememberedConfiguration, reconcileConfigurations,
   type ProductConfigurations } from "../cappatex-design-state";
 
 const styles = ["Minimal", "Illustrativ", "Retro", "Streetwear"];
@@ -130,10 +130,7 @@ export default function CappatexDesigner() {
         const data = catalogResult.value;
         const catalogProducts = Array.isArray(data.products) ? data.products : [];
         const selection = verifiedDesignSelection(restored, catalogProducts);
-        const restoredConfigurations = Object.fromEntries(catalogProducts.flatMap((item: CappatexDesignProduct) => {
-          const saved = rememberedConfiguration(item, restored.configurations || {});
-          return saved ? [[item.id, saved]] : [];
-        }));
+        const restoredConfigurations = reconcileConfigurations(catalogProducts, restored.configurations || {});
         setConfigurations(restoredConfigurations);
         setProducts(catalogProducts); setProductId(selection.profileId); setVariantId(selection.variantId);
         setPlacement(selection.placement || null);

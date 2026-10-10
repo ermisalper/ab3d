@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readDesignState, designStateUrl, retainedPlacement, verifiedDesignSelection, rememberConfiguration, rememberedConfiguration } from "../app/cappatex-design-state.ts";
+import { readDesignState, designStateUrl, retainedPlacement, verifiedDesignSelection, rememberConfiguration, rememberedConfiguration, reconcileConfigurations } from "../app/cappatex-design-state.ts";
 import { initialPlacement, placementGeometry } from "../app/cappatex-print-profile.ts";
 
 test("reload preserves the owned design reference and exact product configuration without another generation", () => {
@@ -114,4 +114,21 @@ test("malformed, oversized and invalid stored configurations are ignored", () =>
   ]))).configurations;
   assert.deepEqual(Object.keys(configurations), ["tee"]);
   assert.deepEqual(rememberedConfiguration(comparisonProducts[0], configurations)?.placement, { x: .4, y: .5, scale: .3 });
+});
+
+test("temporary catalog failure retains saved choices without authorizing an unavailable product", () => {
+  const [tee, hoodie] = comparisonProducts;
+  let saved = rememberConfiguration({}, tee, tee.variants[1].shopifyVariantId, { x: .4, y: .4, scale: .4 });
+  saved = rememberConfiguration(saved, hoodie, hoodie.variants[0].shopifyVariantId, { x: .55, y: .42, scale: .46 });
+  const partial = reconcileConfigurations([tee], saved);
+  assert.deepEqual(partial, saved);
+  const state = { designId: "CPX-A3EBF595EF42", profileId: hoodie.id, variantId: hoodie.variants[0].shopifyVariantId,
+    quantity: 1, country: "CH", placement: saved.hoodie.placement, configurations: partial };
+  assert.equal(verifiedDesignSelection(state, [tee]).requiresSelection, true);
+  const restored = readDesignState(new URL(designStateUrl("https://app.example.test/cappatex", state)).search);
+  assert.deepEqual(reconcileConfigurations(comparisonProducts, restored.configurations), saved);
+  assert.deepEqual(rememberedConfiguration(hoodie, restored.configurations).placement, saved.hoodie.placement);
+  const changed = reconcileConfigurations([{ ...hoodie, profileVersion: "hoodie-v2" }], saved);
+  assert.equal(changed.hoodie, undefined);
+  assert.deepEqual(changed.tee, saved.tee);
 });

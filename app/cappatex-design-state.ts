@@ -23,6 +23,17 @@ export function rememberConfiguration(configurations: ProductConfigurations, pro
   return { ...configurations, [product.id]: { profileVersion: product.profileVersion, variantId, placement: { ...placement } } };
 }
 
+/** Missing catalog entries may be temporary. Retain their choices without making them selectable. */
+export function reconcileConfigurations(products: VersionedSelection[], configurations: ProductConfigurations): ProductConfigurations {
+  const result = { ...configurations };
+  for (const product of products) {
+    const saved = rememberedConfiguration(product, configurations);
+    if (saved) result[product.id] = saved;
+    else delete result[product.id];
+  }
+  return result;
+}
+
 function readConfigurations(value: string | null): ProductConfigurations | undefined {
   if (!value || value.length > 10_000) return undefined;
   try {
