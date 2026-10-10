@@ -473,6 +473,37 @@ describe("offline private design catalog without sales approval", { concurrency:
     assert.ok(fixture.requests.every(request => request.method === "GET"));
   });
 
+  for (const failure of ["network", 503, 429]) {
+    test(`a transient ${failure} product read is retried once and revalidated`, async () => {
+      const candidate = previewOnly();
+      let attempts = 0;
+      fixture.interceptFetch = (url, method) => {
+        if (method !== "GET" || url.pathname !== candidatePath(candidate)) return undefined;
+        if (++attempts === 1) {
+          if (failure === "network") throw new TypeError("Temporary fixture network error");
+          return new Response("Temporary fixture failure", { status: failure });
+        }
+        return undefined;
+      };
+      const body = await (await getDesignCatalog()).json();
+      assert.equal(attempts, 2);
+      assert.equal(body.products.length, 1);
+      assert.equal(body.products[0].purchaseReady, false);
+      assert.equal(body.checkoutEnabled, false);
+    });
+  }
+
+  test("an unauthorized product read is not retried or replaced with an old variant", async () => {
+    const candidate = previewOnly(); let attempts = 0;
+    fixture.interceptFetch = (url, method) => {
+      if (method === "GET" && url.pathname === candidatePath(candidate)) {
+        attempts++; return new Response("Unauthorized fixture", { status: 401 });
+      }
+    };
+    assert.deepEqual((await (await getDesignCatalog()).json()).products, []);
+    assert.equal(attempts, 1);
+  });
+
   test("at most three profiles run together, results stay ordered and provider reads are shared only per request", { timeout: 2000 }, async () => {
     const candidates = Array.from({ length: 6 }, (_, index) => anotherPreview(index + 1));
     const started = [], releases = new Map(), waiters = new Map();

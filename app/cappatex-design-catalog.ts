@@ -32,10 +32,25 @@ export async function designCatalog(email: string): Promise<CappatexDesignProduc
   if (!token || !profiles.length) return [];
   const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
   async function readJson<T>(url: string): Promise<T | null> {
-    try {
-      const response = await fetch(url, { headers, signal: AbortSignal.timeout(20_000) });
-      return response.ok ? await response.json() as T : null;
-    } catch { return null; }
+    // Retry only transient read failures, never accept stale or mismatched product data.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let status = "network";
+      try {
+        const response = await fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(10_000) });
+        status = String(response.status);
+        if (response.ok) {
+          try { return await response.json() as T; }
+          catch { console.warn("cappatex_catalog_read", { endpoint: new URL(url).pathname, issue: "invalid_json" }); return null; }
+        }
+        await response.body?.cancel();
+        if (response.status !== 429 && response.status < 500) {
+          console.warn("cappatex_catalog_read", { endpoint: new URL(url).pathname, issue: status }); return null;
+        }
+      } catch { /* Network failures are safe to retry for these GET-only endpoints. */ }
+      if (attempt === 1) console.warn("cappatex_catalog_read", { endpoint: new URL(url).pathname, issue: status });
+      else await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    return null;
   }
   // Share one provider read only within this request; availability is always read afresh.
   const providers = new Map<string, Promise<ProviderVariants | null>>();
@@ -53,25 +68,32 @@ export async function designCatalog(email: string): Promise<CappatexDesignProduc
         providerVariants(profile),
       ]);
       if (!product || !provider || product.id !== profile.printifyProductId || product.blueprint_id !== profile.blueprintId
-        || product.print_provider_id !== profile.providerId || product.visible !== false) return null;
+        || product.print_provider_id !== profile.providerId || product.visible !== false) {
+        console.warn("cappatex_catalog_product", { profile: profile.id, issue: !product || !provider ? "read_unavailable" : "identity_or_visibility" });
+        return null;
+      }
+      const rejected: Record<string, number> = {};
       const variants = profile.variants.flatMap(variant => {
         const matches = product.variants?.filter(item => item.id === variant.printifyVariantId || item.sku === variant.sku) || [];
         const options = provider.variants?.filter(item => item.id === variant.printifyVariantId) || [];
         const areas = options[0]?.placeholders?.filter(area => area.position === variant.area.position
           && area.decoration_method === variant.area.decorationMethod) || [];
-        if (matches.length !== 1 || matches[0].id !== variant.printifyVariantId || matches[0].sku !== variant.sku
+        const issue = matches.length !== 1 || matches[0].id !== variant.printifyVariantId || matches[0].sku !== variant.sku
           || matches[0].is_enabled !== true || matches[0].is_available !== true
-          || options.length !== 1 || options[0].options?.[profile.optionKey || "color"] !== variant.color || options[0].options?.size !== variant.size
-          || areas.length !== 1 || areas[0].width !== variant.area.widthPx || areas[0].height !== variant.area.heightPx
-          || !product.images?.some(image => image.src === variant.mockup.url && image.position === (profile.mockupPosition || variant.area.position)
-            && image.variant_ids.includes(variant.printifyVariantId))) return [];
+          ? "variant_or_stock"
+          : options.length !== 1 || options[0].options?.[profile.optionKey || "color"] !== variant.color || options[0].options?.size !== variant.size ? "options"
+          : areas.length !== 1 || areas[0].width !== variant.area.widthPx || areas[0].height !== variant.area.heightPx ? "print_area"
+          : !product.images?.some(image => image.src === variant.mockup.url && image.position === (profile.mockupPosition || variant.area.position)
+            && image.variant_ids.includes(variant.printifyVariantId)) ? "photo" : null;
+        if (issue) { rejected[issue] = (rejected[issue] || 0) + 1; return []; }
         return [{ ...variant, title: `${variant.color} / ${variant.size}`, available: true, price: null }];
       });
+      if (!variants.length) console.warn("cappatex_catalog_product", { profile: profile.id, issue: "no_verified_variants", rejected });
       return variants.length ? { id: profile.id, name: profile.name, kind: profile.kind, profileVersion: profile.version,
         purchaseReady: false, blockedReason: "Für deine Gestaltung freigegeben. Verkaufspreis, Versand und Bestellablauf werden noch geprüft.",
         mockupReferenceSize: profile.mockupReferenceSize,
         optionLabel: profile.optionKey === "paper" ? "Papier" : profile.optionKey === "surface" ? "Oberfläche" : "Farbe", variants } : null;
-    } catch { return null; }
+    } catch { console.warn("cappatex_catalog_product", { profile: profile.id, issue: "invalid_product_data" }); return null; }
   }
   const result: Array<CappatexDesignProduct | null> = new Array(profiles.length).fill(null);
   let next = 0;
