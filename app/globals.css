@@ -588,3 +588,39 @@ section[id],:target{scroll-margin-top:132px}
 @media(max-width:760px){.cappatex-verified-preview{min-height:260px;padding:12px}.cappatex-preview-placeholder{padding:25px 15px}}
 
 .cappatex-source{grid-template-columns:1fr 1fr;margin-bottom:22px}.cappatex-upload>p{font-size:13px;line-height:1.6;color:#697169}.cappatex-upload input[type=file]{max-width:100%;padding:12px 0;font-size:13px}
+
+/* CAPPATEX: compare the same artwork on real, individually calibrated blanks. */
+.cappatex-comparison{margin:0 0 26px;padding:26px;border:1px solid #cfc5b6;border-radius:var(--radius-md);background:#f6f1e8}
+.cappatex-comparison-heading{display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:20px}
+.cappatex-comparison-heading h3{margin:0;font:29px/1.15 Georgia,serif}
+.cappatex-comparison-heading p{max-width:590px;margin:0;font-size:13px;line-height:1.55;color:#697169}
+.cappatex-comparison .cappatex-products{grid-template-columns:repeat(auto-fit,minmax(180px,240px));gap:16px;align-items:start}
+.cappatex-comparison .cappatex-product-card{padding:10px 10px 14px;text-align:left;transition:border-color .15s,box-shadow .15s}
+.cappatex-comparison .cappatex-product-card:disabled{cursor:wait;opacity:.65}
+.cappatex-comparison .cappatex-product-card span,.cappatex-comparison .cappatex-product-card small{white-space:normal;overflow:visible;text-overflow:clip}
+.cappatex-comparison .cappatex-product-card-photo{position:relative;display:block;overflow:hidden!important;width:100%;margin-bottom:12px;background:#f1eee7;border-radius:4px}
+.cappatex-card-blank{display:block;width:100%;height:100%;object-fit:contain}
+.cappatex-card-print-area{position:absolute;display:block}
+.cappatex-card-print-area img{display:block;transition:opacity .15s;pointer-events:none}
+.cappatex-comparison .cappatex-product-card-name{font-size:14px;line-height:1.4;font-weight:650;overflow-wrap:anywhere}
+.cappatex-comparison .cappatex-product-card-variant{margin-top:5px;font-size:12px;line-height:1.4;font-weight:400;color:#697169}
+.cappatex-comparison .cappatex-card-status,.cappatex-comparison .cappatex-card-warning{margin-top:8px;font-size:11px;line-height:1.5}
+.cappatex-comparison .cappatex-card-warning{color:#97452f}
+.cappatex-flow .cappatex-workspace{grid-template-columns:minmax(300px,.75fr) minmax(0,1.25fr);min-height:0;align-items:start}
+.cappatex-flow .cappatex-controls{height:100%;padding:30px}
+.cappatex-flow .cappatex-preview-panel{min-width:0;position:sticky;top:96px;align-self:start}
+.cappatex-flow .cappatex-preview-head{height:auto;min-height:85px;gap:18px;align-items:start}
+.cappatex-flow .cappatex-preview-head h3{font-size:25px;line-height:1.2;overflow-wrap:anywhere}
+.cappatex-flow .cappatex-preview-head>b{flex:0 0 145px;font:13px/1.5 Arial,sans-serif;text-align:right}
+.cappatex-preview-panel>.cappatex-variant-fields{padding:0 24px;gap:16px}
+.cappatex-placement-workbench{display:grid;grid-template-columns:minmax(0,1fr)}
+.cappatex-placement-workbench.has-product{grid-template-columns:minmax(0,1fr) 166px}
+.cappatex-placement-workbench .cappatex-verified-preview{min-height:0;padding:12px;border-left:0;border-right:0}
+.cappatex-placement-workbench .cappatex-customize{margin:0;padding:20px 16px;gap:22px;align-content:center;border-top:1px solid #ded6c9;border-bottom:1px solid #ded6c9;background:#faf8f3}
+.cappatex-placement-workbench .cappatex-customize>label{font-size:10px;line-height:1.6;letter-spacing:.04em}
+.cappatex-placement-workbench .cappatex-customize input[type=range]{min-height:22px;margin-top:8px}
+.cappatex-preview-panel>.cappatex-quality-ok,.cappatex-preview-panel>.cappatex-error{margin:12px 24px;font-size:12px;line-height:1.5}
+.cappatex-preview-panel>.cappatex-profile-note,.cappatex-preview-panel>.text-link{margin:10px 24px;font-size:12px;line-height:1.6}
+@media(max-width:1100px){.cappatex-flow .cappatex-workspace{grid-template-columns:minmax(0,1fr)}.cappatex-flow .cappatex-preview-panel{position:static}.cappatex-workspace.has-artwork .cappatex-preview-panel{grid-row:1}.cappatex-workspace.has-artwork .cappatex-controls{grid-row:2;border-bottom:0;border-top:1px solid #cfc5b6}.cappatex-placement-workbench .cappatex-blank-photo{max-width:480px;margin:auto}.cappatex-comparison-heading{display:block}.cappatex-comparison-heading p{margin-top:10px}}
+@media(max-width:760px){.cappatex-comparison{padding:18px 12px;margin-bottom:18px}.cappatex-comparison-heading h3{font-size:25px}.cappatex-comparison .cappatex-products{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cappatex-comparison .cappatex-product-card{padding:7px 7px 12px}.cappatex-comparison .cappatex-product-card-name{font-size:12px}.cappatex-flow .cappatex-controls{padding:24px 16px}.cappatex-flow .cappatex-preview-head{padding:18px 16px}.cappatex-flow .cappatex-preview-head h3{font-size:23px}.cappatex-flow .cappatex-preview-head>b{flex-basis:105px;font-size:11px}.cappatex-preview-panel>.cappatex-variant-fields{padding:0 16px}.cappatex-placement-workbench.has-product{grid-template-columns:minmax(0,1fr)}.cappatex-placement-workbench .cappatex-blank-photo{max-width:330px}.cappatex-placement-workbench .cappatex-customize{grid-template-columns:1fr 1fr!important;gap:10px 24px;padding:14px 18px}.cappatex-placement-workbench .cappatex-customize>label:first-child{grid-column:1/-1}.cappatex-preview-panel>.cappatex-quality-ok,.cappatex-preview-panel>.cappatex-error,.cappatex-preview-panel>.cappatex-profile-note,.cappatex-preview-panel>.text-link{margin-left:16px;margin-right:16px}}
+@media(prefers-reduced-motion:reduce){.cappatex-comparison .cappatex-product-card,.cappatex-card-print-area img{transition:none}}

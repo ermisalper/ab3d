@@ -144,6 +144,8 @@ function offlineFetch(fixture) {
     const method = init.method || (input instanceof Request ? input.method : "GET");
     const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
     fixture.requests.push({ method, url: url.href, body });
+    const intercepted = fixture.interceptFetch?.(url, method);
+    if (intercepted !== undefined) return await intercepted;
     const json = payload => Response.json(payload);
     if (url.href === "https://api.openai.com/v1/images/generations" && method === "POST" && fixture.generationError) {
       return Response.json({ error: { code: fixture.generationError.code, param: fixture.generationError.param,
@@ -355,6 +357,26 @@ describe("offline private design catalog without sales approval", { concurrency:
     return candidate;
   }
 
+  function anotherPreview(index) {
+    const candidate = previewOnly();
+    candidate.id += `-${index}`;
+    candidate.printifyProductId += `-${index}`;
+    candidate.shopifyProductId = `gid://shopify/Product/${1000 + index}`;
+    candidate.variants[0].shopifyVariantId = `gid://shopify/ProductVariant/${2000 + index}`;
+    candidate.variants[0].sku += `-${index}`;
+    candidate.variants[0].mockup.url = `https://example.test/blank-${index}.png`;
+    return candidate;
+  }
+
+  function candidateProduct(candidate) {
+    return { id: candidate.printifyProductId, blueprint_id: candidate.blueprintId, print_provider_id: candidate.providerId,
+      visible: false, images: candidate.variants.map(item => ({ src: item.mockup.url, position: item.area.position,
+        variant_ids: [item.printifyVariantId] })),
+      variants: candidate.variants.map(item => ({ id: item.printifyVariantId, sku: item.sku, is_enabled: true, is_available: true })) };
+  }
+
+  const candidatePath = candidate => `/v1/shops/${candidate.shopId}/products/${candidate.printifyProductId}.json`;
+
   test("the owner's real candidate is selectable without Shopify publication or a placeholder price", async () => {
     const candidate = previewOnly();
     const response = await getDesignCatalog(), body = await response.json();
@@ -380,6 +402,87 @@ describe("offline private design catalog without sales approval", { concurrency:
       assertNoTokensOrNetwork();
     });
   }
+
+  for (const failure of ["network", "http", "invalid-json", "invalid-product"]) {
+    test(`one product's ${failure} failure does not hide a working design candidate`, async () => {
+      const working = previewOnly(), failing = anotherPreview(1);
+      fixture.interceptFetch = (url, method) => {
+        if (method !== "GET" || url.pathname !== candidatePath(failing)) return undefined;
+        if (failure === "network") throw new TypeError("Synthetic product connection failure");
+        if (failure === "http") return new Response("Unavailable", { status: 503 });
+        if (failure === "invalid-json") return new Response("{", { headers: { "Content-Type": "application/json" } });
+        return Response.json({ ...candidateProduct(failing), variants: "invalid provider payload" });
+      };
+      const response = await getDesignCatalog(), body = await response.json();
+      assert.equal(response.status, 200);
+      assert.deepEqual(body.products.map(product => product.id), [working.id]);
+      assert.equal(body.products[0].purchaseReady, false);
+      assert.equal(body.products[0].variants[0].price, null);
+      assert.equal(body.checkoutEnabled, false);
+      assert.equal(fixture.requests.filter(request => request.url.includes("/print_providers/")).length, 1);
+      assert.ok(fixture.requests.every(request => request.method === "GET"));
+    });
+  }
+
+  test("one provider failure leaves products from another provider available", async () => {
+    const working = previewOnly(), failing = anotherPreview(1);
+    failing.providerId++;
+    fixture.interceptFetch = (url, method) => {
+      if (method !== "GET") return undefined;
+      if (url.pathname === candidatePath(failing)) return Response.json(candidateProduct(failing));
+      if (url.pathname === `/v1/catalog/blueprints/${failing.blueprintId}/print_providers/${failing.providerId}/variants.json`) {
+        throw new TypeError("Synthetic provider connection failure");
+      }
+    };
+    const response = await getDesignCatalog(), body = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.products.map(product => product.id), [working.id]);
+    assert.equal(body.checkoutEnabled, false);
+    assert.ok(fixture.requests.every(request => request.method === "GET"));
+  });
+
+  test("at most three profiles run together, results stay ordered and provider reads are shared only per request", { timeout: 2000 }, async () => {
+    const candidates = Array.from({ length: 6 }, (_, index) => anotherPreview(index + 1));
+    const started = [], releases = new Map(), waiters = new Map();
+    let active = 0, peak = 0, releaseImmediately = false;
+    const waitForStarted = count => started.length >= count ? Promise.resolve()
+      : new Promise(resolve => waiters.set(count, resolve));
+    fixture.interceptFetch = (url, method) => {
+      const candidate = candidates.find(item => candidatePath(item) === url.pathname);
+      if (method !== "GET" || !candidate) return undefined;
+      if (releaseImmediately) return Response.json(candidateProduct(candidate));
+      active++; peak = Math.max(peak, active); started.push(candidate.id);
+      const pending = new Promise(resolve => releases.set(candidate.id, () => {
+        active--; releases.delete(candidate.id); resolve(Response.json(candidateProduct(candidate)));
+      }));
+      waiters.get(started.length)?.();
+      return pending;
+    };
+    const pending = getDesignCatalog();
+    await waitForStarted(3);
+    assert.deepEqual(started, candidates.slice(0, 3).map(candidate => candidate.id));
+    assert.equal(active, 3);
+    const fourthStarted = waitForStarted(4);
+    releases.get(candidates[2].id)();
+    await fourthStarted;
+    assert.equal(active, 3);
+    releaseImmediately = true;
+    for (const release of [...releases.values()]) release();
+    const response = await pending, body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(peak, 3);
+    assert.deepEqual(body.products.map(product => product.id), candidates.map(candidate => candidate.id));
+    assert.ok(body.products.every(product => product.purchaseReady === false && product.variants[0].price === null));
+    assert.equal(body.checkoutEnabled, false);
+    assert.equal(fixture.requests.filter(request => request.url.includes("/print_providers/")).length, 1);
+
+    fixture.changeProvider = provider => { provider.variants[0].placeholders[0].width++; };
+    const refreshed = await (await getDesignCatalog()).json();
+    assert.deepEqual(refreshed.products, [], "A new request rechecks provider geometry instead of retaining availability");
+    assert.equal(fixture.requests.filter(request => request.url.includes("/print_providers/")).length, 2);
+    assert.equal(fixture.requests.filter(request => request.url.includes("/products/")).length, 12);
+    assert.ok(fixture.requests.every(request => request.method === "GET"));
+  });
 
   for (const mismatch of ["unavailable", "geometry", "photo", "provider"]) {
     test(`a ${mismatch} mismatch removes the candidate from the design catalog`, async () => {

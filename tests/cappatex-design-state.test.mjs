@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readDesignState, designStateUrl, retainedPlacement, verifiedDesignSelection } from "../app/cappatex-design-state.ts";
+import { readDesignState, designStateUrl, retainedPlacement, verifiedDesignSelection, rememberConfiguration, rememberedConfiguration } from "../app/cappatex-design-state.ts";
 import { initialPlacement, placementGeometry } from "../app/cappatex-print-profile.ts";
 
 test("reload preserves the owned design reference and exact product configuration without another generation", () => {
@@ -50,4 +50,68 @@ test("restore keeps placement only for a variant still belonging to the saved pr
     assert.deepEqual(verifiedDesignSelection({ ...state, variantId }, products), { profileId: "gildan", variantId: "", placement: undefined, requiresSelection: true });
   }
   assert.deepEqual(verifiedDesignSelection({ ...state, profileId: "removed" }, products), { profileId: "", variantId: "", placement: undefined, requiresSelection: true });
+});
+
+const comparisonProducts = [
+  { id: "tee", profileVersion: "tee-v1", variants: [{ shopifyVariantId: "gid://shopify/ProductVariant/11" }, { shopifyVariantId: "gid://shopify/ProductVariant/12" }] },
+  { id: "hoodie", profileVersion: "hoodie-v1", variants: [{ shopifyVariantId: "gid://shopify/ProductVariant/21" }] },
+];
+
+test("returning to each product restores its own variant and placement without changing the other product", () => {
+  const [tee, hoodie] = comparisonProducts;
+  const teePlacement = { x: .43, y: .38, scale: .47 };
+  const hoodiePlacement = { x: .52, y: .48, scale: .36 };
+  const teeOnly = rememberConfiguration({}, tee, tee.variants[1].shopifyVariantId, teePlacement);
+  const both = rememberConfiguration(teeOnly, hoodie, hoodie.variants[0].shopifyVariantId, hoodiePlacement);
+  assert.equal(rememberedConfiguration(hoodie, teeOnly), undefined, "A never visited blank starts with its own initial placement");
+  assert.deepEqual(rememberedConfiguration(tee, both), { profileVersion: "tee-v1", variantId: tee.variants[1].shopifyVariantId, placement: teePlacement });
+  assert.deepEqual(rememberedConfiguration(hoodie, both)?.placement, hoodiePlacement);
+  const selected = rememberedConfiguration(tee, both);
+  selected.placement.x = .6;
+  const updated = rememberConfiguration(both, tee, tee.variants[0].shopifyVariantId, selected.placement);
+  assert.deepEqual(rememberedConfiguration(hoodie, updated), rememberedConfiguration(hoodie, both));
+  assert.equal(rememberedConfiguration(tee, both)?.placement.x, .43, "Editing a returned selection cannot mutate saved configurations");
+  assert.equal(rememberedConfiguration(tee, updated)?.placement.x, .6);
+  assert.equal(rememberedConfiguration(tee, updated)?.variantId, tee.variants[0].shopifyVariantId);
+});
+
+test("reload restores several product configurations with the same owned artwork reference", () => {
+  const [tee, hoodie] = comparisonProducts;
+  let configurations = rememberConfiguration({}, tee, tee.variants[1].shopifyVariantId, { x: .42, y: .35, scale: .41 });
+  configurations = rememberConfiguration(configurations, hoodie, hoodie.variants[0].shopifyVariantId, { x: .55, y: .44, scale: .34 });
+  const state = { designId: "CPX-A3EBF595EF42", profileId: hoodie.id, variantId: hoodie.variants[0].shopifyVariantId,
+    quantity: 2, country: "CH", placement: configurations.hoodie.placement, configurations };
+  const restored = readDesignState(new URL(designStateUrl("https://app.example.test/cappatex#studio", state)).search);
+  assert.deepEqual(restored, state);
+  for (const product of comparisonProducts) assert.deepEqual(rememberedConfiguration(product, restored.configurations), configurations[product.id]);
+});
+
+test("changed profiles, removed variants and cross-product variants cannot reuse a saved placement", () => {
+  const [tee, hoodie] = comparisonProducts;
+  const configurations = rememberConfiguration({}, tee, tee.variants[1].shopifyVariantId, { x: .43, y: .38, scale: .47 });
+  assert.equal(rememberedConfiguration({ ...tee, profileVersion: "tee-v2" }, configurations), undefined);
+  assert.equal(rememberedConfiguration({ ...tee, variants: [tee.variants[0]] }, configurations), undefined);
+  assert.equal(rememberedConfiguration(hoodie, configurations), undefined);
+  assert.deepEqual(rememberConfiguration(configurations, hoodie, tee.variants[1].shopifyVariantId, { x: .5, y: .5, scale: .4 }), configurations);
+  const restored = { designId: "CPX-A3EBF595EF42", profileId: tee.id, variantId: tee.variants[1].shopifyVariantId,
+    quantity: 1, country: "CH", placement: configurations.tee.placement, configurations };
+  assert.deepEqual(verifiedDesignSelection(restored, [{ ...tee, profileVersion: "tee-v2" }]), {
+    profileId: tee.id, variantId: "", placement: undefined, requiresSelection: true,
+  }, "The active URL selection also requires review when its calibrated profile changes");
+});
+
+test("malformed, oversized and invalid stored configurations are ignored", () => {
+  const query = value => `?products=${encodeURIComponent(value)}`;
+  for (const value of ["{", "{}", "x".repeat(10_001), JSON.stringify(Array(21).fill(["tee", "v1", "gid://shopify/ProductVariant/11", .5, .5, .4]))]) {
+    assert.equal(readDesignState(query(value)).configurations, undefined);
+  }
+  const configurations = readDesignState(query(JSON.stringify([
+    ["tee", "tee-v1", "gid://shopify/ProductVariant/11", .4, .5, .3],
+    ["negative", "v1", "gid://shopify/ProductVariant/12", .5, .5, -.1],
+    ["outside", "v1", "gid://shopify/ProductVariant/13", 2, .5, .3],
+    ["wrong-type", "v1", "gid://shopify/ProductVariant/14", "0.5", .5, .3],
+    ["wrong-variant", "v1", "14", .5, .5, .3],
+  ]))).configurations;
+  assert.deepEqual(Object.keys(configurations), ["tee"]);
+  assert.deepEqual(rememberedConfiguration(comparisonProducts[0], configurations)?.placement, { x: .4, y: .5, scale: .3 });
 });
