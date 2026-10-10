@@ -3,6 +3,7 @@ import { generationAccess } from "./cappatex-generation-access";
 import { profileGeometryIsVerified, type PrintProfile, type ProfileVariant } from "./cappatex-print-profile";
 
 export type DesignProfile = Omit<PrintProfile, "fulfillment"> & {
+  backVariants?: Array<ProfileVariant>;
   mockupReferenceSize?: string;
   optionKey?: "paper" | "surface";
   // Some measured front-camera photos are tagged "other" by Printify's product API.
@@ -13,7 +14,10 @@ export type CappatexDesignProduct = {
   purchaseReady: boolean; blockedReason: string | null;
   mockupReferenceSize?: string;
   optionLabel?: string;
-  variants: Array<ProfileVariant & { title: string; available: boolean; price: { amount: string; currencyCode: string } | null }>;
+  variants: Array<ProfileVariant & { title: string; available: boolean; price: { amount: string; currencyCode: string } | null;
+    back?: Pick<ProfileVariant, "area" | "mockup">;
+    photos?: Array<{ url: string; label: string }>;
+  }>;
 };
 
 type ProviderVariant = { id: number; options?: { color?: string; size?: string; paper?: string; surface?: string };
@@ -87,7 +91,27 @@ export async function designCatalog(email: string): Promise<CappatexDesignProduc
           : !product.images?.some(image => image.src === variant.mockup.url && image.position === (profile.mockupPosition || variant.area.position)
             && image.variant_ids.includes(variant.printifyVariantId)) ? "photo" : null;
         if (issue) { rejected[issue] = (rejected[issue] || 0) + 1; return []; }
-        return [{ ...variant, title: `${variant.color} / ${variant.size}`, available: true, price: null }];
+        const candidate = profile.backVariants?.find(item => item.printifyVariantId === variant.printifyVariantId
+          && item.shopifyVariantId === variant.shopifyVariantId && item.sku === variant.sku);
+        const back = candidate && candidate.area.position === "back"
+          && profileGeometryIsVerified({ ...profile, variants: [candidate] }, shopId)
+          && options[0].placeholders?.some(area => area.position === "back" && area.decoration_method === candidate.area.decorationMethod
+            && area.width === candidate.area.widthPx && area.height === candidate.area.heightPx)
+          && product.images?.some(image => image.src === candidate.mockup.url && image.position === "back"
+            && image.variant_ids.includes(variant.printifyVariantId))
+          ? { area: candidate.area, mockup: candidate.mockup } : undefined;
+        const labels: Record<string, string> = { front: "Vorderansicht", back: "Rückansicht", "flat-lay": "Flach liegend",
+          man: "Am Model", woman: "Am Model", "person-left": "Getragen · seitlich", "person-right": "Getragen · seitlich",
+          hanging: "Aufgehängt", "collar-closeup": "Kragen im Detail", "size-chart": "Grössentabelle",
+          "person-1-front": "Getragen · vorne", "person-1-back": "Getragen · hinten" };
+        const photos = (product.images || []).filter(photo => photo.variant_ids.includes(variant.printifyVariantId))
+          .flatMap(photo => {
+            try {
+              const url = new URL(photo.src), label = labels[url.searchParams.get("camera_label") || ""];
+              return url.origin === "https://images.printify.com" && !url.username && !url.password && label ? [{ url: photo.src, label }] : [];
+            } catch { return []; }
+          }).slice(0, 12);
+        return [{ ...variant, title: `${variant.color} / ${variant.size}`, available: true, price: null, ...(back ? { back } : {}), photos }];
       });
       if (!variants.length) console.warn("cappatex_catalog_product", { profile: profile.id, issue: "no_verified_variants", rejected });
       return variants.length ? { id: profile.id, name: profile.name, kind: profile.kind, profileVersion: profile.version,

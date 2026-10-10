@@ -399,6 +399,42 @@ describe("offline private design catalog without sales approval", { concurrency:
     assert.ok(fixture.requests.every(request => request.method === "GET" && request.url.startsWith("https://api.printify.com/")));
   });
 
+  test("back geometry and gallery require the exact provider side, variant and trusted photo", async () => {
+    const candidate = previewOnly(), back = structuredClone(candidate.variants[0]);
+    back.area.position = "back";
+    back.mockup.url = "https://images.printify.com/mockup/test/back.jpg?camera_label=back";
+    candidate.backVariants = [back];
+    fixture.changeProvider = provider => provider.variants[0].placeholders.push({ position: "back", decoration_method: back.area.decorationMethod, width: candidate.variants[0].area.widthPx, height: candidate.variants[0].area.heightPx });
+    fixture.changeTemplate = product => product.images.push(
+      { src: back.mockup.url, position: "back", variant_ids: [back.printifyVariantId] },
+      { src: "https://images.printify.com/mockup/test/model.jpg?camera_label=man", position: "other", variant_ids: [back.printifyVariantId] },
+      { src: "https://images.printify.com.evil.test/photo?camera_label=man", position: "other", variant_ids: [back.printifyVariantId] },
+      { src: "https://images.printify.com/mockup/test/other-color.jpg?camera_label=man", position: "other", variant_ids: [999] });
+    const body = await (await getDesignCatalog()).json(), selected = body.products[0].variants[0];
+    assert.deepEqual(selected.back.area, back.area);
+    assert.equal(selected.photos.length, 2);
+    assert.ok(selected.photos.some(photo => photo.label === "Am Model"));
+    assert.equal(body.products[0].purchaseReady, false);
+    back.area.widthPx++;
+    assert.equal((await (await getDesignCatalog()).json()).products[0].variants[0].back, undefined);
+  });
+
+  for (const mismatch of ["sku", "shopify", "photo", "method"]) {
+    test(`unverified back ${mismatch} leaves only the verified front selectable`, async () => {
+      const candidate = previewOnly(), back = structuredClone(candidate.variants[0]);
+      back.area.position = "back"; back.mockup.url = "https://images.printify.com/back.jpg?camera_label=back";
+      candidate.backVariants = [back];
+      fixture.changeProvider = provider => provider.variants[0].placeholders.push({ position: "back", decoration_method: mismatch === "method" ? "embroidery" : back.area.decorationMethod, width: candidate.variants[0].area.widthPx, height: candidate.variants[0].area.heightPx });
+      fixture.changeTemplate = product => product.images.push({ src: back.mockup.url, position: "back", variant_ids: [mismatch === "photo" ? 999 : back.printifyVariantId] });
+      if (mismatch === "sku") back.sku += "-wrong";
+      if (mismatch === "shopify") back.shopifyVariantId = "gid://shopify/ProductVariant/999";
+      const body = await (await getDesignCatalog()).json();
+      assert.equal(body.products.length, 1);
+      assert.equal(body.products[0].variants[0].back, undefined);
+      assert.equal(body.checkoutEnabled, false);
+    });
+  }
+
   test("private catalog reads can use a separate read-only token without replacing the production credential", async () => {
     previewOnly();
     process.env.PRINTIFY_CATALOG_API_TOKEN = "separate-local-read-only-fixture";

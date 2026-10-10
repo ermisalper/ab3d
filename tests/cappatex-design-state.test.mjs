@@ -45,11 +45,11 @@ test("restore keeps placement only for a variant still belonging to the saved pr
     { id: "hoodie", variants: [{ shopifyVariantId: "gid://shopify/ProductVariant/2" }] }];
   const state = { designId: "CPX-A3EBF595EF42", profileId: "gildan", variantId: "gid://shopify/ProductVariant/1",
     quantity: 2, country: "CH", placement: { x: .41, y: .37, scale: .45 } };
-  assert.deepEqual(verifiedDesignSelection(state, products), { profileId: "gildan", variantId: state.variantId, placement: state.placement, requiresSelection: false });
+  assert.deepEqual(verifiedDesignSelection(state, products), { profileId: "gildan", variantId: state.variantId, placement: state.placement, requiresSelection: false, side: "front" });
   for (const variantId of ["gid://shopify/ProductVariant/999", "gid://shopify/ProductVariant/2"]) {
-    assert.deepEqual(verifiedDesignSelection({ ...state, variantId }, products), { profileId: "gildan", variantId: "", placement: undefined, requiresSelection: true });
+    assert.deepEqual(verifiedDesignSelection({ ...state, variantId }, products), { profileId: "gildan", variantId: "", placement: undefined, requiresSelection: true, side: "front" });
   }
-  assert.deepEqual(verifiedDesignSelection({ ...state, profileId: "removed" }, products), { profileId: "", variantId: "", placement: undefined, requiresSelection: true });
+  assert.deepEqual(verifiedDesignSelection({ ...state, profileId: "removed" }, products), { profileId: "", variantId: "", placement: undefined, requiresSelection: true, side: "front" });
 });
 
 const comparisonProducts = [
@@ -96,7 +96,7 @@ test("changed profiles, removed variants and cross-product variants cannot reuse
   const restored = { designId: "CPX-A3EBF595EF42", profileId: tee.id, variantId: tee.variants[1].shopifyVariantId,
     quantity: 1, country: "CH", placement: configurations.tee.placement, configurations };
   assert.deepEqual(verifiedDesignSelection(restored, [{ ...tee, profileVersion: "tee-v2" }]), {
-    profileId: tee.id, variantId: "", placement: undefined, requiresSelection: true,
+    profileId: tee.id, variantId: "", placement: undefined, side: "front", requiresSelection: true,
   }, "The active URL selection also requires review when its calibrated profile changes");
 });
 
@@ -131,4 +131,36 @@ test("temporary catalog failure retains saved choices without authorizing an una
   const changed = reconcileConfigurations([{ ...hoodie, profileVersion: "hoodie-v2" }], saved);
   assert.equal(changed.hoodie, undefined);
   assert.deepEqual(changed.tee, saved.tee);
+});
+
+
+test("backside URLs restore only when the exact variant has an approved back", () => {
+  const state = { designId: "CPX-A3EBF595EF42", profileId: "hoodie", variantId: "gid://shopify/ProductVariant/2", quantity: 1, country: "CH", side: "back", placement: { x: .4, y: .3, scale: .2 } };
+  const restored = readDesignState(new URL(designStateUrl("https://app.test/cappatex", state)).search);
+  assert.deepEqual(restored, state);
+  const product = { id: "hoodie", variants: [{ shopifyVariantId: state.variantId, back: { area: {} } }] };
+  assert.equal(verifiedDesignSelection(restored, [product]).side, "back");
+  delete product.variants[0].back;
+  const invalid = verifiedDesignSelection(restored, [product]);
+  assert.equal(invalid.requiresSelection, true);
+  assert.equal(invalid.placement, undefined, "Back geometry must never silently become front geometry");
+});
+
+test("independent front and back placements survive URL serialization", () => {
+  const front = comparisonProducts[1], back = { ...front, id: front.id + ":back" };
+  const frontPlacement = { x: .5, y: .25, scale: .3 }, backPlacement = { x: .4, y: .6, scale: .5 };
+  const configs = rememberConfiguration(rememberConfiguration({}, front, front.variants[0].shopifyVariantId, frontPlacement), back, back.variants[0].shopifyVariantId, backPlacement);
+  const state = readDesignState(new URL(designStateUrl("https://app.test/cappatex", { designId: "CPX-A3EBF595EF42", profileId: front.id, variantId: front.variants[0].shopifyVariantId, side: "back", quantity: 1, country: "CH", configurations: configs })).search);
+  assert.deepEqual(rememberedConfiguration(front, state.configurations).placement, frontPlacement);
+  assert.deepEqual(rememberedConfiguration(back, state.configurations).placement, backPlacement);
+});
+
+
+test("back configurations are invalidated when their profile or supported side changes", () => {
+  const product = { id: "tee", profileVersion: "v2", variants: [{ shopifyVariantId: "gid://shopify/ProductVariant/11", back: {} }] };
+  const saved = { "tee:back": { profileVersion: "v1", variantId: product.variants[0].shopifyVariantId, placement: { x: .4, y: .3, scale: .2 } } };
+  assert.deepEqual(reconcileConfigurations([product], saved), {});
+  assert.equal(verifiedDesignSelection({ profileId: "tee", variantId: product.variants[0].shopifyVariantId, side: "back", configurations: saved }, [product]).requiresSelection, true);
+  saved["tee:back"].profileVersion = "v2";
+  assert.deepEqual(reconcileConfigurations([{ ...product, variants: [{ shopifyVariantId: product.variants[0].shopifyVariantId }] }], saved), {});
 });

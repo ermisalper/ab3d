@@ -250,3 +250,441 @@ export const CAPPATEX_DESIGN_PROFILES: DesignProfile[] = [...tshirtProfiles, {
  optionKey: "paper", mockupPosition: "other",
  evidence: ["docs/CAPPATEX-CATALOG-EXPANSION.md", "docs/CAPPATEX-MOCKUP-CALIBRATION.md"], variants: posterVariants,
 }];
+
+// Observed in Printify and Shopify on 2026-10-10; see CAPPATEX-BACKS-AND-GALLERY.md.
+hoodieVariants.push(...expansionVariants([
+  [
+    "Navy",
+    "XS",
+    69055,
+    "58955526340982",
+    "91277794298132275347",
+    3307,
+    2418
+  ],
+  [
+    "Navy",
+    "S",
+    69056,
+    "58955526406518",
+    "24335816752390529267",
+    3543,
+    2591
+  ],
+  [
+    "Navy",
+    "M",
+    69057,
+    "58955526472054",
+    "44788336199637760600",
+    3898,
+    2850
+  ],
+  [
+    "Navy",
+    "L",
+    69058,
+    "58955526537590",
+    "63340238257007595635",
+    4200,
+    3071
+  ],
+  [
+    "Navy",
+    "XL",
+    69059,
+    "58955526603126",
+    "76469985538220345682",
+    4200,
+    3071
+  ],
+  [
+    "Navy",
+    "2XL",
+    69060,
+    "58955526668662",
+    "55662307015472555806",
+    4200,
+    3071
+  ],
+  [
+    "Navy",
+    "3XL",
+    69061,
+    "58955526734198",
+    "43200290827393467207",
+    4200,
+    3071
+  ],
+  [
+    "Navy",
+    "4XL",
+    69062,
+    "58955526799734",
+    "49904632540717831924",
+    4200,
+    3071
+  ],
+  [
+    "Red",
+    "XS",
+    69063,
+    "58955526373750",
+    "16185812065859112467",
+    3307,
+    2418
+  ],
+  [
+    "Red",
+    "S",
+    69064,
+    "58955526439286",
+    "22809390168487293260",
+    3543,
+    2591
+  ],
+  [
+    "Red",
+    "M",
+    69065,
+    "58955526504822",
+    "33268989220139819039",
+    3898,
+    2850
+  ],
+  [
+    "Red",
+    "L",
+    69066,
+    "58955526570358",
+    "92081972792138434003",
+    4200,
+    3071
+  ],
+  [
+    "Red",
+    "XL",
+    69067,
+    "58955526635894",
+    "17878460586364677127",
+    4200,
+    3071
+  ],
+  [
+    "Red",
+    "2XL",
+    69068,
+    "58955526701430",
+    "23132925595147746471",
+    4200,
+    3071
+  ],
+  [
+    "Red",
+    "3XL",
+    69069,
+    "58955526766966",
+    "43782829731043231854",
+    4200,
+    3071
+  ],
+  [
+    "Red",
+    "4XL",
+    69070,
+    "58955526832502",
+    "53733640767780841399",
+    4200,
+    3071
+  ]
+], {
+  "Navy": {
+    "url": "https://images.printify.com/mockup/6ac9455655a9ebcaa50bc346/69058/8872/cappatex-blanko-bc-king-hoodie-opt-ondemand.jpg?camera_label=front",
+    "width": 1200,
+    "height": 1200,
+    "left": 391,
+    "top": 435,
+    "printWidth": 420,
+    "printHeight": 307
+  },
+  "Red": {
+    "url": "https://images.printify.com/mockup/6ac9455655a9ebcaa50bc346/69066/8860/cappatex-blanko-bc-king-hoodie-opt-ondemand.jpg?camera_label=front",
+    "width": 1200,
+    "height": 1200,
+    "left": 391,
+    "top": 435,
+    "printWidth": 420,
+    "printHeight": 307
+  }
+}, { first: 1089, additional: 239 }));
+
+const VERIFIED_BACKS: Record<string, { photos: Record<string, DesignProfile["variants"][number]["mockup"]>; dimensions: Record<string, [number, number]> }> = {
+  "bc-king-hoodie-opt-front": {
+    "photos": {
+      "White": {
+        "url": "https://images.printify.com/mockup/6ac9455655a9ebcaa50bc346/68258/8890/cappatex-blanko-bc-king-hoodie-opt-ondemand.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 391,
+        "top": 420,
+        "printWidth": 420,
+        "printHeight": 480
+      },
+      "Navy": {
+        "url": "https://images.printify.com/mockup/6ac9455655a9ebcaa50bc346/69058/8884/cappatex-blanko-bc-king-hoodie-opt-ondemand.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 391,
+        "top": 420,
+        "printWidth": 420,
+        "printHeight": 480
+      },
+      "Red": {
+        "url": "https://images.printify.com/mockup/6ac9455655a9ebcaa50bc346/69066/8888/cappatex-blanko-bc-king-hoodie-opt-ondemand.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 391,
+        "top": 420,
+        "printWidth": 420,
+        "printHeight": 480
+      },
+      "Black Pure": {
+        "url": "https://images.printify.com/mockup/6ac9455655a9ebcaa50bc346/69090/8886/cappatex-blanko-bc-king-hoodie-opt-ondemand.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 391,
+        "top": 420,
+        "printWidth": 420,
+        "printHeight": 480
+      }
+    },
+    "dimensions": {
+      "S": [
+        3543,
+        4049
+      ],
+      "M": [
+        3898,
+        4454
+      ],
+      "L": [
+        4200,
+        4800
+      ],
+      "XL": [
+        4200,
+        4800
+      ],
+      "2XL": [
+        4200,
+        4800
+      ],
+      "XS": [
+        3307,
+        3779
+      ],
+      "3XL": [
+        4200,
+        4800
+      ],
+      "4XL": [
+        4200,
+        4800
+      ]
+    }
+  },
+  "bella-3480-tde-front": {
+    "photos": {
+      "Black": {
+        "url": "https://images.printify.com/mockup/6ac948494e4b21bea10a38d4/24639/101892/cappatex-blanko-bellacanvas-3480-tanktop-textildruck-europa.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 484,
+        "top": 356,
+        "printWidth": 233,
+        "printHeight": 293
+      },
+      "White": {
+        "url": "https://images.printify.com/mockup/6ac948494e4b21bea10a38d4/24828/101892/cappatex-blanko-bellacanvas-3480-tanktop-textildruck-europa.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 484,
+        "top": 356,
+        "printWidth": 233,
+        "printHeight": 291
+      }
+    },
+    "dimensions": {
+      "M": [
+        2008,
+        2510
+      ],
+      "S": [
+        1654,
+        2067
+      ],
+      "L": [
+        2362,
+        2953
+      ],
+      "XL": [
+        2362,
+        2953
+      ],
+      "2XL": [
+        2362,
+        2953
+      ]
+    }
+  },
+  "bc-wui23-tde-front": {
+    "photos": {
+      "Black": {
+        "url": "https://images.printify.com/mockup/6aca555903e91232940b49e4/63729/5083/cappatex-blanko-bc-wui23-pullover-textildruck-europa.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 382,
+        "top": 346,
+        "printWidth": 435,
+        "printHeight": 544
+      },
+      "White": {
+        "url": "https://images.printify.com/mockup/6aca555903e91232940b49e4/63732/5086/cappatex-blanko-bc-wui23-pullover-textildruck-europa.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 382,
+        "top": 346,
+        "printWidth": 435,
+        "printHeight": 544
+      }
+    },
+    "dimensions": {
+      "XS": [
+        3366,
+        4230
+      ],
+      "S": [
+        3780,
+        4749
+      ],
+      "M": [
+        4193,
+        5268
+      ],
+      "L": [
+        4606,
+        5787
+      ],
+      "XL": [
+        4606,
+        5787
+      ],
+      "2XL": [
+        4606,
+        5787
+      ],
+      "3XL": [
+        4606,
+        5787
+      ],
+      "4XL": [
+        4606,
+        5787
+      ]
+    }
+  },
+  "gildan-2400-opt-front": {
+    "photos": {
+      "White": {
+        "url": "https://images.printify.com/mockup/6aca580a7e00a6f93b0445b0/33793/105265/cappatex-blanko-gildan-2400-langarmshirt-opt-ondemand.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 439,
+        "top": 348,
+        "printWidth": 322,
+        "printHeight": 370
+      },
+      "Black": {
+        "url": "https://images.printify.com/mockup/6aca580a7e00a6f93b0445b0/33798/105265/cappatex-blanko-gildan-2400-langarmshirt-opt-ondemand.jpg?camera_label=back",
+        "width": 1200,
+        "height": 1200,
+        "left": 437,
+        "top": 348,
+        "printWidth": 326,
+        "printHeight": 372
+      }
+    },
+    "dimensions": {
+      "S": [
+        3461,
+        3955
+      ],
+      "M": [
+        3839,
+        4387
+      ],
+      "L": [
+        4200,
+        4800
+      ],
+      "XL": [
+        4200,
+        4800
+      ],
+      "2XL": [
+        4200,
+        4800
+      ],
+      "3XL": [
+        4200,
+        4800
+      ],
+      "4XL": [
+        4200,
+        4800
+      ],
+      "5XL": [
+        4200,
+        4800
+      ]
+    }
+  }
+};
+
+for (const profile of CAPPATEX_DESIGN_PROFILES) {
+  const back = VERIFIED_BACKS[profile.id];
+  if (!back) continue;
+  profile.backVariants = profile.variants.flatMap(variant => {
+    const dimensions = back.dimensions[variant.size], mockup = back.photos[variant.color];
+    if (!dimensions || !mockup) return [];
+    const [widthPx, heightPx] = dimensions;
+    return [{ ...variant, area: { ...variant.area, position: "back", widthPx, heightPx, widthMm: widthPx * 25.4 / 300, heightMm: heightPx * 25.4 / 300 }, mockup }];
+  });
+  profile.evidence.push("docs/CAPPATEX-BACKS-AND-GALLERY.md");
+}
+
+// T-shirt feathered print edges measured with a 60-level magenta difference threshold.
+const tshirtBackPhotos: Record<string, DesignProfile["variants"][number]["mockup"]> = {
+  "White": {
+    "url": "https://images.printify.com/mockup/6ac927b73b3a3e64620a53a3/38191/97993/cappatex-blanko-gildan-64000-opt-ondemand-pilot.jpg?camera_label=back",
+    "width": 1200,
+    "height": 1200,
+    "left": 395,
+    "top": 312,
+    "printWidth": 419,
+    "printHeight": 482
+  },
+  "Black": {
+    "url": "https://images.printify.com/mockup/6ac927b73b3a3e64620a53a3/38192/97993/cappatex-blanko-gildan-64000-opt-ondemand-pilot.jpg?camera_label=back",
+    "width": 1200,
+    "height": 1200,
+    "left": 395,
+    "top": 310,
+    "printWidth": 421,
+    "printHeight": 486
+  }
+};
+for (const profile of tshirtProfiles) {
+  profile.backVariants = profile.variants.map(variant => ({ ...variant, area: { ...variant.area, position: "back" }, mockup: tshirtBackPhotos[variant.color] }));
+  profile.evidence.push("docs/CAPPATEX-BACKS-AND-GALLERY.md");
+}

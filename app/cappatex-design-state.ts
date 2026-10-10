@@ -2,8 +2,8 @@ import type { Placement } from "./cappatex-print-profile";
 
 export type ProductConfiguration = { profileVersion: string; variantId: string; placement: Placement };
 export type ProductConfigurations = Record<string, ProductConfiguration>;
-export type DesignState = { designId: string; profileId: string; variantId: string; quantity: number; country: "CH" | "LI"; placement?: Placement; configurations?: ProductConfigurations };
-type ProductSelection = { id: string; profileVersion?: string; variants: Array<{ shopifyVariantId: string }> };
+export type DesignState = { designId: string; profileId: string; variantId: string; quantity: number; country: "CH" | "LI"; side?: "front" | "back"; placement?: Placement; configurations?: ProductConfigurations };
+type ProductSelection = { id: string; profileVersion?: string; variants: Array<{ shopifyVariantId: string; back?: unknown }> };
 type VersionedSelection = ProductSelection & { profileVersion: string };
 
 function validPlacement(placement: Placement) {
@@ -30,6 +30,10 @@ export function reconcileConfigurations(products: VersionedSelection[], configur
     const saved = rememberedConfiguration(product, configurations);
     if (saved) result[product.id] = saved;
     else delete result[product.id];
+    const backProduct = { ...product, id: `${product.id}:back`, variants: product.variants.filter(variant => variant.back) };
+    const back = rememberedConfiguration(backProduct, configurations);
+    if (back) result[backProduct.id] = back;
+    else delete result[backProduct.id];
   }
   return result;
 }
@@ -57,11 +61,13 @@ export function retainedPlacement(currentProductId: string | undefined, nextProd
 
 export function verifiedDesignSelection(state: DesignState, products: ProductSelection[]) {
   const product = products.find(item => item.id === state.profileId);
-  const savedVersion = state.configurations?.[state.profileId]?.profileVersion;
+  const savedVersion = state.configurations?.[state.side === "back" ? `${state.profileId}:back` : state.profileId]?.profileVersion;
   const variant = (!savedVersion || savedVersion === product?.profileVersion)
     ? product?.variants.find(item => item.shopifyVariantId === state.variantId) : undefined;
-  return { profileId: product?.id || "", variantId: variant?.shopifyVariantId || "", placement: variant ? state.placement : undefined,
-    requiresSelection: Boolean(state.profileId) && !variant };
+  const sideAvailable = state.side !== "back" || Boolean(variant?.back);
+  return { profileId: product?.id || "", variantId: variant?.shopifyVariantId || "", placement: variant && sideAvailable ? state.placement : undefined,
+    side: sideAvailable && state.side === "back" ? "back" as const : "front" as const,
+    requiresSelection: Boolean(state.profileId) && (!variant || !sideAvailable) };
 }
 
 export function readDesignState(search: string): DesignState {
@@ -76,11 +82,12 @@ export function readDesignState(search: string): DesignState {
   return { designId: /^CPX-[A-Z0-9]{12}$/.test(id) ? id : "", profileId: (query.get("profileId") || "").slice(0, 160),
     variantId: /^gid:\/\/shopify\/ProductVariant\/\d+$/.test(query.get("variantId") || "") ? query.get("variantId")! : "",
     quantity: Number.isInteger(quantity) && quantity >= 1 && quantity <= 5 ? quantity : 1,
-    country: query.get("country") === "LI" ? "LI" : "CH", placement, ...(configurations ? { configurations } : {}) };
+    country: query.get("country") === "LI" ? "LI" : "CH", ...(query.get("side") === "back" ? { side: "back" as const } : {}), placement, ...(configurations ? { configurations } : {}) };
 }
 
 export function designStateUrl(currentUrl: string, state: DesignState) {
   const url = new URL(currentUrl);
+  if (state.side === "back") url.searchParams.set("side", "back"); else url.searchParams.delete("side");
   for (const [key, value] of Object.entries({ designId: state.designId, profileId: state.profileId, variantId: state.variantId,
     quantity: state.quantity, country: state.country, ...state.placement })) {
     if (value === "") url.searchParams.delete(key); else url.searchParams.set(key, String(value));

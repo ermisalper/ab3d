@@ -614,6 +614,14 @@ section[id],:target{scroll-margin-top:132px}
 .cappatex-flow .cappatex-preview-head>b{flex:0 0 145px;font:13px/1.5 Arial,sans-serif;text-align:right}
 .cappatex-preview-panel>.cappatex-variant-fields{padding:0 24px;gap:16px}
 .cappatex-placement-workbench{display:grid;grid-template-columns:minmax(0,1fr)}
+.cappatex-placement-workbench[hidden]{display:none}
+.cappatex-print-sides,.cappatex-photo-options{margin:16px 24px;border:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.cappatex-print-sides legend,.cappatex-photo-options legend{font-size:12px;font-weight:700;margin-bottom:8px}
+.cappatex-photo-options button{border:1px solid #cfc5b6;border-radius:8px;background:transparent;padding:9px 12px;color:inherit;font:inherit;font-size:12px;cursor:pointer}
+.cappatex-photo-options button[aria-pressed=true]{background:#23362e;color:#fff;border-color:#23362e}
+.cappatex-provider-photo{margin:0;padding:16px 24px;background:#faf8f3}
+.cappatex-provider-photo img{display:block;width:100%;max-height:560px;object-fit:contain}
+.cappatex-provider-photo figcaption{font-size:12px;line-height:1.6;margin-top:12px}
 .cappatex-placement-workbench.has-product{grid-template-columns:minmax(0,1fr) 166px}
 .cappatex-placement-workbench .cappatex-verified-preview{min-height:0;padding:12px;border-left:0;border-right:0}
 .cappatex-placement-workbench .cappatex-customize{margin:0;padding:20px 16px;gap:22px;align-content:center;border-top:1px solid #ded6c9;border-bottom:1px solid #ded6c9;background:#faf8f3}
@@ -624,3 +632,6 @@ section[id],:target{scroll-margin-top:132px}
 @media(max-width:1100px){.cappatex-flow .cappatex-workspace{grid-template-columns:minmax(0,1fr)}.cappatex-flow .cappatex-preview-panel{position:static}.cappatex-workspace.has-artwork .cappatex-preview-panel{grid-row:1}.cappatex-workspace.has-artwork .cappatex-controls{grid-row:2;border-bottom:0;border-top:1px solid #cfc5b6}.cappatex-placement-workbench .cappatex-blank-photo{max-width:480px;margin:auto}.cappatex-comparison-heading{display:block}.cappatex-comparison-heading p{margin-top:10px}}
 @media(max-width:760px){.cappatex-comparison{padding:18px 12px;margin-bottom:18px}.cappatex-comparison-heading h3{font-size:25px}.cappatex-comparison .cappatex-products{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cappatex-comparison .cappatex-product-card{padding:7px 7px 12px}.cappatex-comparison .cappatex-product-card-name{font-size:12px}.cappatex-flow .cappatex-controls{padding:24px 16px}.cappatex-flow .cappatex-preview-head{padding:18px 16px}.cappatex-flow .cappatex-preview-head h3{font-size:23px}.cappatex-flow .cappatex-preview-head>b{flex-basis:105px;font-size:11px}.cappatex-preview-panel>.cappatex-variant-fields{padding:0 16px}.cappatex-placement-workbench.has-product{grid-template-columns:minmax(0,1fr)}.cappatex-placement-workbench .cappatex-blank-photo{max-width:330px}.cappatex-placement-workbench .cappatex-customize{grid-template-columns:1fr 1fr!important;gap:10px 24px;padding:14px 18px}.cappatex-placement-workbench .cappatex-customize>label:first-child{grid-column:1/-1}.cappatex-preview-panel>.cappatex-quality-ok,.cappatex-preview-panel>.cappatex-error,.cappatex-preview-panel>.cappatex-profile-note,.cappatex-preview-panel>.text-link{margin-left:16px;margin-right:16px}}
 @media(prefers-reduced-motion:reduce){.cappatex-comparison .cappatex-product-card,.cappatex-card-print-area img{transition:none}}
+
+.cappatex-customize > button { border: 1px solid #cad5cb; border-radius: 8px; background: #fff; padding: 9px 12px; color: #183d2b; cursor: pointer; font: inherit; }
+.cappatex-customize > button:disabled { opacity: .5; cursor: default; }

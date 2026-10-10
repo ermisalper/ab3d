@@ -5,7 +5,7 @@ import { CAPPATEX_PRINT_PROFILES } from "../app/cappatex-profiles.ts";
 import { initialPlacement, placementGeometry, profileGeometryIsVerified } from "../app/cappatex-print-profile.ts";
 
 test("actual private profiles have complete geometry and resolution-safe initial placement on every variant", () => {
-  for (const [id, count] of [["gildan-64000-opt-front", 10], ["bc-king-hoodie-opt-front", 10], ["bella-3480-tde-front", 7], ["bc-wui23-tde-front", 15], ["gildan-2400-opt-front", 14], ["poster-eu-opt-front", 4]]) {
+  for (const [id, count] of [["gildan-64000-opt-front", 10], ["bc-king-hoodie-opt-front", 26], ["bella-3480-tde-front", 7], ["bc-wui23-tde-front", 15], ["gildan-2400-opt-front", 14], ["poster-eu-opt-front", 4]]) {
     const profiles = CAPPATEX_DESIGN_PROFILES.filter(profile => profile.id === id);
     assert.equal(profiles.length, 1);
     const profile = profiles[0];
@@ -25,8 +25,8 @@ test("actual hoodie uses its distinct smaller front area and exact Black Pure ca
   const profile = CAPPATEX_DESIGN_PROFILES.find(item => item.id === "bc-king-hoodie-opt-front");
   assert.equal(profile.printifyProductId, "6ac9455655a9ebcaa50bc346");
   assert.equal(profile.shopifyProductId, "gid://shopify/Product/15926043509110");
-  assert.deepEqual([...new Set(profile.variants.map(item => item.color))], ["White", "Black Pure"]);
-  const dimensions = { S: [3543, 2591], M: [3898, 2850], L: [4200, 3071], XL: [4200, 3071], "2XL": [4200, 3071] };
+  assert.deepEqual([...new Set(profile.variants.map(item => item.color))], ["White", "Black Pure", "Navy", "Red"]);
+  const dimensions = { XS: [3307, 2418], "3XL": [4200, 3071], "4XL": [4200, 3071], S: [3543, 2591], M: [3898, 2850], L: [4200, 3071], XL: [4200, 3071], "2XL": [4200, 3071] };
   for (const variant of profile.variants) {
     assert.deepEqual([variant.area.widthPx, variant.area.heightPx], dimensions[variant.size]);
     assert.equal(variant.area.widthMm, variant.area.widthPx * 25.4 / 300);
@@ -111,4 +111,24 @@ test("long sleeves map real sizes including Black 5XL to their distinct provider
     assert.match(v.mockup.url, /6aca580a7e00a6f93b0445b0/);
     assert.deepEqual(v.shipping, ["CH", "LI"].map(country => ({ country, method: 1, currency: "USD", firstCents: 849, additionalCents: 119 })));
   }
+});
+
+
+test("back profiles use independent verified geometry, identical SKU mapping and safe initial placement", () => {
+  for (const profile of CAPPATEX_DESIGN_PROFILES.filter(p => p.backVariants)) {
+    assert.equal(profile.backVariants.length, profile.variants.length);
+    assert.equal(profileGeometryIsVerified({ ...profile, variants: profile.backVariants }, "23104859", Date.parse(profile.verifiedAt) + 1), true, profile.id);
+    for (const back of profile.backVariants) {
+      const front = profile.variants.find(v => v.printifyVariantId === back.printifyVariantId);
+      assert.equal(back.shopifyVariantId, front.shopifyVariantId);
+      assert.equal(back.sku, front.sku);
+      assert.equal(back.area.position, "back");
+      assert.match(back.mockup.url, /camera_label=back$/);
+      const image = { width: 2048, height: 2048 };
+      assert.equal(placementGeometry(back.area, image, initialPlacement(back.area, image)).ok, true);
+    }
+  }
+  const hoodie = CAPPATEX_DESIGN_PROFILES.find(p => p.id === "bc-king-hoodie-opt-front");
+  assert.ok(hoodie.backVariants[0].area.heightPx > hoodie.variants[0].area.heightPx);
+  assert.equal(CAPPATEX_DESIGN_PROFILES.find(p => p.kind === "accessory").backVariants, undefined);
 });
