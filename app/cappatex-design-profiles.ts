@@ -113,6 +113,110 @@ const tanktopVariants = expansionVariants([
     width: 1200, height: 1200, left: 448, top: 430, printWidth: 306, printHeight: 376 },
 }, { first: 729, additional: 199 });
 
+const pulloverVariants = expansionVariants([
+  ["Black","XS",63714,"58954577117558","32678872341066129788",3366,4230],
+  ["White","XS",63717,"58954577150326","21330026037772914430",3366,4230],
+  ["Black","S",63719,"58954577183094","62750618291080586982",3780,4749],
+  ["White","S",63722,"58954577215862","25449384969924700261",3780,4749],
+  ["Black","M",63724,"58954577248630","95880420421167395577",4193,5268],
+  ["White","M",63727,"58954577281398","24353776547763930379",4193,5268],
+  ["Black","L",63729,"58954577314166","17274892019395195918",4606,5787],
+  ["White","L",63732,"58954577346934","15620322811627210052",4606,5787],
+  ["Black","XL",63734,"58954577379702","43773110261645666736",4606,5787],
+  ["White","XL",63737,"58954577412470","88081754547045227028",4606,5787],
+  ["White","2XL",63742,"58954577445238","22674604911372817753",4606,5787],
+  ["Black","3XL",63744,"58954577478006","15638368416559766960",4606,5787],
+  ["White","3XL",63747,"58954577510774","32388819339877992522",4606,5787],
+  ["Black","4XL",63749,"58954577543542","49285417354779670938",4606,5787],
+  ["White","4XL",63752,"58954577576310","15795834611143535959",4606,5787],
+], {
+  "White": {
+    "url": "https://images.printify.com/mockup/6aca555903e91232940b49e4/63732/5081/cappatex-blanko-bc-wui23-pullover-textildruck-europa.jpg?camera_label=front",
+    "width": 1200,
+    "height": 1200,
+    "left": 387,
+    "top": 353,
+    "printWidth": 429,
+    "printHeight": 538
+  },
+  "Black": {
+    "url": "https://images.printify.com/mockup/6aca555903e91232940b49e4/63729/5078/cappatex-blanko-bc-wui23-pullover-textildruck-europa.jpg?camera_label=front",
+    "width": 1200,
+    "height": 1200,
+    "left": 387,
+    "top": 352,
+    "printWidth": 429,
+    "printHeight": 538
+  }
+}, { first: 1089, additional: 239 });
+
+const longsleeveVariants = expansionVariants([
+  ["White","S",33791,"58954602676598","10966533159593605708",3461,3955],
+  ["White","M",33792,"58954602742134","29415264002795040152",3839,4387],
+  ["White","L",33793,"58954602807670","30327933967500366128",4200,4800],
+  ["White","XL",33794,"58954602873206","14062220185393388474",4200,4800],
+  ["White","2XL",33795,"58954602938742","13386688221712842581",4200,4800],
+  ["Black","S",33796,"58954602709366","53195723560638243391",3461,3955],
+  ["Black","M",33797,"58954602774902","31423304680849399144",3839,4387],
+  ["Black","L",33798,"58954602840438","16490252266190400769",4200,4800],
+  ["Black","XL",33799,"58954602905974","23511004661059502159",4200,4800],
+  ["Black","2XL",33800,"58954602971510","32719392498732429126",4200,4800],
+  ["White","3XL",64722,"58954603004278","20866819771864043377",4200,4800],
+  ["Black","3XL",64723,"58954603037046","25867235486070762761",4200,4800],
+  ["Black","4XL",77147,"58954603069814","21783118743071385653",4200,4800],
+  ["Black","5XL",77171,"58954603102582","57613983606352375621",4200,4800],
+], {
+  "White": {
+    "url": "https://images.printify.com/mockup/6aca580a7e00a6f93b0445b0/33793/105264/cappatex-blanko-gildan-2400-langarmshirt-opt-ondemand.jpg?camera_label=front",
+    "width": 1200,
+    "height": 1200,
+    "left": 440,
+    "top": 357,
+    "printWidth": 322,
+    "printHeight": 368
+  },
+  "Black": {
+    "url": "https://images.printify.com/mockup/6aca580a7e00a6f93b0445b0/33798/105264/cappatex-blanko-gildan-2400-langarmshirt-opt-ondemand.jpg?camera_label=front",
+    "width": 1200,
+    "height": 1200,
+    "left": 437,
+    "top": 355,
+    "printWidth": 326,
+    "printHeight": 372
+  }
+}, { first: 849, additional: 119 });
+
+const posterVariants: DesignProfile["variants"] = [
+  { printifyVariantId: 62338, shopifyVariantId: "gid://shopify/ProductVariant/58954622206326", sku: "22943121005929413080",
+    color: "Glossy", size: "11.7\" x 16.5\"",
+    area: {"position":"front","decorationMethod":"digital-printing","widthPx":3510,"heightPx":4950,"widthMm":297.18,"heightMm":419.1,"minDpi":300,"minScale":0.1,"maxScale":1},
+    mockup: { url: "https://images.printify.com/mockup/6aca585903e91232940b4de3/62338/105533/cappatex-blanko-poster-hochformat-eu-opt-ondemand.jpg?camera_label=front", width: 1200, height: 1200, left: 251, top: 107, printWidth: 698, printHeight: 985,
+      foreground: [[[359,105],[340,106],[339,107],[340,108],[340,116],[341,117],[341,132],[390,132],[391,131],[391,122],[390,121],[390,108],[391,107],[390,106],[374,105]],[[826,105],[810,106],[809,107],[810,108],[810,128],[809,129],[809,131],[810,132],[859,132],[859,120],[860,119],[860,108],[861,107],[860,106],[841,105]]] },
+    shipping: [{"country":"CH","method":1,"currency":"USD","firstCents":849,"additionalCents":199},{"country":"LI","method":1,"currency":"USD","firstCents":849,"additionalCents":199}],
+  },
+  { printifyVariantId: 62339, shopifyVariantId: "gid://shopify/ProductVariant/58954622239094", sku: "33631565641566729113",
+    color: "Matte", size: "11.7\" x 16.5\"",
+    area: {"position":"front","decorationMethod":"digital-printing","widthPx":3510,"heightPx":4950,"widthMm":297.18,"heightMm":419.1,"minDpi":300,"minScale":0.1,"maxScale":1},
+    mockup: { url: "https://images.printify.com/mockup/6aca585903e91232940b4de3/62339/105534/cappatex-blanko-poster-hochformat-eu-opt-ondemand.jpg?camera_label=front", width: 1200, height: 1200, left: 251, top: 107, printWidth: 698, printHeight: 985,
+      foreground: [[[359,105],[340,106],[339,107],[340,108],[340,117],[341,118],[341,132],[391,132],[391,119],[390,118],[390,108],[391,107],[390,106],[374,105]],[[826,105],[810,106],[809,107],[810,108],[810,128],[809,129],[809,131],[810,132],[859,132],[859,118],[860,117],[860,106],[841,105]]] },
+    shipping: [{"country":"CH","method":1,"currency":"USD","firstCents":849,"additionalCents":199},{"country":"LI","method":1,"currency":"USD","firstCents":849,"additionalCents":199}],
+  },
+  { printifyVariantId: 62354, shopifyVariantId: "gid://shopify/ProductVariant/58954622140790", sku: "10308888179880755219",
+    color: "Glossy", size: "8.3\" x 11.7\"",
+    area: {"position":"front","decorationMethod":"digital-printing","widthPx":2490,"heightPx":3510,"widthMm":210.82,"heightMm":297.18,"minDpi":300,"minScale":0.1,"maxScale":1},
+    mockup: { url: "https://images.printify.com/mockup/6aca585903e91232940b4de3/62354/105529/cappatex-blanko-poster-hochformat-eu-opt-ondemand.jpg?camera_label=front", width: 1200, height: 1200, left: 251, top: 107, printWidth: 698, printHeight: 985,
+      foreground: [[[328,105],[328,108],[329,109],[329,123],[330,124],[330,142],[331,143],[399,143],[400,142],[400,116],[399,115],[399,109],[400,108],[401,107],[400,106],[400,105]],[[801,105],[800,106],[799,107],[800,108],[801,109],[801,121],[800,122],[800,142],[801,143],[869,143],[870,142],[870,125],[871,124],[871,111],[872,110],[872,105]]] },
+    shipping: [{"country":"CH","method":1,"currency":"USD","firstCents":849,"additionalCents":199},{"country":"LI","method":1,"currency":"USD","firstCents":849,"additionalCents":199}],
+  },
+  { printifyVariantId: 62355, shopifyVariantId: "gid://shopify/ProductVariant/58954622173558", sku: "79637912688942858255",
+    color: "Matte", size: "8.3\" x 11.7\"",
+    area: {"position":"front","decorationMethod":"digital-printing","widthPx":2490,"heightPx":3510,"widthMm":210.82,"heightMm":297.18,"minDpi":300,"minScale":0.1,"maxScale":1},
+    mockup: { url: "https://images.printify.com/mockup/6aca585903e91232940b4de3/62355/105530/cappatex-blanko-poster-hochformat-eu-opt-ondemand.jpg?camera_label=front", width: 1200, height: 1200, left: 251, top: 107, printWidth: 698, printHeight: 985,
+      foreground: [[[329,105],[328,106],[328,108],[329,109],[329,123],[330,124],[330,142],[331,143],[399,143],[400,142],[400,114],[399,113],[399,109],[400,108],[401,107],[400,106],[400,105]],[[801,105],[800,106],[799,107],[800,108],[801,109],[801,121],[800,122],[800,142],[801,143],[869,143],[870,142],[870,125],[871,124],[871,111],[872,110],[872,105]]] },
+    shipping: [{"country":"CH","method":1,"currency":"USD","firstCents":849,"additionalCents":199},{"country":"LI","method":1,"currency":"USD","firstCents":849,"additionalCents":199}],
+  },
+];
+
 // This registry grants private design access only; no checkout or fulfillment access.
 export const CAPPATEX_DESIGN_PROFILES: DesignProfile[] = [...tshirtProfiles, {
   id: "bc-king-hoodie-opt-front", version: "2026-10-09-design-1",
@@ -126,4 +230,23 @@ export const CAPPATEX_DESIGN_PROFILES: DesignProfile[] = [...tshirtProfiles, {
   shopId: "23104859", printifyProductId: "6ac948494e4b21bea10a38d4", blueprintId: 39, providerId: 26,
   shopifyProductId: "gid://shopify/Product/15926045540726", kind: "tanktop", name: "Bella+Canvas 3480 · Unisex Tanktop",
   mockupReferenceSize: "L", evidence: ["docs/CAPPATEX-CATALOG-EXPANSION.md", "docs/CAPPATEX-MOCKUP-CALIBRATION.md"], variants: tanktopVariants,
+}, {
+  id: "bc-wui23-tde-front", version: "2026-10-10-design-1",
+  verifiedAt: "2026-10-10T15:19:41.892Z", validUntil: "2026-11-09T00:00:00Z",
+  shopId: "23104859", printifyProductId: "6aca555903e91232940b49e4", blueprintId: 457, providerId: 26,
+  shopifyProductId: "gid://shopify/Product/15927108829558", kind: "sweatshirt", name: "B&C WUI23 · Unisex Pullover",
+  mockupReferenceSize: "L", evidence: ["docs/CAPPATEX-CATALOG-EXPANSION.md", "docs/CAPPATEX-MOCKUP-CALIBRATION.md"], variants: pulloverVariants,
+}, {
+  id: "gildan-2400-opt-front", version: "2026-10-10-design-1",
+  verifiedAt: "2026-10-10T15:29:06.664Z", validUntil: "2026-11-09T00:00:00Z",
+  shopId: "23104859", printifyProductId: "6aca580a7e00a6f93b0445b0", blueprintId: 80, providerId: 30,
+  shopifyProductId: "gid://shopify/Product/15927119610230", kind: "tshirt", name: "Gildan 2400 · Unisex Langarmshirt",
+  mockupReferenceSize: "L", evidence: ["docs/CAPPATEX-CATALOG-EXPANSION.md", "docs/CAPPATEX-MOCKUP-CALIBRATION.md"], variants: longsleeveVariants,
+}, {
+ id: "poster-eu-opt-front", version: "2026-10-10-design-1",
+ verifiedAt: "2026-10-10T15:32:40.471Z", validUntil: "2026-11-09T00:00:00Z",
+ shopId: "23104859", printifyProductId: "6aca585903e91232940b4de3", blueprintId: 443, providerId: 30,
+ shopifyProductId: "gid://shopify/Product/15927121740150", kind: "accessory", name: "Poster · Hochformat EU",
+ optionKey: "paper", mockupPosition: "other",
+ evidence: ["docs/CAPPATEX-CATALOG-EXPANSION.md", "docs/CAPPATEX-MOCKUP-CALIBRATION.md"], variants: posterVariants,
 }];

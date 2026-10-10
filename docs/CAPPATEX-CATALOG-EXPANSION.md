@@ -131,3 +131,61 @@ Die tatsächliche Registrierung umfasst das bestehende Gildan-64000-T-Shirt und 
 Die Registrierung enthält jetzt T-Shirt (10), Hoodie (10) und Tanktop (7 Varianten). 132 Tests, TypeScript-Prüfung, vollständiges Lint und Produktionsbuild bestanden. Vier reale Profiltests prüfen 27 Varianten auf Geometrie, auflösungssichere Anfangsplatzierung und getrennte Verkaufsfreigabe. Die lokale Browserseite lädt; ohne Betreiberanmeldung bleibt ihr Katalog korrekt gesperrt. Die Live-Browserabnahme folgt nach privatem Deployment.
 
 Vom Betreiber priorisierte nächste Gruppen: Pullover, Tassen, Langarmshirts, Handyhüllen, Poster. B&C WUI23, Blueprint 457 / Anbieter 26, wurde als versteckter Blankoentwurf `6aca555903e91232940b49e4` angelegt und zur versteckten Shopify-Synchronisierung geschickt. 15 aktive Varianten (White XS–4XL; Black XS/S/M/L/XL/3XL/4XL). Noch nicht im Designer registriert; Fotoabnahme und Shopify-Zuordnung folgen. GET-Nachweis: `outputs/cappatex-bc-pullover-api-audit.json`. Anbieter-Versand CH/LI USD 10.89 + USD 2.39.
+
+## B&C WUI23: bestätigte Zuordnung
+
+Shopify-Produkt 15927108829558 ist als Entwurf mit Tag cappatex-blank gespeichert; keine Vertriebskanäle. Printify bestätigt visible=false und is_locked=false nach der nativen Synchronisierung. Front DTG, Provider 26 / Blueprint 457. CH/LI: USD 10.89 + USD 2.39. Kosten USD 22.22 bis USD 25.80, keine genehmigten Verkaufspreise. Black 2XL wird nicht angeboten. Alle 15 tatsächlichen SKUs wurden eindeutig im Shopify-Admin abgeglichen.
+
+| Farbe | Grösse | Printify | Shopify-Variante | SKU | Frontpixel |
+| --- | --- | --- | --- | --- | --- |
+| Black | XS | 63714 | 58954577117558 | 32678872341066129788 | 3366 × 4230 |
+| White | XS | 63717 | 58954577150326 | 21330026037772914430 | 3366 × 4230 |
+| Black | S | 63719 | 58954577183094 | 62750618291080586982 | 3780 × 4749 |
+| White | S | 63722 | 58954577215862 | 25449384969924700261 | 3780 × 4749 |
+| Black | M | 63724 | 58954577248630 | 95880420421167395577 | 4193 × 5268 |
+| White | M | 63727 | 58954577281398 | 24353776547763930379 | 4193 × 5268 |
+| Black | L | 63729 | 58954577314166 | 17274892019395195918 | 4606 × 5787 |
+| White | L | 63732 | 58954577346934 | 15620322811627210052 | 4606 × 5787 |
+| Black | XL | 63734 | 58954577379702 | 43773110261645666736 | 4606 × 5787 |
+| White | XL | 63737 | 58954577412470 | 88081754547045227028 | 4606 × 5787 |
+| White | 2XL | 63742 | 58954577445238 | 22674604911372817753 | 4606 × 5787 |
+| Black | 3XL | 63744 | 58954577478006 | 15638368416559766960 | 4606 × 5787 |
+| White | 3XL | 63747 | 58954577510774 | 32388819339877992522 | 4606 × 5787 |
+| Black | 4XL | 63749 | 58954577543542 | 49285417354779670938 | 4606 × 5787 |
+| White | 4XL | 63752 | 58954577576310 | 15795834611143535959 | 4606 × 5787 |
+
+## CAPPATEX Blanko – Gildan 2400 Langarmshirt – OPT OnDemand: bestätigte Zuordnung
+
+Printify 6aca580a7e00a6f93b0445b0; Shopify 15927119610230; Blueprint 80, Provider 30. Native Synchronisierung abgeschlossen, visible=false. Shopify als Entwurf mit cappatex-blank gespeichert, Varianten ohne Vertriebskanäle. Preise bleiben für den Designer null.
+
+| Option | Grösse | Printify | Shopify-Variante | SKU | Frontpixel |
+| --- | --- | --- | --- | --- | --- |
+| White | S | 33791 | 58954602676598 | 10966533159593605708 | 3461 × 3955 |
+| White | M | 33792 | 58954602742134 | 29415264002795040152 | 3839 × 4387 |
+| White | L | 33793 | 58954602807670 | 30327933967500366128 | 4200 × 4800 |
+| White | XL | 33794 | 58954602873206 | 14062220185393388474 | 4200 × 4800 |
+| White | 2XL | 33795 | 58954602938742 | 13386688221712842581 | 4200 × 4800 |
+| Black | S | 33796 | 58954602709366 | 53195723560638243391 | 3461 × 3955 |
+| Black | M | 33797 | 58954602774902 | 31423304680849399144 | 3839 × 4387 |
+| Black | L | 33798 | 58954602840438 | 16490252266190400769 | 4200 × 4800 |
+| Black | XL | 33799 | 58954602905974 | 23511004661059502159 | 4200 × 4800 |
+| Black | 2XL | 33800 | 58954602971510 | 32719392498732429126 | 4200 × 4800 |
+| White | 3XL | 64722 | 58954603004278 | 20866819771864043377 | 4200 × 4800 |
+| Black | 3XL | 64723 | 58954603037046 | 25867235486070762761 | 4200 × 4800 |
+| Black | 4XL | 77147 | 58954603069814 | 21783118743071385653 | 4200 × 4800 |
+| Black | 5XL | 77171 | 58954603102582 | 57613983606352375621 | 4200 × 4800 |
+
+## CAPPATEX Blanko – Poster Hochformat EU – OPT OnDemand: bestätigte Zuordnung
+
+Printify 6aca585903e91232940b4de3; Shopify 15927121740150; Blueprint 443, Provider 30. Native Synchronisierung abgeschlossen, visible=false. Shopify als Entwurf mit cappatex-blank gespeichert, Varianten ohne Vertriebskanäle. Preise bleiben für den Designer null.
+
+| Option | Grösse | Printify | Shopify-Variante | SKU | Frontpixel |
+| --- | --- | --- | --- | --- | --- |
+| Glossy | 11.7" x 16.5" | 62338 | 58954622206326 | 22943121005929413080 | 3510 × 4950 |
+| Matte | 11.7" x 16.5" | 62339 | 58954622239094 | 33631565641566729113 | 3510 × 4950 |
+| Glossy | 8.3" x 11.7" | 62354 | 58954622140790 | 10308888179880755219 | 2490 × 3510 |
+| Matte | 8.3" x 11.7" | 62355 | 58954622173558 | 79637912688942858255 | 2490 × 3510 |
+
+Langarmshirt: 14 verfügbare Varianten White S–3XL und Black S–5XL, Front DTG. CH/LI USD 8.49 + USD 1.19 je zusätzlichem Artikel. Poster: 4 verfügbare Varianten, zwei Hochformate × Glossy/Matte, digital-printing; CH/LI USD 8.49 + USD 1.99. Dies sind Printify-Anbieterraten, keine getesteten Shopify-Checkout-Tarife. Produktionskosten Poster USD 6.50–7.09. Keine Verkaufspreise freigegeben.
+
+Damit enthält das private Gestaltungsregister sechs Produktmodelle mit 60 Varianten: T-Shirt 10, Hoodie 10, Tanktop 7, Pullover 15, Langarmshirt 14, Poster 4. Tassen (EU BP441/Provider30) und Tough-Case-Handyhüllen (BP421/Provider23) sind recherchiert, aber ohne bestätigte Fotoprojektion nicht registriert: Tassen benötigen Zylinderprojektion, Hüllen Ausschnitt- und Randmasken sowie verifizierten Produktionsstandort. Diese Gruppen bleiben unsichtbar und nicht bestellbar. Das native Shopify-Import-Unlink sowie manuelle Produktionsfreigabe sind weiterhin Verkaufs-Blocker; das Verkaufsregister bleibt leer.

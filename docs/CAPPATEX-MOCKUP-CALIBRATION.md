@@ -126,3 +126,24 @@ Die [White-](../outputs/cappatex-tanktop-calibration-white.jpg) und [Black-Scree
 Gerundet ergeben sich **448 / 430 / 306 / 374** und **448 / 430 / 306 / 376**. Die Screenshot-Rahmen `[470,270,621,455]` und `[470,236,621,422]` verwenden exklusive rechte/untere Grenzen. Der Höhenunterschied entspricht einem Screenshotpixel und liegt innerhalb der Farbschwellenempfindlichkeit von rund 2,024 Originalpixeln. Arbeitsunsicherheit: **±3 Originalpixel je Kante**. Die absolute Seitenverhältnisabweichung zu 3071/3780 beträgt lediglich 0,003782 beziehungsweise 0,000606 und erfüllt die vorhandene 0,01-Prüfung. Im Randkern bleiben beide Seiten gerade; nur 0,029 % beziehungsweise 0,531 % des Aussenrahmens fehlen in der Magentamaske. Hier ist keine besondere gekrümmte Fotoprojektion erforderlich.
 
 Messwerte, Farbschwellen und Eingabe-Hashes: [White-Analyse](../outputs/cappatex-tanktop-calibration-white-analysis.json), [Black-Analyse](../outputs/cappatex-tanktop-calibration-black-analysis.json). Die Werte wurden zur Profilübernahme weitergegeben; Website-Abgleich und Deployment bleiben separate Nachweise. Diese Analyse veränderte keine Produktdaten und legte keinen Auftrag an.
+
+## B&C WUI23 Pullover: gerade Frontprojektion, 10.10.2026
+
+Printify 6aca555903e91232940b49e4, Blueprint 457 / Textildruck Europa 26. Referenz L: White 63732 / Kamera 5081, Black 63729 / Kamera 5078. Die tatsächlichen Blankofotos aus der Produkt-API haben 1200 × 1200 Pixel. Frontfläche L 4606 × 5787 Pixel. Fill to placeholder mit der vorhandenen Magenta-Messdatei bestätigt Höhe 19.29 Zoll für 5787 Pixel, also 300 Pixel pro Zoll; Skalierung 120.57 %, links −4.97 %, oben 0. Die farbige Messdatei wurde nach der Prüfung zweimal rückgängig gemacht bis „Nothing to undo yet“; ausschliesslich die transparente Blankodatei blieb erhalten, ohne neue Speicherung.
+
+Die gerenderte Printify-Fotovorschau besitzt 2048 × 2048 Pixel und wird im beobachteten DOM auf 593 × 593 Pixel skaliert. Die tatsächliche DOM-Position liefert den Ausgangspunkt der Messung; unveränderte Kragen-/Ärmel-/Saumkanten verfeinern Skalierung und Translation gegen das separate 1200-Pixel-Blankofoto. Die schwarze CMYK-/RGB-Darstellung hat deutlich grössere Helligkeitsabweichungen; deshalb wird die Lage zusätzlich durch die direkte DOM-Geometrie begrenzt, nicht als präziser Farbfit interpretiert.
+
+| Farbe | links | oben | Breite | Höhe |
+| --- | --- | --- | --- | --- |
+| White | 387 | 353 | 429 | 538 |
+| Black | 387 | 352 | 429 | 538 |
+
+Die Farbschwellenprüfung erfolgt mit vier Schwellen. Arbeitsunsicherheit ±3 Originalpixel je Kante. Die gemessene Verhältnisabweichung zur tatsächlichen Frontfläche beträgt 0.001071 und liegt innerhalb der unveränderten 0.01-Grenze. Die Messfläche hat gerade Seiten und kein ausgespartes Loch; Stofffalten bleiben in der Website vereinfacht. Messskript, Eingabe-Hashes, DOM-Geometrie, Schwellen und Ergebnisse: outputs/measure-bc-pullover.py und outputs/cappatex-bc-pullover-calibration-{white,black}-analysis.json. Keine physische Druckabnahme oder Verkaufsfreigabe.
+
+## 2026-10-10: Langarmshirt und Poster
+
+Gildan 2400 / OPT OnDemand, Blueprint 80, Provider 30: tatsächliche Frontvorlage 4200 × 4800 bei 14 × 16 Zoll (300 px/in). L-Fotoreferenz, White-Rechteck 440/357/322/368, Black 437/355/326/372 auf 1200 × 1200. Abweichung des Seitenverhältnisses unter 0.002. Bildschirmgeometrie und unveränderte Foto-Ränder abgeglichen; Unsicherheit ±3 Fotopixel je Rand. Schwarz-Registrierung hat wegen Beleuchtung eine höhere Intensitätsabweichung, die DOM-Geometrie bestätigt die Koordinaten. S/M verwenden ihre tatsächlichen kleineren Druckflächen. Alle Messmotive nach dem Prüfen zweimal zurückgenommen; nur transparente Blankodatei, keine Kalibrierung gespeichert.
+
+Poster EU / OPT OnDemand, Blueprint 443, Provider 30: 11.7 × 16.5 Zoll = 3510 × 4950 Pixel; 8.3 × 11.7 Zoll = 2490 × 3510 Pixel, jeweils 300 px/in und digital-printing. Vier eigene Frontkamera-Fotos (je Format/Papier), alle Rechtecke 251/107/698/985 auf 1200 × 1200. Jede Variante separat mit vollflächiger Magenta-Testdatei im Provider-Preview gemessen, Seitenverhältnisabweichung unter 0.001. Das API-Feld der Fotos lautet tatsächlich position=other, obwohl camera_label=front: nur dieses Profil gestattet other, weiterhin mit exakt registrierter URL und Varianten-ID. Die beiden dunklen Fotoklammern wurden in den tatsächlichen Fotos als Vordergrundkonturen vermessen; Overlay nur in der Vorschau, keine Änderung an Motiv oder Druckgeometrie. Unsicherheit ±3 Fotopixel je Rand. Magenta-Datei nach Messung vollständig zurückgenommen.
+
+Lokale Belege: outputs/cappatex-longsleeve-{white,black}-photo-dom.json, zugehörige Kalibrierungsbilder und Analyse-JSONs; outputs/cappatex-poster-{62338,62339,62354,62355}-photo-dom.json, Kalibrierungsbilder und Analyse-JSONs. Keine kostenpflichtige Bildgenerierung oder Bestellung.

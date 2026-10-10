@@ -392,6 +392,38 @@ describe("offline private design catalog without sales approval", { concurrency:
     assert.ok(fixture.requests.every(request => request.method === "GET" && request.url.startsWith("https://api.printify.com/")));
   });
 
+  for (const [optionKey, optionLabel] of [["paper", "Papier"], ["surface", "Oberfläche"]]) {
+    test(`a real ${optionKey} option is verified without inventing a garment color`, async () => {
+      const candidate = previewOnly();
+      candidate.optionKey = optionKey;
+      candidate.variants[0].color = "Matte";
+      fixture.changeProvider = provider => {
+        delete provider.variants[0].options.color;
+        provider.variants[0].options[optionKey] = "Matte";
+      };
+      const body = await (await getDesignCatalog()).json();
+      assert.equal(body.products.length, 1);
+      assert.equal(body.products[0].optionLabel, optionLabel);
+      assert.equal(body.products[0].variants[0].color, "Matte");
+      assert.equal(body.products[0].purchaseReady, false);
+      fixture.changeProvider = provider => {
+        delete provider.variants[0].options.color;
+        provider.variants[0].options[optionKey] = "Glossy";
+      };
+      assert.deepEqual((await (await getDesignCatalog()).json()).products, []);
+    });
+  }
+
+  test("a calibrated front camera tagged other needs explicit profile approval and the exact photo URL", async () => {
+    const candidate = previewOnly();
+    fixture.changeTemplate = product => { product.images[0].position = "other"; };
+    assert.deepEqual((await (await getDesignCatalog()).json()).products, []);
+    candidate.mockupPosition = "other";
+    assert.equal((await (await getDesignCatalog()).json()).products.length, 1);
+    fixture.changeTemplate = product => { product.images[0].position = "other"; product.images[0].src += "-unverified"; };
+    assert.deepEqual((await (await getDesignCatalog()).json()).products, []);
+  });
+
   for (const actor of [null, "customer@example.test"]) {
     test(`the unpublished candidate is hidden from ${actor || "anonymous users"} before provider access`, async () => {
       previewOnly(); runtime.actor = actor;

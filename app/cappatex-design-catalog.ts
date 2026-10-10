@@ -2,15 +2,21 @@ import { CAPPATEX_DESIGN_PROFILES } from "./cappatex-design-profiles";
 import { generationAccess } from "./cappatex-generation-access";
 import { profileGeometryIsVerified, type PrintProfile, type ProfileVariant } from "./cappatex-print-profile";
 
-export type DesignProfile = Omit<PrintProfile, "fulfillment"> & { mockupReferenceSize?: string };
+export type DesignProfile = Omit<PrintProfile, "fulfillment"> & {
+  mockupReferenceSize?: string;
+  optionKey?: "paper" | "surface";
+  // Some measured front-camera photos are tagged "other" by Printify's product API.
+  mockupPosition?: "other";
+};
 export type CappatexDesignProduct = {
   id: string; name: string; kind: PrintProfile["kind"]; profileVersion: string;
   purchaseReady: boolean; blockedReason: string | null;
   mockupReferenceSize?: string;
+  optionLabel?: string;
   variants: Array<ProfileVariant & { title: string; available: boolean; price: { amount: string; currencyCode: string } | null }>;
 };
 
-type ProviderVariant = { id: number; options?: { color?: string; size?: string };
+type ProviderVariant = { id: number; options?: { color?: string; size?: string; paper?: string; surface?: string };
   placeholders?: Array<{ position: string; decoration_method?: string; width: number; height: number }> };
 type ProviderVariants = { variants?: ProviderVariant[] };
 type ProviderProduct = { id: string; blueprint_id: number; print_provider_id: number; visible: boolean;
@@ -55,15 +61,16 @@ export async function designCatalog(email: string): Promise<CappatexDesignProduc
           && area.decoration_method === variant.area.decorationMethod) || [];
         if (matches.length !== 1 || matches[0].id !== variant.printifyVariantId || matches[0].sku !== variant.sku
           || matches[0].is_enabled !== true || matches[0].is_available !== true
-          || options.length !== 1 || options[0].options?.color !== variant.color || options[0].options?.size !== variant.size
+          || options.length !== 1 || options[0].options?.[profile.optionKey || "color"] !== variant.color || options[0].options?.size !== variant.size
           || areas.length !== 1 || areas[0].width !== variant.area.widthPx || areas[0].height !== variant.area.heightPx
-          || !product.images?.some(image => image.src === variant.mockup.url && image.position === variant.area.position
+          || !product.images?.some(image => image.src === variant.mockup.url && image.position === (profile.mockupPosition || variant.area.position)
             && image.variant_ids.includes(variant.printifyVariantId))) return [];
         return [{ ...variant, title: `${variant.color} / ${variant.size}`, available: true, price: null }];
       });
       return variants.length ? { id: profile.id, name: profile.name, kind: profile.kind, profileVersion: profile.version,
         purchaseReady: false, blockedReason: "Für deine Gestaltung freigegeben. Verkaufspreis, Versand und Bestellablauf werden noch geprüft.",
-        mockupReferenceSize: profile.mockupReferenceSize, variants } : null;
+        mockupReferenceSize: profile.mockupReferenceSize,
+        optionLabel: profile.optionKey === "paper" ? "Papier" : profile.optionKey === "surface" ? "Oberfläche" : "Farbe", variants } : null;
     } catch { return null; }
   }
   const result: Array<CappatexDesignProduct | null> = new Array(profiles.length).fill(null);

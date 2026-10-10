@@ -24,6 +24,13 @@ function placedArtwork(variant: DesignVariant, artwork: ArtworkSize, placement: 
     left: `${placement.x * 100}%`, top: `${placement.y * 100}%`, transform: "translate(-50%, -50%)" };
 }
 
+function MockupForeground({ variant }: { variant: DesignVariant }) {
+  const photo = variant.mockup;
+  return <>{photo.foreground?.map((polygon, index) => <img key={index} src={photo.url} alt="" aria-hidden="true"
+    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "fill", pointerEvents: "none",
+      clipPath: `polygon(${polygon.map(([x, y]) => `${100 * x / photo.width}% ${100 * y / photo.height}%`).join(",")})` }} />)}</>;
+}
+
 function ProductComparisonCard({ product, variant, placement, image, artwork, previewSize, active, disabled, onSelect }: {
   product: CappatexDesignProduct; variant: DesignVariant; placement: Placement; image: string | null;
   artwork: ArtworkSize; previewSize: ArtworkSize; active: boolean; disabled: boolean; onSelect: () => void;
@@ -46,6 +53,7 @@ function ProductComparisonCard({ product, variant, placement, image, artwork, pr
           onLoad={event => setLoadedMotif(event.currentTarget.naturalWidth === previewSize.width && event.currentTarget.naturalHeight === previewSize.height ? image : "")}
           onError={() => setLoadedMotif("")} />
       </span>}
+      <MockupForeground variant={variant} />
     </span>
     <span className="cappatex-product-card-name">{product.name}</span>
     <span className="cappatex-product-card-variant">{variant.color} · {variant.size}</span>
@@ -286,7 +294,7 @@ export default function CappatexDesigner() {
         <div className="cappatex-preview-head"><div><small>Vorschau & Platzierung</small><h3>{product?.name || "Dein Motiv"}</h3></div>
           {variant && <b>{variant.price ? money(Number(variant.price.amount), variant.price.currencyCode) : "Preis noch nicht freigegeben"}</b>}</div>
         {product && variant && <div className="cappatex-variant-fields">
-          <label className="cappatex-field">Farbe<select disabled={Boolean(busy)} value={variant.color} onChange={e => {
+          <label className="cappatex-field">{product.optionLabel || "Farbe"}<select disabled={Boolean(busy)} value={variant.color} onChange={e => {
             const next = product.variants.find(v => v.color === e.target.value && v.size === variant.size)
               || product.variants.find(v => v.color === e.target.value)!;
             selectVariant(product, next.shopifyVariantId);
@@ -306,6 +314,7 @@ export default function CappatexDesigner() {
                 onError={() => { setLoadedArtwork(""); setTerms(false); setError("Das Motiv konnte nicht geladen werden. Die Bestellung bleibt gesperrt."); }}
                 style={{ ...placedArtwork(variant, artwork, placement), opacity: loadedBlank === blankIdentity && loadedArtwork === image ? 1 : 0 }} />}
             </div>
+            <MockupForeground variant={variant} />
           </div> : image ? <div style={{ width: "100%", maxWidth: 460 * artwork.width / artwork.height, aspectRatio: `${artwork.width}/${artwork.height}`, margin: "auto" }}>
             <img className="cappatex-artwork-only" src={image} style={{ width: "100%", height: "100%", objectFit: "fill" }} alt="Dein fertiges Motiv" /></div> :
             <div className="cappatex-preview-placeholder"><span aria-hidden="true">✦</span><b>Hier beginnt dein Einzelstück</b><p>Beschreibe deine Idee oder wähle ein eigenes Bild. Dein Motiv erscheint hier.</p></div>}
@@ -322,7 +331,9 @@ export default function CappatexDesigner() {
         {variant && <>
           {product?.mockupReferenceSize && <p className="cappatex-profile-note">Produktansicht: Referenzgrösse {product.mockupReferenceSize}. Druckmasse für deine gewählte Grösse.</p>}
           <p className="cappatex-profile-note">Druckfläche: {variant.area.position === "front" ? "Vorderseite" : variant.area.position} · {Math.round(variant.area.widthMm)} × {Math.round(variant.area.heightMm)} mm · {variant.area.widthPx} × {variant.area.heightPx} px · Qualitätsziel: mindestens {variant.area.minDpi} dpi.
-              Die gestrichelte Linie markiert die erlaubte Fläche. Die Fotovorschau zeigt Position und Grösse; Stofffalten werden vereinfacht dargestellt. Stoffstruktur und Bildschirmfarben können vom Druck abweichen.</p>
+              Die gestrichelte Linie markiert die erlaubte Fläche. Die Fotovorschau zeigt Position und Grösse.
+              {product?.kind === "accessory" ? " Oberfläche und Bildschirmfarben können vom Druck abweichen. Fotohalterungen gehören nicht zum Lieferumfang."
+                : " Stofffalten werden vereinfacht dargestellt. Stoffstruktur und Bildschirmfarben können vom Druck abweichen."}</p>
           <div className="cappatex-order-config">
             <label>Menge<select value={quantity} onChange={e => { setQuantity(Number(e.target.value)); setTerms(false); }}>{[1,2,3,4,5].map(n => <option key={n}>{n}</option>)}</select></label>
             <label>Lieferland<select value={country} onChange={e => { setCountry(e.target.value === "LI" ? "LI" : "CH"); setTerms(false); }}><option value="CH">Schweiz</option><option value="LI">Liechtenstein</option></select></label>

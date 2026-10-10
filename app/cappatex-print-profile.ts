@@ -39,6 +39,8 @@ export type PrintProfile = {
       top: number;
       printWidth: number;
       printHeight: number;
+      // Measured foreground silhouettes in photo pixels; never affect the print file.
+      foreground?: Array<Array<[number, number]>>;
     };
     shipping: Array<{ country: "CH" | "LI"; method: 1; currency: string; firstCents: number; additionalCents: number }>;
   }>;
@@ -70,6 +72,10 @@ export function profileGeometryIsVerified(profile: Omit<PrintProfile, "fulfillme
       && area.minScale > 0 && area.maxScale <= 1 && area.minScale <= area.maxScale
       && mockup.url.startsWith("https://") && mockup.left >= 0 && mockup.top >= 0
       && mockup.left + mockup.printWidth <= mockup.width && mockup.top + mockup.printHeight <= mockup.height
+      && (!mockup.foreground || (mockup.foreground.length <= 8 && mockup.foreground.every(polygon =>
+        polygon.length >= 3 && polygon.length <= 64 && polygon.every(point => point.length === 2
+          && Number.isFinite(point[0]) && Number.isFinite(point[1])
+          && point[0] >= 0 && point[0] <= mockup.width && point[1] >= 0 && point[1] <= mockup.height))))
       && Math.abs(mockup.printWidth / mockup.printHeight - area.widthPx / area.heightPx) < 0.01
       && Math.abs((area.widthMm / area.heightMm) / (area.widthPx / area.heightPx) - 1) < 0.001;
   });
