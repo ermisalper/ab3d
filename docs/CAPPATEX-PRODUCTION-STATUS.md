@@ -2,7 +2,17 @@
 
 Ausschliesslich AB3D unter C:\Users\berk1\OneDrive\Desktop\ab3d; GitHub ermisalper/ab3d, Branch codex/cappatex-production. Der aktuelle private Generator-/Upload-Pilot ist verÃ¶ffentlicht. Das Abnahmekriterium fÃ¼r Verkauf und Fulfillment ist **noch nicht erfÃ¼llt**; dieser Stand ist keine Verkaufsfreigabe.
 
-## Aktuell am 10.10.2026: alle sechs Blankos live, Version 45
+## Aktuell am 10.10.2026: Rückseiten und Fotogalerie live, Version 46
+
+Quellstand **4afd1ad60d9b3d6109e4499e7edb4bbc29e39d13**, Version **46**, Version-ID appgprj_6a69247390f08191811183b6a04bae94~appgver_4d34c3d31f788191840e142668918806, Deployment appgdep_6acaaa60d3a48191a54e1bf4e6292b0c, erfolgreich 2026-10-10T21:13:27.419203+00:00. Weiterhin owner-private, Umgebung Revision 11.
+
+Sechs Modelle mit **76 Varianten**, alle **72 Kleidungsvarianten mit eigener geprüfter Rückseite**. Hoodie um Navy/Red XS–4XL erweitert: 26 Varianten statt 10. T-Shirt-Galerie von 2 auf 8 echte Fotos erweitert. Getragene Anbieterfotos sind beim T-Shirt, Hoodie und Langarmshirt vorhanden; sie zeigen das Blanko. Das Kundenmotiv wird in der separat vermessenen Vorder-/Rückseitenansicht platziert. IDs und Messdaten: [CAPPATEX-BACKS-AND-GALLERY.md](CAPPATEX-BACKS-AND-GALLERY.md).
+
+Live mit vorhandenem Motiv CPX-A3EBF595EF42 geprüft: alle sechs Modelle sichtbar; Rückseitenwechsel bei allen fünf Kleidungsmodellen; Poster ohne Rückseitenoption; unabhängige T-Shirt-Platzierung (vorne 59 %, hinten 11 %) nach Seitenwechsel und Reload erhalten. Hoodie Red/4XL und Navy/4XL inklusive geladener Rückseitenbilder; 100 % ergibt korrekte 146-dpi-Warnung, Einpassen stellt 300 dpi her. Model-Foto geladen, Galerie ausdrücklich unbedruckt. Mobile Kontrolle bei 390×844 ohne horizontalen Überlauf, anschließend ursprünglichen Viewport wiederhergestellt. Keine Browser-Konsolenfehler im Prüftab.
+
+**153 Tests, Typprüfung, Lint und Produktions-Build bestanden.** Tatsächliches Katalogmodul bestätigt gegen Printify 6/76/72. GitHub-Branch codex/cappatex-production gesichert. Keine KI-Generierung, Bestellung, Produktion, Tarif- oder Zahlungsmethodenänderung. Bestellungen und mehrseitiges Fulfillment bleiben bis eigener Integration und Freigabe gesperrt; Tassen und Handyhüllen bleiben offen.
+
+## Historie am 10.10.2026: alle sechs Blankos live, Version 45
 
 Die zusÃ¤tzliche Hosting-Speicherung des lokalen Printify-Lesetokens wurde nach der konkreten RÃ¼ckfrage mit â€žokey die schritte einleiten das man alle blanks siehtâ€œ genehmigt und ausgefÃ¼hrt. PRINTIFY_CATALOG_API_TOKEN ist als Secret gespeichert, Umgebung Revision 11; PRINTIFY_API_TOKEN bleibt unverÃ¤ndert. Kein SchlÃ¼sselwert wurde in Git oder Dokumentation gespeichert.
 

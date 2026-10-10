@@ -72,3 +72,5 @@ Checkout bleibt gesperrt. Rückseiten sind ausschließlich für private Gestaltu
 ## Validierung
 
 153 Offline-Tests einschließlich Back-/SKU-/Foto-/Methoden-Fehlerfällen, Typprüfung, Lint und Produktions-Build erfolgreich. Read-only-Lauf des echten Katalogmoduls gegen Printify bestätigt 6 Produkte / 76 Varianten / 72 Rückseiten.
+
+Privat ver�ffentlicht als Version 46, Quellstand 4afd1ad60d9b3d6109e4499e7edb4bbc29e39d13. Browserpr�fung: alle f�nf R�ckseiten, separate Seiteneinstellungen nach Reload, Navy/Red 4XL, Foto-Galerie, DPI-Warnung/Einpassen und mobile Auswahl erfolgreich. Checkout bleibt deaktiviert.
