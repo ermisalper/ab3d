@@ -2,7 +2,17 @@
 
 Ausschliesslich AB3D unter C:\Users\berk1\OneDrive\Desktop\ab3d; GitHub ermisalper/ab3d, Branch codex/cappatex-production. Der aktuelle private Generator-/Upload-Pilot ist veröffentlicht. Das Abnahmekriterium für Verkauf und Fulfillment ist **noch nicht erfüllt**; dieser Stand ist keine Verkaufsfreigabe.
 
-## Aktuell am 10.10.2026: erweiterter Privatkatalog, Version 44
+## Aktuell am 10.10.2026: alle sechs Blankos live, Version 45
+
+Die zusätzliche Hosting-Speicherung des lokalen Printify-Lesetokens wurde nach der konkreten Rückfrage mit „okey die schritte einleiten das man alle blanks sieht“ genehmigt und ausgeführt. PRINTIFY_CATALOG_API_TOKEN ist als Secret gespeichert, Umgebung Revision 11; PRINTIFY_API_TOKEN bleibt unverändert. Kein Schlüsselwert wurde in Git oder Dokumentation gespeichert.
+
+Veröffentlichter Quellstand **32a8cba7795f32e7286f5b3f5d14bf97bf59d484**, Version **45**, Version-ID appgprj_6a69247390f08191811183b6a04bae94~appgver_fb216c6e8c9c81918bfa83df313ac1f7, Deployment appgdep_6acaa22e929881918bb73250a01084f8, erfolgreich 2026-10-10T20:38:25.802955+00:00. Weiterhin owner-private.
+
+Live geprüft: T-Shirt, Hoodie, Tanktop, Pullover, Langarmshirt und Poster erscheinen gemeinsam mit demselben vorhandenen Motiv. Alle sechs bleiben nach erneutem Reload verfügbar. Posterwechsel Glossy → Matte bleibt nach Reload erhalten; Druckflächen-/DPI-Anzeige und gesperrter Checkout bestätigt. Keine Browser-Konsolenfehler, keine Worker-Fehler im abgefragten Fünf-Minuten-Fenster. Der vorherige Hosting-403-Blocker trat bei diesen Prüfungen nicht mehr auf. Das ist eine Momentaufnahme, keine Verfügbarkeitsgarantie.
+
+Die veröffentlichten Code-Eingaben sind gegenüber dem bereits bestandenen Lauf mit **144 Tests, TypeScript, Lint und Build** unverändert. Keine neue Bildgenerierung, Bestellung oder Produktion. Tassen und Handyhüllen sowie Verkaufs-/Versand-/Fulfillment-Freigabe bleiben offen.
+
+## Historie am 10.10.2026: erweiterter Privatkatalog, Version 44
 
 Live-Quellstand **fe504e93813edcfaa6fff1f8bd483356f78deb44**, Version `appgprj_6a69247390f08191811183b6a04bae94~appgver_78030510241c819199d1888126d8b1bc`, Deployment `appgdep_6aca5ddd85f08191a08b10006b1bde04`, bestätigt 2026-10-10T15:46:56.290598+00:00, Konfigurationsrevision 10. Owner-private; Checkout, Fulfillment und automatische Produktion bleiben false. GitHub-Branch codex/cappatex-production. Keine neuen KI-Aufrufe, Aufträge, Abos oder Shopify-Tarifänderungen.
 
