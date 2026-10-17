@@ -29,3 +29,17 @@ Lokale D1-Migrationen erfolgreich. HTTP 200 für Modellgalerie und leere Galerie
 Keine kostenpflichtige neue 3D- oder Bildgenerierung, Bestellung oder Produktion im Test. Die reale Meshy-Archivierung hängt von noch erreichbaren Anbieterdateien ab; bereits abgelaufene historische Dateien können nicht rekonstruiert werden. Ohne laufende Statusabfrage beginnt keine Hintergrundarchivierung; nach einem geschlossenen Tab lässt sie sich in der Sammlung mit „Fertigstellung & Speicherung prüfen“ nachholen. Die Sammlung unterscheidet Datensätze und tatsächlich vorhandene Dateien.
 
 Die Website bleibt in ihrer bestehenden privaten Pilot-Zielgruppe. Historische echte Werke werden im Test nicht öffentlich freigegeben. Shopify-, Produktions- und Verkaufssperren sowie Zahlungsarten bleiben unverändert. Eine spätere öffentliche Freigabe der gesamten Website ist eine getrennte Entscheidung.
+
+## Bereitstellung und echte Browserprüfung
+
+**Version 51** erfolgreich auf `https://ab3d-swiss-design.berk-ermis.chatgpt.site` bereitgestellt, weiterhin nur für den bestehenden privaten Pilotzugang. Quellcommit `20f9103d0e7498ed6562b80a760973aae8c722fe`, GitHub-Branch `codex/cappatex-production`. Deployment `appgdep_6ad381bbd0ac8191837c34c1ecef3eff`, Umgebungsrevision unverändert `11`. Das überprüfte Windows-Paket enthält beide neuen Migrationen; die Prüfung des Pakets gegen lokale OpenAI-/Printify-Schlüssel fand keinen Treffer. Der offizielle Helfer synchronisierte den Quellstand, scheiterte jedoch beim Start seines Paketierungskommandos unter Windows; die bereits vorhandene native Windows-Paketierung wurde für diesen Stand verwendet.
+
+Auf der bereitgestellten Site im echten Testkonto nachgewiesen:
+
+- Historische CAPPATEX-Vorschauen erscheinen als private gespeicherte Motive, historische 3D-Datensätze zunächst als nicht archiviert.
+- Ein kostenfreier Statusabruf des vorhandenen Meshy-Auftrags `01a12797-aabc-73d3-98f2-1da831539d46` meldete `Task not found`. Keine neue Generierung oder Abbuchung; die Datei wurde nicht als vorhanden ausgegeben. Eine neue reale Meshy-GLB-Archivierung ist deshalb nur mit simulierten Anbieterdateien getestet.
+- Ein ausschließlich lokal berechnetes geometrisches PNG wurde ohne KI und Tokenkosten hochgeladen. Ohne Galerieentscheidung blieb die Übernahme gesperrt. Nach expliziter Privatwahl wurden Titel, Kategorie und Motiv dauerhaft gespeichert: Design `CPX-05473EF09709`, Sammlung `GLD-f41e3cdc499c43d2b99bd2b420e4ab03`, Kategorie `kunst`.
+- Anschließend am eigenen synthetischen Testmotiv: öffentliche Wahl mit Rechtebestätigung, Status „Wartet auf Freigabe“, Betreiberfreigabe, sichtbarer Beitrag in der Motivgalerie unter „Kunst & Abstrakt“, danach erfolgreicher Widerruf. Die Motivgalerie zeigt wieder den leeren Zustand; das Testmotiv bleibt mit Status „Zurückgezogen“ privat in der Sammlung. Kein historisches echtes Werk wurde veröffentlicht.
+- Die persönliche Sammlung wurde nach CAPPATEX gefiltert und mit echten Vorschaubildern angezeigt. Browsernachweise lokal und ignoriert: `outputs/gallery-live-collection.jpg` und `outputs/gallery-live-designs-test.jpg` (letzteres zeigt den kurzzeitig freigegebenen Testzustand vor Widerruf).
+
+Dieser abschließende Dokumentationsnachtrag ändert den bereitgestellten Anwendungscode nicht. GitHub enthält nach dem Dokumentationscommit zusätzlich diesen geprüften Bereitstellungsnachweis.
