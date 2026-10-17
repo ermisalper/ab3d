@@ -53,6 +53,9 @@ const hooks = registerHooks({
 });
 
 // These are production entry points, not replacements for their business logic.
+const { POST: prepareDesign } = await import("../app/api/cappatex/preparations/route.ts");
+const { GET: getPreparation } = await import("../app/api/cappatex/preparations/[id]/route.ts");
+const { preparedDraftPayload, preparedDraftMatches } = await import("../app/cappatex-prepared-draft.ts");
 const { POST: checkout } = await import("../app/api/cappatex/checkout/route.ts");
 const { POST: webhook } = await import("../app/api/cappatex/webhooks/shopify/route.ts");
 const { POST: uploadArtwork } = await import("../app/api/cappatex/upload/route.ts");
@@ -1273,5 +1276,148 @@ describe("offline real CAPPATEX checkout and paid-webhook routes", { concurrency
     assert.equal(fixture.orders.length, 1);
     assert.equal(fixture.uploads.length, 1);
     assert.equal(fixture.drafts.length, 1);
+  });
+});
+
+
+describe("offline immutable multi-side print preparations", { concurrency: false }, () => {
+  function prepareProfile() {
+    const candidate = structuredClone(profile); delete candidate.fulfillment;
+    const back = structuredClone(variant);
+    back.area = { ...back.area, position: "back", widthPx: 900, heightPx: 1200, widthMm: 76.2, heightMm: 101.6 };
+    back.mockup.url = "https://images.printify.com/mockup/fixture/back.jpg?camera_label=back";
+    candidate.backVariants = [back]; runtime.designProfiles.push(candidate);
+    fixture.changeProvider = p => p.variants[0].placeholders.push({ position: "back", decoration_method: "dtg", width: 900, height: 1200 });
+    fixture.changeTemplate = p => p.images.push({ src: back.mockup.url, position: "back", variant_ids: [101] });
+    return candidate;
+  }
+  function input(front, back) {
+    return { requestId: crypto.randomUUID(), profileId: profile.id, profileVersion: profile.version,
+      shopifyVariantId: variant.shopifyVariantId, quantity: 2, country: "LI",
+      sides: [{ position: "front", designId: front.id, placement: { x: .3, y: .4, scale: .2 } },
+        ...(back ? [{ position: "back", designId: back.id, placement: { x: .65, y: .6, scale: .2 } }] : [])] };
+  }
+  const post = (data, origin = APP_ORIGIN) => prepareDesign(new Request(APP_ORIGIN + "/api/cappatex/preparations", {
+    method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(data) }));
+  const get = (id, side) => getPreparation(new Request(APP_ORIGIN + "/api/cappatex/preparations/" + id + (side ? "?side=" + side : "")), { params: Promise.resolve({ id }) });
+  const savedRow = id => fixture.db.sqlite.prepare("SELECT * FROM cappatex_preparations WHERE id = ?").get(id);
+
+  for (const mode of ["front", "back", "both", "same motif"]) test(`stores ${mode} as a complete immutable preparation without commerce calls`, async () => {
+    prepareProfile(); const front = await seedDesign("A", 30), back = await seedDesign("B", 210);
+    const body = input(front, mode === "same motif" ? front : back);
+    if (mode === "front") body.sides.splice(1);
+    if (mode === "back") body.sides.splice(0, 1);
+    const response = await post(body), result = await response.json();
+    assert.equal(response.status, 201, JSON.stringify(result));
+    assert.equal(result.purchaseReady, false);
+    const row = savedRow(result.id), payload = JSON.parse(row.payload_json);
+    assert.equal(row.state, "ready"); assert.equal(row.payload_sha256, await sha256(row.payload_json));
+    assert.equal(payload.schemaVersion, 2); assert.equal(payload.sides.length, body.sides.length);
+    assert.ok(!JSON.stringify(result).includes(front.key));
+    for (const side of payload.sides) {
+      const image = decode(fixture.bucket.objects.get(side.file.key).bytes);
+      assert.deepEqual([image.width, image.height], side.position === "front" ? [600, 800] : [900, 1200]);
+      assert.equal(await sha256(fixture.bucket.objects.get(side.file.key).bytes), side.file.sha256);
+      const corner = [...image.data.slice(0, 4)]; assert.deepEqual(corner, [0,0,0,0]);
+      const i = ((side.raster.top + 4) * image.width + side.raster.left + 4) * 4;
+      assert.equal(image.data[i], side.designId === front.id ? 30 : 210);
+      assert.deepEqual(side.placement, body.sides.find(s => s.position === side.position).placement);
+    }
+    assert.ok(fixture.requests.every(r => r.method === "GET"));
+    assert.equal(fixture.carts.length + fixture.uploads.length + fixture.orders.length, 0);
+    const before = row.payload_json; body.sides[0].placement.x = .5;
+    assert.equal((await post(body)).status, 409); assert.equal(savedRow(result.id).payload_json, before);
+  });
+
+  test("same request and concurrent requests reuse one preparation and exactly two stored files", async () => {
+    prepareProfile(); const design = await seedDesign(); const body = input(design, design);
+    const replies = await Promise.all([post(body), post(body)]);
+    assert.ok(replies.some(r => r.status === 201));
+    const repeated = await post(body), result = await repeated.json(); assert.equal(repeated.status, 200);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_preparations").get().n, 1);
+    assert.equal([...fixture.bucket.objects.keys()].filter(k => k.includes("/preparations/")).length, 2);
+    assert.equal(savedRow(result.id).state, "ready");
+  });
+
+  for (const issue of ["duplicate side", "unapproved side", "wrong variant", "old profile", "low dpi", "out of bounds", "numeric string", "foreign artwork", "changed original", "changed dimensions"]) test(`${issue} cannot release partial print files`, async () => {
+    prepareProfile(); const design = await seedDesign(); const body = input(design, design);
+    if (issue === "duplicate side") body.sides[1].position = "front";
+    if (issue === "unapproved side") body.sides[1].position = "sleeve";
+    if (issue === "wrong variant") body.shopifyVariantId += "9";
+    if (issue === "old profile") body.profileVersion += "old";
+    if (issue === "low dpi") body.sides[1].placement.scale = .6;
+    if (issue === "out of bounds") body.sides[1].placement.x = 0;
+    if (issue === "numeric string") body.sides[0].placement.x = "0.4";
+    if (issue === "foreign artwork") body.sides[1].designId = "CPX-ZZZZZZZZZZZZ";
+    if (issue === "changed original") fixture.bucket.objects.get(design.key).bytes = imageBytes(200);
+    if (issue === "changed dimensions") fixture.db.sqlite.prepare("UPDATE cappatex_designs SET artwork_width = 241 WHERE id = ?").run(design.id);
+    assert.ok((await post(body)).status >= 400);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_preparations WHERE state='ready'").get().n, 0);
+    assert.equal(fixture.orders.length + fixture.carts.length + fixture.uploads.length, 0);
+  });
+
+  test("failure storing the second side never exposes the first side as a complete result", async () => {
+    prepareProfile(); const design = await seedDesign();
+    const original = fixture.bucket.put.bind(fixture.bucket); let writes = 0;
+    fixture.bucket.put = async (...args) => { if (++writes === 2) throw Error("local storage failure"); return original(...args); };
+    assert.equal((await post(input(design, design))).status, 503);
+    const row = fixture.db.sqlite.prepare("SELECT * FROM cappatex_preparations").get(); assert.equal(row.state, "failed");
+    assert.equal((await get(row.id, "front")).status, 404);
+  });
+
+  test("downloads preserve ownership, original access policy and stored-file checksums", async () => {
+    prepareProfile(); const design = await seedDesign(); const result = await (await post(input(design, design))).json();
+    assert.equal(result.sides[0].downloadUrl, null); assert.equal((await get(result.id, "front")).status, 403);
+    runtime.actor = "other@example.test"; assert.equal((await get(result.id)).status, 404);
+    runtime.actor = null; assert.equal((await get(result.id)).status, 401);
+    runtime.actor = EMAIL; process.env.AB3D_UNLIMITED_EMAILS = EMAIL;
+    assert.equal((await get(result.id, "front")).status, 200);
+    assert.equal((await get(result.id, "sleeve")).status, 404);
+    const payload = JSON.parse(savedRow(result.id).payload_json);
+    fixture.bucket.objects.get(payload.sides[0].file.key).bytes[25]++;
+    assert.equal((await get(result.id, "front")).status, 409);
+    fixture.db.sqlite.prepare("UPDATE cappatex_preparations SET payload_json = '{}' WHERE id = ?").run(result.id);
+    assert.equal((await get(result.id)).status, 404);
+  });
+
+  test("uploaded designs keep their existing original-download permission", async () => {
+    prepareProfile(); const design = await seedDesign();
+    fixture.db.sqlite.prepare("UPDATE cappatex_designs SET style='Upload' WHERE id = ?").run(design.id);
+    const result = await (await post(input(design))).json();
+    assert.ok(result.sides[0].downloadUrl); assert.equal((await get(result.id, "front")).status, 200);
+  });
+
+  test("origin, account and rate gates prevent unwanted rendering", async () => {
+    prepareProfile(); const design = await seedDesign(); const body = input(design);
+    assert.equal((await post(body, "https://evil.example.test")).status, 403);
+    runtime.actor = null; assert.equal((await post(body)).status, 401);
+    runtime.actor = "other@example.test"; assert.equal((await post(body)).status, 403); runtime.actor = EMAIL;
+    for (let i=0;i<20;i++) fixture.db.sqlite.prepare("INSERT INTO cappatex_preparations (id,email,request_id,request_sha256,state,created_at) VALUES(?,?,?,'hash','failed',?)").run(`rate-${i}`,EMAIL,`rate-${i}`,NOW);
+    assert.equal((await post(body)).status, 429);
+  });
+
+  test("future Printify adapter uses both full-canvas files without repeating original placement", async () => {
+    prepareProfile(); const design = await seedDesign(); const result = await (await post(input(design, design))).json();
+    const saved = JSON.parse(savedRow(result.id).payload_json);
+    const uploads = Object.fromEntries(saved.sides.map(s=>[s.position,{id:`upload-${s.position}`,width:s.file.width,height:s.file.height}]));
+    const draft = preparedDraftPayload(saved, uploads, 2200);
+    assert.deepEqual(draft.print_areas[0].placeholders.map(p=>p.images[0]), ["front","back"].map(s=>({id:`upload-${s}`,x:.5,y:.5,scale:1,angle:0})));
+    const response = {...draft,id:"local-draft",visible:false};
+    response.print_areas[0].placeholders.forEach(p=>p.decoration_method="dtg");
+    assert.equal(preparedDraftMatches(response,saved,uploads),true);
+    for (const change of [r=>r.print_areas[0].placeholders.pop(),r=>r.print_areas[0].placeholders[1].images[0].scale=.2,r=>r.print_areas[0].placeholders[1].images[0].id="upload-front",r=>r.print_areas[0].placeholders[0].decoration_method="embroidery",r=>r.print_areas[0].background="#fff"]) {
+      const invalid=structuredClone(response);change(invalid);assert.equal(preparedDraftMatches(invalid,saved,uploads),false);
+    }
+    const invalidUploads=structuredClone(uploads);invalidUploads.back.width++;
+    assert.throws(()=>preparedDraftPayload(saved,invalidUploads,2200));
+  });
+
+  test("legacy checkout rejects multi-side inputs instead of silently discarding a back", async () => {
+    const design = await seedDesign();
+    for(const overrides of [{sides:[]},{preparationId:"CPP-"+"a".repeat(32)},{schemaVersion:2},{side:"back"}]) {
+      const response=await callCheckout(design,overrides);assert.equal(response.status,409);
+      assert.equal((await response.json()).code,"multiside_checkout_pending");
+    }
+    assert.equal(fixture.carts.length,0);
   });
 });

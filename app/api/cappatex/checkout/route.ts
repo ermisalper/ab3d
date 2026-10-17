@@ -43,6 +43,8 @@ export async function POST(request: Request) {
   if (raw.length > 8000) return error(413, "request_too_large", "Die Anfrage ist zu gross.");
   let body;
   try { body = JSON.parse(raw); } catch { return error(400, "invalid_json", "Ungültige Anfrage."); }
+  if (body?.sides !== undefined || body?.preparationId !== undefined || body?.schemaVersion === 2 || body?.side === "back")
+    return error(409, "multiside_checkout_pending", "Gespeicherte Druckseiten warten noch auf die Preis- und Bestellfreigabe.");
   if (body?.termsAccepted !== true) return error(400, "terms_required", "Bitte bestätige AGB und Datenschutz.");
   if (!/^CPX-[A-Z0-9]{12}$/.test(body.designId || "") || !Number.isInteger(body.quantity) || body.quantity < 1 || body.quantity > 5
     || !["CH", "LI"].includes(body.country)) return error(400, "invalid_checkout", "Design, Menge oder Lieferland ist ungültig.");

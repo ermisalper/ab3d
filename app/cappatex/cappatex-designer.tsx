@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
+import CappatexPreparationPanel from "./cappatex-preparation-panel";
 import { initialPlacement, placementGeometry, type ArtworkSize, type Placement } from "../cappatex-print-profile";
 import type { CappatexDesignProduct } from "../cappatex-design-catalog";
 import { prepareCustomerImage } from "../cappatex-upload-client";
@@ -364,6 +365,10 @@ export default function CappatexDesigner() {
           </div>
         </>}
         {error && <p className="cappatex-error" role="alert">{error}</p>}
+        {pilotOwner && product && variant && <CappatexPreparationPanel key={`${product.id}:${product.profileVersion}:${variant.shopifyVariantId}`}
+          product={product} variant={variant} side={side} designId={designId} artwork={artwork} placement={placement}
+          ready={previewReady && Boolean(geometry?.ok) && !busy} quantity={quantity} country={country}
+          onSaving={saving => setBusy(saving ? "preparation" : "")} />}
         <div className="cappatex-ready">
           <label className="legal-consent cappatex-consent"><input type="checkbox" checked={terms} disabled={side !== "front" || !product?.purchaseReady || !previewReady || !geometry?.ok} onChange={e => setTerms(e.target.checked)} />
             <span>Motiv und Platzierung sind geprüft. Ich akzeptiere die <Link href="/recht/agb" target="_blank">AGB</Link> und habe die <Link href="/recht/datenschutz" target="_blank">Datenschutzerklärung</Link> gelesen.</span></label>

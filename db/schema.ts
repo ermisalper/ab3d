@@ -212,6 +212,22 @@ export const cappatexSnapshots = sqliteTable("cappatex_snapshots", {
   createdAt: integer("created_at").notNull(),
 });
 
+// Immutable print preparation, deliberately separate from priced checkout snapshots.
+export const cappatexPreparations = sqliteTable("cappatex_preparations", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().references(() => accounts.email),
+  requestId: text("request_id").notNull(),
+  requestSha256: text("request_sha256").notNull(),
+  state: text("state").notNull().default("preparing"),
+  payloadJson: text("payload_json"),
+  payloadSha256: text("payload_sha256"),
+  createdAt: integer("created_at").notNull(),
+}, table => [
+  uniqueIndex("cappatex_preparation_request").on(table.email, table.requestId),
+  uniqueIndex("cappatex_preparation_in_progress").on(table.email).where(sql`${table.state} = 'preparing'`),
+  index("cappatex_preparation_owner_created").on(table.email, table.createdAt),
+]);
+
 export const cappatexFulfillments = sqliteTable("cappatex_fulfillments", {
   id: text("id").primaryKey(), // trusted shop domain + Shopify order id
   externalId: text("external_id").notNull().unique(),
