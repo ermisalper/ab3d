@@ -25,6 +25,27 @@ export const tokenLedger = sqliteTable(
   (table) => [index("token_ledger_email_idx").on(table.email)],
 );
 
+export const galleryEntries = sqliteTable("gallery_entries", {
+  id: text("id").primaryKey(), email: text("email").notNull().references(() => accounts.email),
+  studio: text("studio").notNull(), sourceId: text("source_id"), sourceType: text("source_type"),
+  title: text("title").notNull(), category: text("category").notNull(),
+  consentVersion: text("consent_version"), consentAt: integer("consent_at"),
+  initialChoiceJson: text("initial_choice_json"),
+  publicRequested: integer("public_requested").notNull().default(0), rightsConfirmed: integer("rights_confirmed").notNull().default(0),
+  visibility: text("visibility").notNull().default("private"), state: text("state").notNull().default("creating"),
+  resultTaskId: text("result_task_id"), thumbnailKey: text("thumbnail_key"), thumbnailType: text("thumbnail_type"),
+  assetKey: text("asset_key"), assetBytes: integer("asset_bytes"), revision: integer("revision").notNull().default(0),
+  createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
+}, t => [uniqueIndex("gallery_source_unique").on(t.studio,t.sourceId),index("gallery_owner_created").on(t.email,t.createdAt),
+  index("gallery_public_category").on(t.visibility,t.studio,t.category,t.createdAt)]);
+
+export const galleryTaskLinks = sqliteTable("gallery_task_links", {
+  taskId: text("task_id").primaryKey().references(() => generationTasks.taskId), entryId: text("entry_id").notNull().references(() => galleryEntries.id),
+  taskType: text("task_type").notNull(), role: text("role").notNull(), state: text("state").notNull().default("pending"),
+  assetKey: text("asset_key"), assetBytes: integer("asset_bytes"), thumbnailKey: text("thumbnail_key"), thumbnailType: text("thumbnail_type"),
+  updatedAt: integer("updated_at").notNull(),
+}, t => [index("gallery_tasks_entry").on(t.entryId)]);
+
 export const generationTasks = sqliteTable(
   "generation_tasks",
   {

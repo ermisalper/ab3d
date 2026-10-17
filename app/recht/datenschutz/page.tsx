@@ -34,6 +34,12 @@ export default function DatenschutzPage() {
         <p>Wir speichern personenbezogene Daten nur so lange, wie sie für Konto, Auftrag, Produktion, Support, Sicherheit oder gesetzliche Aufbewahrungspflichten benötigt werden. Kreativdateien können für die Abwicklung eines Auftrags und den späteren Kontozugriff gespeichert bleiben. Löschwünsche prüfen wir unter Berücksichtigung laufender Aufträge und gesetzlicher Pflichten.</p>
       </section>
       <section>
+        <h2>5a. Private Sammlung und freiwillige Galerien</h2>
+        <p>Erstellte Modelle und Motive werden deinem Konto in einer privaten Sammlung zugeordnet. Vor einer neuen Erstellung wählst du ausdrücklich, ob das Ergebnis privat bleibt oder zusätzlich zur Galerieprüfung eingereicht wird. Beide Möglichkeiten haben denselben Erstellungspreis. Bestehende Werke werden ohne neue Einwilligung nicht veröffentlicht.</p>
+        <p>Nach deiner ausdrücklichen Zustimmung, Rechtebestätigung und unserer Prüfung können Titel, Kategorie und Ergebnis für andere Besucher sichtbar werden. Bei 3D-Modellen ist auch die zur Anzeige verwendete GLB-Datei öffentlich abrufbar. Bei CAPPATEX wird nur eine verkleinerte Vorschau gezeigt; die Original-Druckdatei bleibt geschützt. Kontoname, E-Mail-Adresse, Prompts und hochgeladene Referenzbilder werden dabei nicht veröffentlicht.</p>
+        <p>Wir speichern deine Auswahl mit Zeitpunkt und Fassung des Hinweises. Du kannst die Veröffentlichung jederzeit in „Meine Sammlung“ zurückziehen; der Galerie- und Dateizugriff wird dann gesperrt. Bereits von Besuchern gespeicherte Kopien können wir nicht zurückrufen. Das Zurückziehen entfernt die private Sammlung nicht. Für eine Löschung kannst du dich an uns wenden.</p>
+      </section>
+      <section>
         <h2>6. Automatisierte Verarbeitung</h2>
         <p>KI-Systeme unterstützen die Erstellung von Entwürfen. Sie treffen keine alleinige Entscheidung mit rechtlich erheblicher Wirkung. Individuelle 3D-Produkte werden vor der Produktion technisch geprüft. KI-Ergebnisse können fehlerhaft oder nicht einzigartig sein.</p>
       </section>
@@ -47,7 +53,7 @@ export default function DatenschutzPage() {
       </section>
       <section>
         <h2>9. Stand und Änderungen</h2>
-        <p>Stand: 19. August 2026. Wir passen diese Erklärung an, wenn sich Funktionen, Dienstleister oder gesetzliche Anforderungen ändern. Die jeweils aktuelle Fassung wird hier veröffentlicht.</p>
+        <p>Stand: 17. Oktober 2026. Wir passen diese Erklärung an, wenn sich Funktionen, Dienstleister oder gesetzliche Anforderungen ändern. Die jeweils aktuelle Fassung wird hier veröffentlicht.</p>
       </section>
     </LegalShell>
   );

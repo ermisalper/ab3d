@@ -14,6 +14,7 @@ import {
 } from "../../../db/account";
 import { buildDesignPlan, buildServerMeshPrompt } from "../../design-planner";
 import { meshGeometry, printSize } from "../../meshy-policy";
+import { meshCreationIntent, linkMeshTask, failCreation, archiveMeshTask, importLegacyCreations } from "../../gallery-storage";
 
 const MESHY_API = "https://api.meshy.ai/openapi";
 const TASK_ID = /^[a-zA-Z0-9-]{8,80}$/;
@@ -161,16 +162,24 @@ async function beginChargedTask(options: {
   payload: Record<string, unknown>;
   kind: string;
   parentTaskId?: string;
+  galleryChoice?: unknown;
+  galleryRole?: "input"|"preview"|"result"|"version";
 }) {
+  const role=options.galleryRole||"version";
+  let creationId:string|null;
+  try { creationId=await meshCreationIntent(options.email,options.parentTaskId,options.galleryChoice); }
+  catch(error) { return {ok:false as const,response:Response.json({code:"gallery_choice_required",error:error instanceof Error&&error.message==="gallery_choice_required"
+    ?"Bitte wähle vor der Erstellung, ob dein Ergebnis privat bleiben oder in der Galerie erscheinen soll.":"Die Sammlung ist noch nicht bereit. Es wurde keine Generierung gestartet."},{status:error instanceof Error&&error.message==="gallery_choice_required"?409:503})}; }
   const tokenCost = hasUnlimitedTokens(options.email) ? 0 : options.amount;
   const charge = await chargeOrReply(options.email, options.amount, options.reason);
-  if (!charge.ok) return { ok: false as const, response: charge.response };
+  if (!charge.ok) {if(creationId&&!options.parentTaskId)await failCreation(creationId,options.email);return { ok: false as const, response: charge.response };}
 
   const result = await meshyFetch(options.path, {
     method: "POST",
     body: JSON.stringify(options.payload),
   });
   if (!result.ok) {
+    if(creationId&&!options.parentTaskId)await failCreation(creationId,options.email);
     if (tokenCost > 0) await refundUnstartedCharge(options.email, tokenCost, options.refundReason);
     return {
       ok: false as const,
@@ -182,6 +191,8 @@ async function beginChargedTask(options: {
   }
 
   await recordTask(result.data.result, options.email, options.kind, tokenCost, options.parentTaskId);
+  const apiType=options.kind==="text-preview"||options.kind==="text-refine"?"text":options.kind;
+  await linkMeshTask(creationId,options.email,result.data.result,apiType,role);
   return {
     ok: true as const,
     taskId: result.data.result as string,
@@ -235,6 +246,7 @@ export async function POST(request: Request) {
         surface?: string;
         colorMood?: string;
       };
+      galleryChoice?: unknown;
     };
 
     if (["analyze", "repair", "convert"].includes(body.action || "")) {
@@ -300,6 +312,7 @@ export async function POST(request: Request) {
           remove_background: false,
         },
         kind: taskType,
+        galleryChoice:body.galleryChoice,galleryRole:"input",
       });
       if (!task.ok) return task.response;
       return Response.json({ taskId: task.taskId, type: taskType, tokenBalance: task.tokenBalance });
@@ -338,6 +351,7 @@ export async function POST(request: Request) {
         },
         kind: taskType,
         parentTaskId: body.prototypeTaskId,
+        galleryRole:"result",
       });
       if (!task.ok) return task.response;
       return Response.json({ taskId: task.taskId, type: taskType, tokenBalance: task.tokenBalance });
@@ -372,6 +386,7 @@ export async function POST(request: Request) {
           remove_background: false,
         },
         kind: "image-transform",
+        galleryChoice:body.galleryChoice,galleryRole:"input",
       });
       if (!task.ok) return task.response;
       return Response.json({ taskId: task.taskId, type: "image-transform", tokenBalance: task.tokenBalance });
@@ -430,6 +445,7 @@ export async function POST(request: Request) {
         },
         kind: "text-refine",
         parentTaskId: body.previewTaskId,
+        galleryRole:"result",
       });
       if (!task.ok) return task.response;
       return Response.json({ taskId: task.taskId, type: "text", tokenBalance: task.tokenBalance });
@@ -485,6 +501,7 @@ export async function POST(request: Request) {
           origin_at: "bottom",
         },
         kind: "text-preview",
+        galleryChoice:body.galleryChoice,galleryRole:body.willRefine?"preview":"result",
       });
       if (!task.ok) return task.response;
       return Response.json({ taskId: task.taskId, type: "text", tokenBalance: task.tokenBalance });
@@ -532,6 +549,7 @@ export async function POST(request: Request) {
       },
       kind: taskType,
       parentTaskId: inputTaskId || undefined,
+      galleryChoice:body.galleryChoice,galleryRole:"result",
     });
     if (!task.ok) return task.response;
     return Response.json({ taskId: task.taskId, type: taskType, tokenBalance: task.tokenBalance });
@@ -593,6 +611,13 @@ export async function GET(request: Request) {
     const ownedTask = await getOwnedTask(taskId, ownershipEmail);
     if (!ownedTask) return Response.json({ error: "Dieser Auftrag gehört nicht zu deinem Konto." }, { status: 403 });
 
+    if(requestedFormat==="glb"){
+      const archive=await env.DB.prepare(`SELECT l.asset_key FROM gallery_task_links l JOIN gallery_entries e ON e.id=l.entry_id
+        WHERE l.task_id=? AND e.email=? AND l.state='ready'`).bind(taskId,ownershipEmail).first<{asset_key:string}>();
+      const object=archive?.asset_key?await env.BUCKET.get(archive.asset_key):null;
+      if(object)return new Response(object.body||await object.arrayBuffer(),{headers:{"Content-Type":"model/gltf-binary","Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
+    }
+
     const result = await meshyFetch(`${TASK_ENDPOINTS[type]}/${taskId}`);
     if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
 
@@ -617,7 +642,10 @@ export async function GET(request: Request) {
     if (status === "FAILED" || status === "CANCELED") {
       tokenBalance = await refundTokens(user.email, taskId, ownedTask.tokenCost, "Fehlgeschlagene KI-Generierung");
     }
-    return Response.json({ ...result.data, tokenBalance }, { headers: { "Cache-Control": "no-store" } });
+    let creationId=await archiveMeshTask(user.email,taskId,result.data);
+    if(!creationId&&status==="SUCCEEDED"&&result.data.model_urls?.glb){await importLegacyCreations(user.email);creationId=await archiveMeshTask(user.email,taskId,result.data);}
+    const collection=creationId?await env.DB.prepare("SELECT state FROM gallery_entries WHERE id=? AND email=?").bind(creationId,user.email).first<{state:string}>():null;
+    return Response.json({ ...result.data, tokenBalance,creationId,collectionSaved:collection?.state==="ready"||collection?.state==="preview_ready" }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error && error.message === "MESHY_API_KEY_NOT_CONFIGURED"
       ? "Die AB3D Design Engine ist noch nicht konfiguriert."

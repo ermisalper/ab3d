@@ -13,12 +13,16 @@ type SiteHeaderProps = {
 const objectLinks = [
   ["Kollektion", "/#kollektion"],
   ["3D AI Studio", "/#studio"],
+  ["Modellgalerie", "/modelle"],
+  ["Meine Sammlung", "/sammlung"],
   ["Creator Plans", "/#preise"],
   ["FAQ", "/#faq"],
 ] as const;
 
 const cappatexLinks = [
   ["Design Studio", "/cappatex#studio"],
+  ["Designgalerie", "/cappatex/designs"],
+  ["Meine Sammlung", "/sammlung"],
   ["So funktioniert es", "/cappatex#ablauf"],
   ["FAQ", "/cappatex#faq"],
 ] as const;

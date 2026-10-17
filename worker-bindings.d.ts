@@ -18,8 +18,9 @@ declare module "cloudflare:workers" {
   export const env: {
     DB: D1Database;
     BUCKET: {
-      get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>;
-      put(key: string, data: Uint8Array, options: { httpMetadata: { contentType: string } }): Promise<unknown>;
+      get(key: string, options?: {range?:Headers}): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; body?:ReadableStream<Uint8Array>;
+        size?:number;range?:{offset:number;length:number} } | null>;
+      put(key: string, data: Uint8Array | ReadableStream<Uint8Array>, options: { httpMetadata: { contentType: string } }): Promise<unknown>;
     };
   };
 }

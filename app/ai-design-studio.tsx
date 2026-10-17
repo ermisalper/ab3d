@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { DesignPlan } from "./design-planner";
 import ModelViewer from "./model-viewer";
 import { printReportVerified, type Printability } from "./meshy-policy";
+import GalleryConsent from "./gallery-consent";
+import { galleryChoiceValid, newGalleryDraft } from "./gallery-policy";
 
 type InputMode = "text" | "image";
 type GenerationMode = "fast" | "quality";
@@ -26,6 +28,7 @@ type MeshyTask = {
   task_error?: { message?: string };
   tokenBalance?: number;
   printability?: Printability | null;
+  collectionSaved?: boolean;
 };
 type Template = {
   id: string;
@@ -133,6 +136,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   const [interpretedPreview, setInterpretedPreview] = useState("");
   const [imageStrategy, setImageStrategy] = useState<ImageStrategy>("accurate");
   const [generationMode, setGenerationMode] = useState<GenerationMode>("quality");
+  const [galleryChoice,setGalleryChoice]=useState(newGalleryDraft);
   const [style, setStyle] = useState<keyof typeof styles>("Japandi");
   const [surface, setSurface] = useState<keyof typeof surfaces>("Feine Rillen");
   const [colorMood, setColorMood] = useState<keyof typeof colorMoods>("Warm Ivory");
@@ -401,6 +405,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   };
 
   const generate = async () => {
+    if(!galleryChoiceValid(galleryChoice,"ab3d")){setError("Bitte entscheide vor der Erstellung, ob dein Ergebnis privat bleiben oder in der Galerie erscheinen soll.");return;}
     if (!signedIn) {
       window.location.href = "/signin-with-chatgpt?return_to=%2F%23studio";
       return;
@@ -450,7 +455,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
         const prototypeResponse = await fetch("/api/meshy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "creative-prototype", templateId: selectedTemplate.id, imageData }),
+          body: JSON.stringify({ action: "creative-prototype", templateId: selectedTemplate.id, imageData,galleryChoice }),
         });
         const prototype = await readJson(prototypeResponse);
         if (typeof prototype.tokenBalance === "number") setTokenBalance(prototype.tokenBalance);
@@ -497,7 +502,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           const transformResponse = await fetch("/api/meshy", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "transform-image", imageData, prompt: transformation.slice(0, 800) }),
+            body: JSON.stringify({ action: "transform-image", imageData, prompt: transformation.slice(0, 800),galleryChoice }),
           });
           const transformed = await readJson(transformResponse);
           if (typeof transformed.tokenBalance === "number") setTokenBalance(transformed.tokenBalance);
@@ -516,6 +521,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "create",
+            galleryChoice,
             type: mode,
             prompt: finalPrompt,
             texturePrompt: finalPrompt,
@@ -571,7 +577,8 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       setThumbnail(safeMeshyUrl(completed.thumbnail_url) || "");
       setProgress(100);
       setState("complete");
-      setStatusText(generationMode === "fast" ? "Schnellvorschau fertig – jetzt Form prüfen" : "Dein finales 3D-Design ist fertig");
+      setGalleryChoice(newGalleryDraft());
+      setStatusText(completed.collectionSaved===false?"3D-Modell fertig – Speicherung in deiner Sammlung noch prüfen":generationMode === "fast" ? "Schnellvorschau fertig – jetzt Form prüfen" : "Dein finales 3D-Design ist fertig");
     } catch (caught) {
       if (generationRef.current !== runId) return;
       setState("error");
@@ -903,8 +910,9 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             </div>
           </div>}
 
+          {(mode==="image"||plannerApproved)&&<GalleryConsent studio="ab3d" value={galleryChoice} onChange={setGalleryChoice} disabled={busy}/>}
           {error && <div className="ai-error" role="alert">{error}</div>}
-          {(mode === "image" || plannerApproved) && <><div className="generation-actions"><button className="generate-button" onClick={generate} disabled={busy}>{busy ? <><i className="spinner" /> KI arbeitet · {formatElapsed(elapsedSeconds)}</> : signedIn ? <><span>✦</span> {generationMode === "fast" ? "Schnellvorschau erstellen" : "3D-Design in bester Qualität"}{unlimited ? " · Launch-Pass" : ` · ${tokenCost} Token`}</> : <>Anmelden & Design starten</>}</button>{busy && <button type="button" className="stop-generation" onClick={stopWatching}>Überwachung stoppen</button>}</div>
+          {(mode === "image" || plannerApproved) && <><div className="generation-actions"><button className="generate-button" onClick={generate} disabled={busy||!galleryChoiceValid(galleryChoice,"ab3d")}>{busy ? <><i className="spinner" /> KI arbeitet · {formatElapsed(elapsedSeconds)}</> : signedIn ? <><span>✦</span> {generationMode === "fast" ? "Schnellvorschau erstellen" : "3D-Design in bester Qualität"}{unlimited ? " · Launch-Pass" : ` · ${tokenCost} Token`}</> : <>Anmelden & Design starten</>}</button>{busy && <button type="button" className="stop-generation" onClick={stopWatching}>Überwachung stoppen</button>}</div>
           <p className="credit-note">{signedIn ? unlimited ? <><b>Launch-Pass aktiv · unbegrenzte Generierungen</b></> : <>Dein Guthaben: <b>{tokenBalance ?? "–"} Design-Tokens</b> · Exakte Grössenskalierung: 1 Token</> : <>Neue Accounts erhalten Start-Tokens für die erste Kreation.</>}</p></>}
         </div>
 
@@ -950,6 +958,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             </div>{generationMode === "fast" && <div className="quality-upgrade"><div><b>Gefällt dir die Grundform?</b><span>Erstelle jetzt Material, Farben und die druckbaren STL-/3MF-Dateien.</span></div><button type="button" onClick={() => { setGenerationMode("quality"); workspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Beste Qualität vorbereiten</button></div>}</>
           )}
           {state === "complete" && <div className="file-access-note"><b>Physisch bestellen oder Datei besitzen?</b><span>Bei einer Fertigung geht die geprüfte STL automatisch intern an AB3D. Nur für einen eigenen STL-/3MF-Download brauchst du das 3D-Studio- oder Complete-Abo.</span>{orderMessage && <small role="status">✓ {orderMessage}</small>}</div>}
+          {modelTaskId&&<Link className="gallery-collection-link" href="/sammlung">Gespeicherte Modelle in „Meine Sammlung“ ansehen →</Link>}
         </div>
       </div>
 

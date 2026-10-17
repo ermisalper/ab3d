@@ -1,0 +1,1 @@
+ALTER TABLE `gallery_entries` ADD `initial_choice_json` text;

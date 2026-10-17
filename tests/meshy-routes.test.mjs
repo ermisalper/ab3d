@@ -79,7 +79,7 @@ afterEach(()=>{
   }
 });
 after(()=>{hook.deregister();delete globalThis.__meshyOfflineUpdate;});
-const post=body=>POST(new Request(`${origin}/api/meshy`,{method:"POST",headers:{origin,host:"ab3d.example.test","Content-Type":"application/json"},body:JSON.stringify(body)}));
+const post=body=>POST(new Request(`${origin}/api/meshy`,{method:"POST",headers:{origin,host:"ab3d.example.test","Content-Type":"application/json"},body:JSON.stringify({galleryChoice:{version:"gallery-2026-10-17-v1",visibility:"private",category:"sonstiges",title:"Local fixture",rightsConfirmed:false},...body})}));
 const balance=()=>database.sql.prepare("SELECT token_balance FROM accounts WHERE email=?").get(email).token_balance;
 const posts=()=>fixture.requests.filter(r=>r.method==="POST");
 function source(id,kind="text-preview",status="SUCCEEDED",owner=email){

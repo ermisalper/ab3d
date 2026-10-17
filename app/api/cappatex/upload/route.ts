@@ -5,6 +5,8 @@ import { generationAccess } from "../../../cappatex-generation-access";
 import { sha256 } from "../../../cappatex-artwork";
 import { createArtworkPreview } from "../../../cappatex-preview";
 import { boundedBody, validateUploadPng, RESERVE_UPLOAD } from "../../../cappatex-upload";
+import { parseGalleryChoice } from "../../../gallery-policy";
+import { reserveCreation, readyArtworkCreation, failCreation } from "../../../gallery-storage";
 
 const error = (status: number, code: string, message: string) => Response.json({ error: message, code }, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -17,16 +19,21 @@ export async function POST(request: Request) {
     return error(403, "upload_not_allowed", "Der Bildupload ist derzeit nur für das freigegebene Testkonto verfügbar.");
   if (request.headers.get("content-type")?.split(";")[0] !== "image/png") return error(415, "png_required", "Bitte lade das Bild über die PNG/JPG-Dateiauswahl hoch.");
   if (request.headers.get("x-cappatex-image-rights") !== "confirmed") return error(400, "rights_required", "Bitte bestätige, dass du das Bild verwenden darfst.");
+  let galleryChoice;
+  try { const encoded=request.headers.get("x-gallery-choice")||"";if(encoded.length>4000)throw new Error("choice_too_large");galleryChoice=parseGalleryChoice(JSON.parse(decodeURIComponent(encoded)),"cappatex"); }
+  catch { return error(409,"gallery_choice_required","Bitte wähle, ob dein Motiv privat bleiben oder in der Galerie erscheinen soll."); }
 
   const id = `CPX-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+  const creation=await reserveCreation(user.email,"cappatex",galleryChoice,id);
   try {
     await ensureAccount(user.email, user.fullName);
     const now = Date.now();
-    const reserved = await env.DB.prepare(RESERVE_UPLOAD).bind(id, user.email, now, now, user.email, now - 86_400_000).run();
+    const results=await env.DB.batch([env.DB.prepare(RESERVE_UPLOAD).bind(id, user.email, now, now, user.email, now - 86_400_000),creation.statement]);
+    const reserved=results[0];
     if (!reserved.meta.changes) return error(429, "upload_limit", "Du kannst innerhalb von 24 Stunden höchstens zehn Upload-Versuche starten.");
   } catch { return error(503, "upload_unavailable", "Der Bildspeicher ist noch nicht bereit."); }
   const failUpload = () => env.DB.prepare("UPDATE cappatex_designs SET status = 'upload_failed', updated_at = ? WHERE id = ? AND email = ? AND status = 'uploading'")
-    .bind(Date.now(), id, user.email).run().catch(() => {});
+    .bind(Date.now(), id, user.email).run().then(()=>failCreation(creation.id,user.email)).catch(() => {});
 
   let bytes: Uint8Array, size, preview;
   try {
@@ -52,8 +59,9 @@ export async function POST(request: Request) {
     const saved = await env.DB.prepare("UPDATE cappatex_designs SET artwork_key = ?, artwork_sha256 = ?, artwork_width = ?, artwork_height = ?, preview_key = ?, preview_sha256 = ?, status = 'preview_ready', updated_at = ? WHERE id = ? AND email = ? AND status = 'uploading'")
       .bind(artworkKey, hash, size.width, size.height, previewKey, previewHash, Date.now(), id, user.email).run();
     if (!saved.meta.changes) throw new Error("upload_not_saved");
+    await readyArtworkCreation(creation.id,user.email,previewKey).catch(()=>{});
     return Response.json({ image: `/api/cappatex/artwork/${id}`, designId: id, width: size.width, height: size.height,
-      previewWidth: preview.width, previewHeight: preview.height, sha256: hash, format: "png", source: "upload" }, { headers: { "Cache-Control": "no-store" } });
+      previewWidth: preview.width, previewHeight: preview.height, sha256: hash, format: "png", source: "upload",creationId:creation.id }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     // Do not delete potentially committed files after an uncertain database result.
     await failUpload();

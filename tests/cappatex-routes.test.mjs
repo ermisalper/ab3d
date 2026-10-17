@@ -330,6 +330,7 @@ function oddImageBytes(alpha = 255) {
 
 function callUpload(body, overrides = {}) {
   const headers = new Headers({ Origin: APP_ORIGIN, "Content-Type": "image/png", "X-Cappatex-Image-Rights": "confirmed" });
+  headers.set("X-Gallery-Choice",encodeURIComponent(JSON.stringify({version:"gallery-2026-10-17-v1",visibility:"private",category:"sonstiges",title:"Local fixture",rightsConfirmed:false})));
   for (const [key, value] of Object.entries(overrides)) {
     if (value === null) headers.delete(key); else headers.set(key, value);
   }
@@ -634,7 +635,8 @@ describe("offline private design catalog without sales approval", { concurrency:
 function callGeneration(canvas = "square") {
   return generateArtwork(new Request(`${APP_ORIGIN}/api/cappatex`, {
     method: "POST", headers: { Origin: APP_ORIGIN, Host: new URL(APP_ORIGIN).host, "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: "An alpine flower in warm colors", style: "Minimal", canvas, confirmGeneration: true }),
+    body: JSON.stringify({ prompt: "An alpine flower in warm colors", style: "Minimal", canvas, confirmGeneration: true,
+      galleryChoice:{version:"gallery-2026-10-17-v1",visibility:"private",category:"sonstiges",title:"Local fixture",rightsConfirmed:false} }),
   }));
 }
 

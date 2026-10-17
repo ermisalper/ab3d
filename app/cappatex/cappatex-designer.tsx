@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import CappatexPreparationPanel from "./cappatex-preparation-panel";
+import GalleryConsent from "../gallery-consent";
+import { galleryChoiceValid, newGalleryDraft } from "../gallery-policy";
 import { initialPlacement, placementGeometry, type ArtworkSize, type Placement } from "../cappatex-print-profile";
 import type { CappatexDesignProduct } from "../cappatex-design-catalog";
 import { prepareCustomerImage } from "../cappatex-upload-client";
@@ -83,6 +85,7 @@ export default function CappatexDesigner() {
   const [style, setStyle] = useState("Minimal");
   const [canvas, setCanvas] = useState("portrait");
   const [confirmed, setConfirmed] = useState(false);
+  const [galleryChoice,setGalleryChoice]=useState(newGalleryDraft);
   const [image, setImage] = useState<string | null>(null);
   const [artwork, setArtwork] = useState<ArtworkSize>({ width: 2048, height: 3072 });
   const [designId, setDesignId] = useState("");
@@ -203,14 +206,15 @@ export default function CappatexDesigner() {
     setPlacement(saved?.variantId === variant.shopifyVariantId ? saved.placement : null); setTerms(false); setError("");
   }
   async function generate() {
-    if (!confirmed || !generationEnabled || busy) return;
+    if (!confirmed || !generationEnabled || busy || !galleryChoiceValid(galleryChoice,"cappatex")) return;
     setBusy("generation"); setError("");
     try {
       const response = await fetch("/api/cappatex", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, style, canvas, confirmGeneration: confirmed }) });
+        body: JSON.stringify({ prompt, style, canvas, confirmGeneration: confirmed,galleryChoice }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Das Motiv konnte nicht erstellt werden.");
       setImage(data.image); setDesignId(data.designId); setArtwork({ width: data.width, height: data.height });
+      setGalleryChoice(newGalleryDraft());setConfirmed(false);
       setPreviewSize({ width: data.previewWidth ?? Math.ceil(data.width / 4), height: data.previewHeight ?? Math.ceil(data.height / 4) });
       setUploadedArtwork(false); setLoadedArtwork("");
       setConfigurations({});
@@ -220,15 +224,16 @@ export default function CappatexDesigner() {
     finally { setBusy(""); }
   }
   async function upload() {
-    if (!uploadFile || !imageRights || !uploadEnabled || busy) return;
+    if (!uploadFile || !imageRights || !uploadEnabled || busy || !galleryChoiceValid(galleryChoice,"cappatex")) return;
     setBusy("upload"); setError("");
     try {
       const file = await prepareCustomerImage(uploadFile);
-      const response = await fetch("/api/cappatex/upload", { method: "POST", headers: { "Content-Type": "image/png", "X-Cappatex-Image-Rights": "confirmed" }, body: file });
+      const response = await fetch("/api/cappatex/upload", { method: "POST", headers: { "Content-Type": "image/png", "X-Cappatex-Image-Rights": "confirmed","X-Gallery-Choice":encodeURIComponent(JSON.stringify(galleryChoice)) }, body: file });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Das Bild konnte nicht gespeichert werden.");
       const size = { width: data.width, height: data.height };
       setImage(data.image); setDesignId(data.designId); setArtwork(size);
+      setGalleryChoice(newGalleryDraft());
       setPreviewSize({ width: data.previewWidth, height: data.previewHeight });
       setUploadedArtwork(true); setLoadedArtwork(""); setTerms(false);
       setConfigurations({});
@@ -285,9 +290,10 @@ export default function CappatexDesigner() {
           <label className="cappatex-field">Motivformat<select value={canvas} onChange={e => setCanvas(e.target.value)}>
             <option value="portrait">Hochformat · 2048 × 3072 px</option><option value="square">Quadratisch · 2048 × 2048 px</option><option value="landscape">Querformat · 3072 × 2048 px</option>
           </select></label>
+          <GalleryConsent studio="cappatex" value={galleryChoice} onChange={setGalleryChoice} disabled={Boolean(busy)}/>
           <label className="legal-consent cappatex-consent"><input type="checkbox" checked={confirmed} disabled={!generationEnabled} onChange={e => setConfirmed(e.target.checked)} />
             <span>{pilotOwner ? "Ein Testmotiv als Betreiber erstellen. Es entstehen OpenAI-API-Kosten; kein Design-Token wird abgezogen." : "Ein Motiv für 1 Design-Token erstellen."}</span></label>
-          <button className="button primary cappatex-generate" onClick={generate} disabled={!confirmed || !generationEnabled || prompt.trim().length < 12 || Boolean(busy)}>
+          <button className="button primary cappatex-generate" onClick={generate} disabled={!confirmed || !generationEnabled || prompt.trim().length < 12 || Boolean(busy) || !galleryChoiceValid(galleryChoice,"cappatex")}>
             {busy === "generation" ? "Motiv wird erstellt …" : "Motiv erstellen"}</button>
           <p className="cappatex-wait-note">{generationEnabled ? "Die Vorschau ist eine verkleinerte Ansicht deiner Druckdatei. Es gibt keine automatische zweite Generierung."
             : "Die KI-Generierung wartet auf den freigegebenen Test. Du kannst deine Idee bereits formulieren; es entstehen keine API-Kosten."}</p>
@@ -296,7 +302,8 @@ export default function CappatexDesigner() {
             <p>PNG oder JPG, bis 12 MB und 6,29 Megapixel. Dein Bild wird ohne KI-Bearbeitung und ohne Verkleinerung als PNG-Druckdatei gespeichert. Bitte prüfe danach Farben, Ausrichtung und Platzierung in der Vorschau.</p>
             <label className="legal-consent cappatex-consent"><input type="checkbox" checked={imageRights} onChange={e => setImageRights(e.target.checked)} />
               <span>Ich darf dieses Bild verwenden und bedrucken lassen.</span></label>
-            <button className="button primary cappatex-generate" onClick={upload} disabled={!uploadFile || !imageRights || !uploadEnabled || Boolean(busy)}>{busy === "upload" ? "Bild wird geprüft …" : "Eigenes Bild übernehmen"}</button>
+            <GalleryConsent studio="cappatex" value={galleryChoice} onChange={setGalleryChoice} disabled={Boolean(busy)}/>
+            <button className="button primary cappatex-generate" onClick={upload} disabled={!uploadFile || !imageRights || !uploadEnabled || Boolean(busy) || !galleryChoiceValid(galleryChoice,"cappatex")}>{busy === "upload" ? "Bild wird geprüft …" : "Eigenes Bild übernehmen"}</button>
             <p className="cappatex-wait-note">{uploadEnabled ? "Keine KI-Kosten und kein Design-Token. Bis zu zehn Upload-Versuche innerhalb von 24 Stunden."
               : "Der Upload ist noch nicht freigegeben. Für den Test ist ein angemeldetes Betreiberkonto erforderlich."}</p>
           </div>}
@@ -370,6 +377,7 @@ export default function CappatexDesigner() {
           ready={previewReady && Boolean(geometry?.ok) && !busy} quantity={quantity} country={country}
           onSaving={saving => setBusy(saving ? "preparation" : "")} />}
         <div className="cappatex-ready">
+          {designId&&<Link className="text-link" href="/sammlung">Deine Motive in „Meine Sammlung“ ansehen →</Link>}
           <label className="legal-consent cappatex-consent"><input type="checkbox" checked={terms} disabled={side !== "front" || !product?.purchaseReady || !previewReady || !geometry?.ok} onChange={e => setTerms(e.target.checked)} />
             <span>Motiv und Platzierung sind geprüft. Ich akzeptiere die <Link href="/recht/agb" target="_blank">AGB</Link> und habe die <Link href="/recht/datenschutz" target="_blank">Datenschutzerklärung</Link> gelesen.</span></label>
           <button className="button primary" onClick={checkout} disabled={side !== "front" || !product?.purchaseReady || !variant?.price || !checkoutEnabled || !previewReady || !terms || !designId || !geometry?.ok || Boolean(busy)}>

@@ -5,6 +5,8 @@ import { generationAccess } from "../../cappatex-generation-access";
 import { decodeBase64, pngSize, sha256 } from "../../cappatex-artwork";
 import { createArtworkPreview } from "../../cappatex-preview";
 import { RESERVE_DESIGN, DEBIT_DESIGN, LOG_DESIGN, REFUND_DESIGN, LOG_REFUND, FINISH_FAILURE } from "../../../db/cappatex-generation";
+import { parseGalleryChoice } from "../../gallery-policy";
+import { reserveCreation, readyArtworkCreation, failCreation } from "../../gallery-storage";
 
 const CANVASES: Record<string, string> = { square: "2048x2048", portrait: "2048x3072", landscape: "3072x2048" };
 const STYLES = new Set(["Minimal", "Illustrativ", "Retro", "Streetwear"]);
@@ -98,6 +100,7 @@ export async function POST(request: Request) {
     canvas?: unknown;
     style?: unknown;
     confirmGeneration?: unknown;
+    galleryChoice?: unknown;
   } | null;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   const canvas = typeof body?.canvas === "string" ? body.canvas : "";
@@ -112,6 +115,9 @@ export async function POST(request: Request) {
   if (body?.confirmGeneration !== true) {
     return clientError(409, "confirmation_required", "Bitte bestätige die kostenpflichtige KI-Generierung.");
   }
+  let galleryChoice;
+  try { galleryChoice = parseGalleryChoice(body.galleryChoice,"cappatex"); }
+  catch { return clientError(409,"gallery_choice_required","Bitte wähle vor der Erstellung, ob dein Motiv privat bleiben oder in der Galerie erscheinen soll."); }
   if (process.env.CAPPATEX_GENERATION_ENABLED !== "true") {
     return clientError(503, "generation_disabled", "Der Bildgenerator wartet noch auf die Freigabe des Shopbetreibers.");
   }
@@ -134,6 +140,7 @@ export async function POST(request: Request) {
   const productionPrompt = buildProductionPrompt(canvas, style, prompt);
   const designId = `CPX-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
   const createdAt = Date.now();
+  const creation=await reserveCreation(user.email,"cappatex",galleryChoice,designId);
   try {
     if (!env.BUCKET) throw new Error("artwork_storage_missing");
     // Validate the complete persistence schema before making a paid image request.
@@ -155,8 +162,9 @@ export async function POST(request: Request) {
         .bind(createdAt,user.email,designId),
       env.DB.prepare(LOG_DESIGN)
         .bind(user.email,designId,createdAt,designId),
+      creation.statement,
     ]);
-    if (!results[0].meta.changes) return clientError(402, "insufficient_tokens", "Für ein Motiv brauchst du 1 Design-Token.");
+    if (!results[0].meta.changes) { await failCreation(creation.id,user.email); return clientError(402, "insufficient_tokens", "Für ein Motiv brauchst du 1 Design-Token."); }
 
   } catch {
     return clientError(503, "design_storage_unavailable", "Der Designspeicher ist nicht bereit oder eine vorherige Generierung wird noch geprüft. Es wurde keine weitere kostenpflichtige Generierung gestartet.");
@@ -222,6 +230,7 @@ export async function POST(request: Request) {
     ).bind(artworkKey, hash, size.width, size.height, previewKey, previewHash, Date.now(), designId, user.email).run();
     if (saved.meta?.changes !== 1) throw new Error("artwork_save_not_confirmed");
     completed = true;
+    await readyArtworkCreation(creation.id,user.email,previewKey).catch(()=>{});
     const tokenBalance = await getTokenBalance(user.email).catch(() => null);
 
     return Response.json({
@@ -229,6 +238,7 @@ export async function POST(request: Request) {
       width: size.width, height: size.height, sha256: hash,
       previewWidth: preview.width, previewHeight: preview.height,
       designId,
+      creationId:creation.id,
       format: "png",
       quality: "high",
       tokenBalance,
@@ -241,6 +251,7 @@ export async function POST(request: Request) {
       : "Das Motiv konnte nicht vollständig gespeichert werden. Bitte prüfe den Vorgang vor einem weiteren Versuch.");
   } finally {
     if (!completed) {
+      await failCreation(creation.id,user.email).catch(()=>{});
       try {
         await env.DB.batch([
           env.DB.prepare(REFUND_DESIGN)
