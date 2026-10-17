@@ -28,8 +28,11 @@ test("Meshy route keeps secrets server-side and exposes the print pipeline", asy
   assert.doesNotMatch(route, /msy_[A-Za-z0-9]{12,}/);
   assert.match(route, /MAX_PROMPT_LENGTH = 800/);
   assert.match(route, /\/v1\/multi-image-to-3d/);
-  assert.match(route, /ai_model: "meshy-7"/);
-  assert.match(route, /should_remesh: false/);
+  const policy = await read("app/meshy-policy.ts");
+  assert.match(policy, /meshy-7\.1/);
+  assert.match(policy, /meshy-t2\.5/);
+  assert.match(route, /meshGeometry/);
+  assert.match(policy, /should_remesh: false/);
   assert.match(route, /image_enhancement: false/);
   assert.match(route, /\/creative-lab\/figure\/v1\/prototype/);
   assert.match(route, /\/creative-lab\/keychain\/v1\/build/);

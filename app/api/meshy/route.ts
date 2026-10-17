@@ -13,6 +13,7 @@ import {
   updateTaskStatus,
 } from "../../../db/account";
 import { buildDesignPlan, buildServerMeshPrompt } from "../../design-planner";
+import { meshGeometry, printSize } from "../../meshy-policy";
 
 const MESHY_API = "https://api.meshy.ai/openapi";
 const TASK_ID = /^[a-zA-Z0-9-]{8,80}$/;
@@ -237,6 +238,12 @@ export async function POST(request: Request) {
     };
 
     if (["analyze", "repair", "convert"].includes(body.action || "")) {
+      let size: ReturnType<typeof printSize> | undefined;
+      if (body.action !== "convert") {
+        try { size = printSize(body.heightCm); }
+        catch { return Response.json({ error: "Bitte gib für die Druckprüfung eine Zielhöhe zwischen 2 und 80 cm an." }, { status: 400 }); }
+        if (body.sourceFormat && body.sourceFormat !== "glb") return Response.json({ error: "Die höhenbezogene Druckprüfung benötigt das GLB-Modell." }, { status: 400 });
+      }
       const source = await ownedModelUrl({
         email: user.email,
         taskId: body.sourceTaskId,
@@ -248,7 +255,7 @@ export async function POST(request: Request) {
       if (body.action === "analyze") {
         const result = await meshyFetch("/v1/print/analyze", {
           method: "POST",
-          body: JSON.stringify({ model_url: source.modelUrl }),
+          body: JSON.stringify({ model_url: source.modelUrl, ...size }),
         });
         if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
         await recordTask(result.data.result, user.email, "print-analyze", 0, body.sourceTaskId);
@@ -263,7 +270,7 @@ export async function POST(request: Request) {
         refundReason: isRepair ? "Druckreparatur nicht gestartet" : "Dateikonvertierung nicht gestartet",
         path: isRepair ? "/v1/print/repair" : "/v1/convert",
         payload: isRepair
-          ? { model_url: source.modelUrl, alpha_thumbnail: true }
+          ? { model_url: source.modelUrl, alpha_thumbnail: true, ...size }
           : { model_url: source.modelUrl, target_formats: ["stl", "3mf"] },
         kind: isRepair ? "print-repair" : "convert",
         parentTaskId: body.sourceTaskId,
@@ -371,8 +378,9 @@ export async function POST(request: Request) {
     }
 
     if (body.action === "resize") {
-      const heightCm = Number(body.heightCm);
-      if (!Number.isFinite(heightCm) || heightCm < 5 || heightCm > 80) return Response.json({ error: "Bitte wähle eine Höhe zwischen 5 und 80 cm." }, { status: 400 });
+      const heightCm = body.heightCm;
+      try { printSize(heightCm); }
+      catch { return Response.json({ error: "Bitte wähle eine Höhe zwischen 2 und 80 cm." }, { status: 400 }); }
       const source = await ownedModelUrl({
         email: user.email,
         taskId: body.sourceTaskId || body.modelTaskId,
@@ -388,7 +396,7 @@ export async function POST(request: Request) {
         path: "/v1/resize",
         payload: {
           model_url: source.modelUrl,
-          resize_height: Math.round(heightCm * 10) / 1000,
+          resize_height: Math.round(heightCm! * 10) / 1000,
           origin_at: "bottom",
         },
         kind: "resize",
@@ -403,7 +411,7 @@ export async function POST(request: Request) {
         return Response.json({ error: "Ungültige Vorschau-ID." }, { status: 400 });
       }
       const parent = await getOwnedTask(body.previewTaskId, user.email);
-      if (!parent) return Response.json({ error: "Diese Vorschau gehört nicht zu deinem Konto." }, { status: 403 });
+      if (!parent || parent.kind !== "text-preview" || parent.status !== "SUCCEEDED") return Response.json({ error: "Diese Textvorschau ist noch nicht fertig oder gehört nicht zu deinem Konto." }, { status: 403 });
 
       const task = await beginChargedTask({
         email: user.email,
@@ -414,10 +422,9 @@ export async function POST(request: Request) {
         payload: {
           mode: "refine",
           preview_task_id: body.previewTaskId,
-          ai_model: "meshy-7",
+          // Inherit the preview model, including previews created before this update.
           enable_pbr: true,
           texture_resolution: "2k",
-          remove_lighting: true,
           ...(body.texturePrompt?.trim() ? { texture_prompt: body.texturePrompt.trim().slice(0, MAX_PROMPT_LENGTH) } : {}),
           target_formats: ["glb"],
         },
@@ -431,6 +438,8 @@ export async function POST(request: Request) {
     if (body.action !== "create" || !["text", "image"].includes(body.type || "")) {
       return Response.json({ error: "Ungültiger Generierungsauftrag." }, { status: 400 });
     }
+    const quality = body.quality === "fast" ? "fast" : body.quality === "quality" ? "quality"
+      : body.type === "text" ? "quality" : "fast";
 
     if (body.type === "text") {
       const submittedPlan = body.designPlan;
@@ -469,9 +478,7 @@ export async function POST(request: Request) {
         payload: {
           mode: "preview",
           prompt,
-          model_type: "standard",
-          ai_model: "meshy-7",
-          should_remesh: false,
+          ...meshGeometry(quality),
           moderation: true,
           target_formats: ["glb"],
           alpha_thumbnail: true,
@@ -483,11 +490,12 @@ export async function POST(request: Request) {
       return Response.json({ taskId: task.taskId, type: "text", tokenBalance: task.tokenBalance });
     }
 
+    if (body.imageDatas !== undefined && (!Array.isArray(body.imageDatas) || body.imageDatas.length > 4
+      || body.imageDatas.some(entry => typeof entry !== "string"))) return Response.json({ error: "Bitte wähle ein bis vier gültige Bilder." }, { status: 400 });
     const imageDatas = Array.isArray(body.imageDatas)
-      ? body.imageDatas.slice(0, 4).filter((entry): entry is string => typeof entry === "string")
+      ? body.imageDatas
       : body.imageData ? [body.imageData] : [];
     const inputTaskId = body.inputTaskId || "";
-    const quality = body.quality === "quality" ? "quality" : "fast";
     const texturePrompt = body.texturePrompt?.trim().slice(0, MAX_PROMPT_LENGTH) || "";
     if (!inputTaskId && (imageDatas.length < 1 || imageDatas.some((entry) => !validImage(entry)))) {
       return Response.json({ error: "Bitte verwende ein bis vier gültige JPG- oder PNG-Bilder." }, { status: 400 });
@@ -498,7 +506,7 @@ export async function POST(request: Request) {
     if (inputTaskId) {
       if (!TASK_ID.test(inputTaskId)) return Response.json({ error: "Ungültige Bild-Auftrags-ID." }, { status: 400 });
       const parent = await getOwnedTask(inputTaskId, user.email);
-      if (!parent || parent.status !== "SUCCEEDED") {
+      if (!parent || parent.kind !== "image-transform" || parent.status !== "SUCCEEDED") {
         return Response.json({ error: "Die kreative Bildinterpretation ist noch nicht fertig oder gehört nicht zu dir." }, { status: 403 });
       }
     }
@@ -512,12 +520,10 @@ export async function POST(request: Request) {
       path: TASK_ENDPOINTS[taskType],
       payload: {
         ...(inputTaskId ? { input_task_id: inputTaskId } : useMultiImage ? { image_urls: imageDatas } : { image_url: imageDatas[0] }),
-        ...(useMultiImage ? {} : { model_type: "standard" }),
-        ai_model: "meshy-7",
-        should_remesh: false,
+        ...meshGeometry(quality, useMultiImage),
         should_texture: quality === "quality",
         ...(quality === "quality" ? { enable_pbr: true, texture_resolution: "2k" } : {}),
-        ...(inputTaskId ? {} : { image_enhancement: false }),
+        ...(quality === "quality" || useMultiImage ? inputTaskId ? {} : { image_enhancement: false } : {}),
         moderation: true,
         ...(quality === "quality" && texturePrompt ? { texture_prompt: texturePrompt } : {}),
         target_formats: ["glb"],

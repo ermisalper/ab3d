@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { DesignPlan } from "./design-planner";
 import ModelViewer from "./model-viewer";
+import { printReportVerified, type Printability } from "./meshy-policy";
 
 type InputMode = "text" | "image";
 type GenerationMode = "fast" | "quality";
@@ -14,13 +15,6 @@ type TaskType = InputMode | "multi-image" | "image-transform" | CreativeTaskType
 type ModelTaskType = Exclude<TaskType, "image-transform" | "print-analyze" | `creative-${CreativeTemplateId}-prototype`>;
 type GenerationState = "idle" | "uploading" | "transforming" | "generating" | "refining" | "resizing" | "analyzing" | "repairing" | "converting" | "complete" | "error";
 type ModelUrls = { glb?: string; stl?: string; "3mf"?: string; obj?: string; fbx?: string; usdz?: string };
-type Printability = {
-  status: "healthy" | "warning" | "error" | "unknown";
-  issue_count: number;
-  error_count: number;
-  warning_count: number;
-  metrics: { is_watertight: boolean; volume: number; non_manifold_edges: number; degenerate_faces: number; holes: number };
-};
 type MeshyTask = {
   id: string;
   status: "PENDING" | "IN_PROGRESS" | "SUCCEEDED" | "FAILED" | "CANCELED";
@@ -516,7 +510,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
 
         setState("generating");
         setProgress(2);
-        setStatusText(mode === "image" && imageDatas.length > 1 ? "Meshy 7 verbindet deine Ansichten zur präzisen 3D-Form …" : "AB3D baut die echte 3D-Geometrie …");
+        setStatusText(mode === "image" && imageDatas.length > 1 ? "Meshy 7.1 verbindet deine Ansichten zur präzisen 3D-Form …" : "AB3D baut die echte 3D-Geometrie …");
         const createResponse = await fetch("/api/meshy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -620,23 +614,26 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       const analyzeResponse = await fetch("/api/meshy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "analyze", sourceTaskId: created.taskId, sourceTaskType: "resize" }),
+        body: JSON.stringify({ action: "analyze", sourceTaskId: created.taskId, sourceTaskType: "resize", heightCm }),
       });
       const analyzeCreated = await readJson(analyzeResponse);
-      const analyzed = await pollTask(analyzeCreated.taskId, "print-analyze", runId);
+      let analyzed = await pollTask(analyzeCreated.taskId, "print-analyze", runId);
       if (!analyzed.printability) throw new Error("Die Design Engine hat keinen Druckbarkeitsbericht geliefert.");
       setPrintability(analyzed.printability);
 
       let productionSourceId = created.taskId as string;
       let productionSourceType: ModelTaskType = "resize";
-      if (analyzed.printability.status !== "healthy") {
+      if (!printReportVerified(analyzed.printability, heightCm)) {
+        if (!analyzed.printability.thin_walls || !analyzed.printability.intended_print
+          || analyzed.printability.status === "unknown" || analyzed.printability.thin_walls.status === "unknown")
+          throw new Error("Die Wandstärkenprüfung ist unvollständig. Das Druckpaket wird noch nicht freigegeben.");
         setState("repairing");
         setProgress(35);
         setStatusText("AB3D repariert Löcher und fehlerhafte Kanten …");
         const repairResponse = await fetch("/api/meshy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "repair", sourceTaskId: productionSourceId, sourceTaskType: productionSourceType }),
+          body: JSON.stringify({ action: "repair", sourceTaskId: productionSourceId, sourceTaskType: productionSourceType, heightCm }),
         });
         const repairCreated = await readJson(repairResponse);
         if (typeof repairCreated.tokenBalance === "number") setTokenBalance(repairCreated.tokenBalance);
@@ -645,7 +642,18 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
         productionSourceId = repairCreated.taskId;
         productionSourceType = "print-repair";
         setPrintRepaired(true);
+        setModelUrls(proxiedModelUrls(repaired.model_urls, productionSourceId, productionSourceType));
+        setModelTaskId(productionSourceId); setModelTaskType(productionSourceType);
+        setState("analyzing"); setStatusText("Repariertes Modell und Wandstärken werden erneut geprüft …");
+        const checkResponse = await fetch("/api/meshy", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "analyze", sourceTaskId: productionSourceId, sourceTaskType: productionSourceType, heightCm }),
+        });
+        const check = await readJson(checkResponse);
+        analyzed = await pollTask(check.taskId, "print-analyze", runId);
+        setPrintability(analyzed.printability || null);
       }
+      if (!printReportVerified(analyzed.printability, heightCm)) throw new Error("Die Druckprüfung bestätigt noch kein fehlerfreies Modell in deiner Zielgrösse. Bitte vor der Fertigung prüfen lassen.");
 
       setState("converting");
       setProgress(70);
@@ -706,7 +714,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   const tokenCost = mode === "text" ? (textured ? 2 : 1) : creativeImage ? 3 : generationMode === "quality" ? 2 : 1;
   const processStages = mode === "text"
     ? (textured ? ["Auftrag", "Geometrie", "Material", "Fertig"] : ["Auftrag", "Geometrie", "Fertig"])
-    : (creativeImage ? ["Upload", "Entwurf", "3D-Modell", "Fertig"] : [imageDatas.length > 1 ? "Ansichten" : "Foto", "Meshy 7", "Fertig"]);
+    : (creativeImage ? ["Upload", "Entwurf", "3D-Modell", "Fertig"] : [imageDatas.length > 1 ? "Ansichten" : "Foto", generationMode === "fast" && imageDatas.length <= 1 ? "Meshy T2.5" : "Meshy 7.1", "Fertig"]);
   const activeStage = state === "complete"
     ? processStages.length - 1
     : state === "refining"
@@ -843,7 +851,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
                 )}
               </div>
               {imageData && <div className="image-strategy" role="radiogroup" aria-label="Bildverarbeitung">
-                <button type="button" role="radio" aria-checked={imageStrategy === "accurate"} className={imageStrategy === "accurate" ? "active" : ""} onClick={() => { setImageStrategy("accurate"); setInterpretedPreview(""); resetResult(); }} disabled={busy}><b>Originalgetreu</b><small>{imageDatas.length > 1 ? "Meshy 7 verbindet alle Ansichten direkt" : "Foto direkt mit Meshy 7 in 3D umwandeln"}</small></button>
+                <button type="button" role="radio" aria-checked={imageStrategy === "accurate"} className={imageStrategy === "accurate" ? "active" : ""} onClick={() => { setImageStrategy("accurate"); setInterpretedPreview(""); resetResult(); }} disabled={busy}><b>Originalgetreu</b><small>{imageDatas.length > 1 ? "Meshy 7.1 verbindet alle Ansichten direkt" : "Dein Foto direkt in 3D umwandeln"}</small></button>
                 <button type="button" role="radio" aria-checked={imageStrategy === "creative"} className={imageStrategy === "creative" ? "active" : ""} onClick={() => { setImageStrategy("creative"); setGenerationMode("quality"); setInterpretedPreview(""); resetResult(); }} disabled={busy || imageDatas.length > 1}><b>Kreativ gestalten</b><small>{isCreativeTemplate(selectedTemplate.id) ? `Spezialablauf für ${selectedTemplate.name}` : "Zuerst konsistente Mehransicht gestalten"}</small></button>
                 {imageDatas.length > 1 && <p>Mehrere Ansichten werden immer originalgetreu verarbeitet. So entstehen die zuverlässigsten Proportionen.</p>}
               </div>}
@@ -890,8 +898,8 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           {(mode === "image" || plannerApproved) && <div className="generation-mode-picker">
             <div><span>Wie möchtest du starten?</span></div>
             <div>
-              <button type="button" className={generationMode === "fast" ? "active" : ""} onClick={() => setGenerationMode("fast")} disabled={busy || creativeImage}><b>Schnelle Vorschau</b><small>{creativeImage ? "Im Kreativmodus nicht verfügbar" : "Form prüfen · etwa 1–3 Minuten"}</small></button>
-              <button type="button" className={generationMode === "quality" ? "active" : ""} onClick={() => setGenerationMode("quality")} disabled={busy}><b>Finales Modell</b><small>Texturen und feine Details · etwa 3–8 Minuten</small></button>
+              <button type="button" className={generationMode === "fast" ? "active" : ""} onClick={() => setGenerationMode("fast")} disabled={busy || creativeImage}><b>Schnelle Vorschau</b><small>{creativeImage ? "Im Kreativmodus nicht verfügbar" : mode === "image" && imageDatas.length > 1 ? "Meshy 7.1 · alle Ansichten, ohne Texturen" : "Meshy T2.5 · leichtes Netz, ohne Texturen"}</small></button>
+              <button type="button" className={generationMode === "quality" ? "active" : ""} onClick={() => setGenerationMode("quality")} disabled={busy}><b>Finales Modell</b><small>{creativeImage && isCreativeTemplate(selectedTemplate.id) ? "Spezialmodell mit Material und Farbe" : "Meshy 7.1 · Texturen und feine Details"}</small></button>
             </div>
           </div>}
 
@@ -911,7 +919,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
               <div className="empty-viewer"><div className="wire-vase"><i /><i /><i /><i /><i /></div><p>Dein echtes 3D-Modell erscheint hier</p><small>Mit der Maus drehen · Scrollen zum Zoomen</small></div>
             )}
           </div>
-          <div className="progress-area"><div><span>{statusText}</span><b>{Math.round(progress)}%</b></div><div className="process-stages">{displayedStages.map((stage, index) => <span key={stage} className={index < displayedActiveStage ? "done" : index === displayedActiveStage ? "active" : ""}><i>{index < displayedActiveStage ? "✓" : index + 1}</i>{stage}</span>)}</div><div className="progress-track"><i style={{ width: `${progress}%` }} /></div><small className="progress-note">{printPipeline ? "Die Druckprüfung kontrolliert Wasserdichtheit, Löcher und fehlerhafte Kanten. Die finale Freigabe erfolgt vor der Fertigung." : "Du kannst diesen Tab geöffnet lassen. AB3D baut zuerst die Geometrie und danach – falls gewählt – Material und Farbe."}</small></div>
+          <div className="progress-area"><div><span>{statusText}</span><b>{Math.round(progress)}%</b></div><div className="process-stages">{displayedStages.map((stage, index) => <span key={stage} className={index < displayedActiveStage ? "done" : index === displayedActiveStage ? "active" : ""}><i>{index < displayedActiveStage ? "✓" : index + 1}</i>{stage}</span>)}</div><div className="progress-track"><i style={{ width: `${progress}%` }} /></div><small className="progress-note">{printPipeline ? "Die Druckprüfung kontrolliert Wasserdichtheit, Löcher, fehlerhafte Kanten und Wandstärken bei deiner Zielhöhe für FDM-Druck. Die finale Freigabe erfolgt vor der Fertigung." : "Du kannst diesen Tab geöffnet lassen. AB3D baut zuerst die Geometrie und danach – falls gewählt – Material und Farbe."}</small></div>
 
           {modelUrls.glb && (
             <div className="production-config">
@@ -930,6 +938,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
               {printability && <div className={`printability-report status-${printability.status}`}>
                 <div><span>{printFilesReady ? "✓" : "!"}</span><p><b>{printFilesReady ? "Druckpaket bereit" : "Geometrie geprüft"}</b><small>{printRepaired ? "Geometrie wurde automatisch repariert." : printability.status === "healthy" ? "Die Geometrie ist sauber und geschlossen." : "Auffälligkeiten werden im Druckpaket repariert."}</small></p></div>
                 <dl><div><dt>Wasserdicht</dt><dd>{printability.metrics.is_watertight ? "Ja" : "Nein"}</dd></div><div><dt>Löcher</dt><dd>{printability.metrics.holes}</dd></div><div><dt>Nicht-manifold</dt><dd>{printability.metrics.non_manifold_edges}</dd></div><div><dt>Fehlerflächen</dt><dd>{printability.metrics.degenerate_faces}</dd></div></dl>
+                <p>Wandstärken bei {printability.intended_print?.height_mm ?? "–"} mm: {printability.thin_walls?.status === "healthy" ? "nach Anbieterprüfung unauffällig" : "Prüfung offen oder auffällig"} · FDM{printability.intended_print?.wall_thickness_mm ? ` · Prüfgrenze ${printability.intended_print.wall_thickness_mm} mm` : ""}</p>
               </div>}
             </div>
           )}
