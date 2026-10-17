@@ -18,8 +18,8 @@ function chunk(type: string, data: Uint8Array) {
 }
 
 /** Row-streamed full-placeholder PNG. No full-sized target RGBA allocation. */
-export async function renderPrintFile(bytes: Uint8Array, area: ProfileVariant["area"], placement: Placement) {
-  const size = await validateUploadPng(bytes), geometry = placementGeometry(area, size, placement);
+export async function renderPrintFile(bytes: Uint8Array, area: ProfileVariant["area"], placement: Placement, sourceType: "upload" | "generated" = "upload") {
+  const size = await validateUploadPng(bytes, { generatedContentCredentials: sourceType === "generated" }), geometry = placementGeometry(area, size, placement);
   if (!geometry.ok) throw new Error("invalid_placement");
   const width = area.widthPx, height = area.heightPx;
   if (![width, height].every(n => Number.isSafeInteger(n) && n > 0 && n <= 10000) || width * height > 40_000_000)

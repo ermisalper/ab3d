@@ -25,7 +25,7 @@ export async function boundedBody(request: Request, limit = MAX_ARTWORK_BYTES) {
 }
 
 /** Browser-normalized PNG only. Reject animation, metadata and decompression bombs before decoding. */
-export async function validateUploadPng(bytes: Uint8Array) {
+export async function validateUploadPng(bytes: Uint8Array, options: { generatedContentCredentials?: boolean } = {}) {
   if (bytes.length > MAX_ARTWORK_BYTES) throw new Error("upload_too_large");
   const size = pngSize(bytes);
   if (size.width > MAX_ARTWORK_SIDE || size.height > MAX_ARTWORK_SIDE || size.width * size.height > MAX_ARTWORK_PIXELS
@@ -48,6 +48,9 @@ export async function validateUploadPng(bytes: Uint8Array) {
       if (type === "IEND") {
         if (length || !hadData || offset + 12 !== bytes.length) throw new Error("invalid_png");
         ended = true;
+      } else if (type === "caBX" && options.generatedContentCredentials) {
+        // Existing generated originals carry provenance, not pixel/colour instructions.
+        // Keep their original bytes; the decoder verifies CRC and ignores this metadata.
       } else if (!({ sRGB: 1, gAMA: 4, cHRM: 32, pHYs: 9 } as Record<string, number>)[type]
         || length !== ({ sRGB: 1, gAMA: 4, cHRM: 32, pHYs: 9 } as Record<string, number>)[type]) throw new Error("unsupported_upload");
       if (type === "gAMA" && view.getUint32(offset + 8) !== 45455) throw new Error("unsupported_upload");

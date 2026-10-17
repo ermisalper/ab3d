@@ -37,6 +37,21 @@ test("downsampling weights colour by alpha without a dark transparent fringe", a
   assert.deepEqual(pixel(decode(result.bytes),1,0), [0,0,0,0]);
 });
 
+test("generated original provenance is accepted without changing pixels; uploads remain strict", async () => {
+  const original = image(4,2,[25,75,125,255]);
+  const block = Buffer.alloc(18); block.writeUInt32BE(6); block.write("caBX",4); block.write("source",8);
+  let crc = 0xffffffff;
+  for (const byte of block.subarray(4,-4)) { crc ^= byte; for (let b=0;b<8;b++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0); }
+  block.writeUInt32BE((crc ^ 0xffffffff) >>> 0,block.length-4);
+  const generated = Buffer.concat([original.subarray(0,33),block,original.subarray(33)]);
+  const placement = {x:.5,y:.5,scale:1};
+  await assert.rejects(renderPrintFile(generated,area(4,2),placement),/unsupported_upload/);
+  const result = await renderPrintFile(generated,area(4,2),placement,"generated");
+  assert.deepEqual(result.bytes,(await renderPrintFile(original,area(4,2),placement)).bytes);
+  const damaged = generated.slice(); damaged[42] ^= 1;
+  await assert.rejects(renderPrintFile(damaged,area(4,2),placement,"generated"));
+});
+
 test("non-integer resize preserves coverage and rejects out of bounds / insufficient DPI", async () => {
   const input = image(5,3,[200,30,10,255]);
   const result = await renderPrintFile(input, area(10,10), { x:.85, y:.9, scale:.3 });

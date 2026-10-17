@@ -37,14 +37,17 @@ export async function POST(request: Request) {
       ? "Die Dateien werden noch vorbereitet. Bitte prüfe den Speicherstatus erneut." : "Dieser Speicherversuch ist fehlgeschlagen. Bitte starte eine neue Speicherung.");
   }
   let reservedId: string | null = null;
+  let phase = "idempotency";
   try {
     const duplicate = await repeated(); if (duplicate) return duplicate;
+    phase = "catalog";
     const products = await designCatalog(user.email);
     const product = products.find(p => p.id === input.profileId && p.profileVersion === input.profileVersion);
     const variant = product?.variants.find(v => v.shopifyVariantId === input.shopifyVariantId);
     const profile = CAPPATEX_DESIGN_PROFILES.find(p => p.id === product?.id && p.version === product.profileVersion);
     if (!product || !variant || !profile) return fail(409, "catalog_mismatch", "Die Variante oder das Druckprofil ist nicht mehr bestätigt. Bitte lade den Katalog neu.");
     const selected = [];
+    phase = "source_metadata";
     for (const side of input.sides) {
       const geometryProfile = side.position === "front" ? variant : variant.back;
       if (!geometryProfile || geometryProfile.area.position !== side.position) return fail(409, "side_unavailable", "Diese Druckseite ist für die gewählte Variante nicht geprüft.");
@@ -68,15 +71,18 @@ export async function POST(request: Request) {
     }
     const sides: PreparedDesign["sides"] = [];
     for (const s of selected) {
+      phase = "source_read";
       const object = await env.BUCKET.get(s.artwork.key);
       if (!object) throw new Error("artwork_missing");
       const bytes = new Uint8Array(await object.arrayBuffer());
       if (await sha256(bytes) !== s.artwork.sha256) throw new Error("artwork_changed");
-      const rendered = await renderPrintFile(bytes, s.area, s.placement);
+      phase = "render";
+      const rendered = await renderPrintFile(bytes, s.area, s.placement, s.source);
       // Reject altered metadata even if the stored source hash is otherwise valid.
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
       if (view.getUint32(16) !== s.artwork.width || view.getUint32(20) !== s.artwork.height) throw new Error("artwork_dimensions_changed");
       const hash = await sha256(rendered.bytes), key = `cappatex/preparations/${id}/${s.position}-${hash}.png`;
+      phase = "file_store";
       await env.BUCKET.put(key, rendered.bytes, { httpMetadata: { contentType: "image/png" } });
       sides.push({ ...s, file: { key, sha256: hash, width: rendered.width, height: rendered.height }, raster: rendered.raster, dpi: rendered.dpi });
     }
@@ -86,11 +92,16 @@ export async function POST(request: Request) {
       variant: { shopifyVariantId: variant.shopifyVariantId, printifyVariantId: variant.printifyVariantId, sku: variant.sku, color: variant.color, size: variant.size },
       quantity: input.quantity, country: input.country, sides };
     const json = JSON.stringify(saved);
+    phase = "commit";
     const complete = await env.DB.prepare("UPDATE cappatex_preparations SET payload_json = ?, payload_sha256 = ?, state = 'ready' WHERE id = ? AND email = ? AND state = 'preparing'")
       .bind(json, await sha256(json), id, user.email).run();
     if (!complete.meta.changes) throw new Error("preparation_not_saved");
+    phase = "summary";
     return Response.json(preparationSummary(saved, await preparationDownloadAllowed(saved, user.email)), { status: 201, headers });
-  } catch {
+  } catch (error) {
+    const known = ["unsupported_upload", "invalid_png", "invalid_png_data", "unsupported_print_source", "invalid_placement",
+      "invalid_raster_bounds", "print_file_too_large", "print_area_too_large", "artwork_missing", "artwork_changed", "artwork_dimensions_changed", "preparation_not_saved"];
+    console.error("cappatex_preparation_failed", { phase, reason: error instanceof Error && known.includes(error.message) ? error.message : "unclassified" });
     if (reservedId) await env.DB.prepare("UPDATE cappatex_preparations SET state = 'failed' WHERE id = ? AND email = ? AND state = 'preparing'")
       .bind(reservedId, user.email).run().catch(() => {});
     return fail(503, "preparation_failed", "Die Druckdateien konnten nicht vollständig bestätigt werden. Es wurde keine Bestellung ausgelöst.");
