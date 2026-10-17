@@ -4,6 +4,7 @@ import Link from "next/link";
 import { productPrice, type Product } from "./products";
 import { ProductPhoto } from "./shop-product-ui";
 import { formatChf, type ProductSelection } from "./shop-types";
+import useDialogFocus from "./use-dialog-focus";
 
 type CartDrawerProps = {
   open: boolean;
@@ -25,12 +26,13 @@ type CartDrawerProps = {
 };
 
 export default function CartDrawer({ open, step, cart, products, subtotal, shipping, total, termsAccepted, checkoutBusy, checkoutError, selectionFor, onClose, onStep, onQuantity, onTerms, onCheckout }: CartDrawerProps) {
+  const dialogRef = useDialogFocus<HTMLElement>(open);
   const cartProducts = products.filter((product) => cart[product.id]);
   const count = cartProducts.reduce((sum, product) => sum + cart[product.id], 0);
   const freeShippingProgress = Math.min(100, subtotal / 80 * 100);
 
   return (
-    <aside className={`cart-drawer ${open ? "open" : ""}`} aria-hidden={!open} inert={!open} role={open ? "dialog" : undefined} aria-modal={open || undefined} aria-labelledby="cart-title">
+    <aside ref={dialogRef} tabIndex={-1} className={`cart-drawer ${open ? "open" : ""}`} aria-hidden={!open} inert={!open} role={open ? "dialog" : undefined} aria-modal={open || undefined} aria-labelledby="cart-title">
       <div className="cart-head"><div><small>{step === "checkout" ? "Sicher bezahlen" : "Deine Auswahl"}</small><h2 id="cart-title">{step === "checkout" ? "Checkout" : "Warenkorb"}</h2></div><button type="button" onClick={onClose} aria-label="Warenkorb schliessen">×</button></div>
       {step === "checkout" ? (
         <div className="checkout-form">

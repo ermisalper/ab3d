@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import CappatexPreparationPanel from "./cappatex-preparation-panel";
 import GalleryConsent from "../gallery-consent";
@@ -100,6 +100,8 @@ export default function CappatexDesigner() {
   const [terms, setTerms] = useState(false);
   const [busy, setBusy] = useState("restore");
   const [error, setError] = useState("");
+  const [creationError, setCreationError] = useState<{ source: "prompt" | "upload"; message: string } | null>(null);
+  const previewPanel = useRef<HTMLElement | null>(null);
   const [loadedArtwork, setLoadedArtwork] = useState("");
   const [loadedBlank, setLoadedBlank] = useState("");
   const [restorationComplete, setRestorationComplete] = useState(false);
@@ -115,6 +117,31 @@ export default function CappatexDesigner() {
   const geometry = variant ? placementGeometry(variant.area, artwork, placement) : null;
   const blankIdentity = variant ? `${product?.id}:${product?.profileVersion}:${variant.shopifyVariantId}:${variant.mockup.url}` : "";
   const previewReady = Boolean(image && loadedArtwork === image && variant && loadedBlank === blankIdentity);
+  const galleryHint = !galleryChoice.visibility ? "Bitte wähle, ob dein Motiv privat bleibt oder für die Galerie vorgeschlagen wird."
+    : galleryChoice.visibility === "public" && !galleryChoice.rightsConfirmed ? "Bitte bestätige die Rechte für die Galerie."
+    : !galleryChoiceValid(galleryChoice, "cappatex") ? "Bitte vervollständige die Angaben für deine Sammlung." : "";
+  const generationHint = busy === "restore" ? "Dein Studio wird geladen …"
+    : !generationEnabled ? "Die KI-Erstellung ist für dein Konto noch nicht freigegeben."
+    : busy === "generation" ? "Dein Motiv entsteht. Bitte lasse diese Seite geöffnet."
+    : busy ? "Bitte warte, bis der aktuelle Vorgang abgeschlossen ist."
+    : prompt.trim().length < 12 ? "Beschreibe deine Idee mit mindestens 12 Zeichen."
+    : galleryHint || (!confirmed ? "Bitte bestätige vor der Erstellung die angezeigten Kosten." : "Alles bereit – du kannst dein Motiv erstellen.");
+  const uploadHint = busy === "restore" ? "Dein Studio wird geladen …"
+    : !uploadEnabled ? "Der Bild-Upload ist für dein Konto noch nicht freigegeben."
+    : busy === "upload" ? "Dein Bild wird geprüft und gespeichert …"
+    : busy ? "Bitte warte, bis der aktuelle Vorgang abgeschlossen ist."
+    : !uploadFile ? "Wähle zuerst eine PNG- oder JPG-Datei."
+    : !imageRights ? "Bitte bestätige, dass du dein Bild verwenden und bedrucken lassen darfst."
+    : galleryHint || "Alles bereit – du kannst dein Bild übernehmen.";
+
+  function showProductPreview() {
+    window.requestAnimationFrame(() => {
+      const panel = previewPanel.current;
+      if (!panel) return;
+      panel.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+      panel.focus({ preventScroll: true });
+    });
+  }
 
   useEffect(() => {
     let active = true;
@@ -207,7 +234,7 @@ export default function CappatexDesigner() {
   }
   async function generate() {
     if (!confirmed || !generationEnabled || busy || !galleryChoiceValid(galleryChoice,"cappatex")) return;
-    setBusy("generation"); setError("");
+    setBusy("generation"); setError(""); setCreationError(null);
     try {
       const response = await fetch("/api/cappatex", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, style, canvas, confirmGeneration: confirmed,galleryChoice }) });
@@ -216,16 +243,17 @@ export default function CappatexDesigner() {
       setImage(data.image); setDesignId(data.designId); setArtwork({ width: data.width, height: data.height });
       setGalleryChoice(newGalleryDraft());setConfirmed(false);
       setPreviewSize({ width: data.previewWidth ?? Math.ceil(data.width / 4), height: data.previewHeight ?? Math.ceil(data.height / 4) });
-      setUploadedArtwork(false); setLoadedArtwork("");
+      setUploadedArtwork(false); setLoadedArtwork(""); setPhotoUrl("");
       setConfigurations({});
       if (variant) setPlacement(initialPlacement(variant.area, { width: data.width, height: data.height }));
       setTerms(false);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Bilddienst nicht erreichbar."); }
+      showProductPreview();
+    } catch (caught) { setCreationError({ source: "prompt", message: caught instanceof Error ? caught.message : "Bilddienst nicht erreichbar." }); }
     finally { setBusy(""); }
   }
   async function upload() {
     if (!uploadFile || !imageRights || !uploadEnabled || busy || !galleryChoiceValid(galleryChoice,"cappatex")) return;
-    setBusy("upload"); setError("");
+    setBusy("upload"); setError(""); setCreationError(null);
     try {
       const file = await prepareCustomerImage(uploadFile);
       const response = await fetch("/api/cappatex/upload", { method: "POST", headers: { "Content-Type": "image/png", "X-Cappatex-Image-Rights": "confirmed","X-Gallery-Choice":encodeURIComponent(JSON.stringify(galleryChoice)) }, body: file });
@@ -235,10 +263,11 @@ export default function CappatexDesigner() {
       setImage(data.image); setDesignId(data.designId); setArtwork(size);
       setGalleryChoice(newGalleryDraft());
       setPreviewSize({ width: data.previewWidth, height: data.previewHeight });
-      setUploadedArtwork(true); setLoadedArtwork(""); setTerms(false);
+      setUploadedArtwork(true); setLoadedArtwork(""); setPhotoUrl(""); setTerms(false);
       setConfigurations({});
       if (variant) setPlacement(initialPlacement(variant.area, size));
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Das Bild konnte nicht verarbeitet werden."); }
+      showProductPreview();
+    } catch (caught) { setCreationError({ source: "upload", message: caught instanceof Error ? caught.message : "Das Bild konnte nicht verarbeitet werden." }); }
     finally { setBusy(""); }
   }
   async function checkout() {
@@ -258,6 +287,11 @@ export default function CappatexDesigner() {
   return <section className="cappatex-flow" id="studio">
     <div className="cappatex-flow-intro"><p className="eyebrow">Selbst gestalten</p><h2>Erst dein Motiv.<br />Dann dein Einzelstück.</h2>
       <p>Gestalte ein Motiv, wähle deinen Blanko-Artikel und prüfe den Druck vor der Bestellung.</p></div>
+    <ol className="cappatex-flow-steps" aria-label="Deine Gestaltung in drei Schritten">
+      <li><a href="#cappatex-motif"><span>1</span><b>Motiv erstellen</b><small>KI oder eigenes Bild</small></a></li>
+      <li><a href="#cappatex-product"><span>2</span><b>Produkt gestalten</b><small>Farbe, Grösse & Druckseite</small></a></li>
+      <li><a href="#cappatex-save"><span>3</span><b>Prüfen & speichern</b><small>Deinen Stand sichern</small></a></li>
+    </ol>
     <section className="cappatex-comparison" aria-labelledby="cappatex-compare-heading">
       <div className="cappatex-comparison-heading"><h3 id="cappatex-compare-heading">Produkte vergleichen</h3>
         <p>{image ? "Dein Motiv auf jedem verfügbaren Blanko. Jede Auswahl behält ihre eigene Platzierung."
@@ -275,8 +309,8 @@ export default function CappatexDesigner() {
     </section>
     <div className={`cappatex-workspace${image ? " has-artwork" : ""}`}>
       <div className="cappatex-controls">
-        <section className="cappatex-step">
-          <div className="cappatex-step-heading"><span>1</span><div><h3>Dein Motiv</h3><p>Was möchtest du tragen?</p></div></div>
+        <section className="cappatex-step" id="cappatex-motif" aria-labelledby="cappatex-motif-heading">
+          <div className="cappatex-step-heading"><span>1</span><div><h3 id="cappatex-motif-heading">Dein Motiv</h3><p>Was möchtest du tragen?</p></div></div>
           <fieldset className="cappatex-styles cappatex-source"><legend>Wie möchtest du starten?</legend>
             <button type="button" aria-pressed={source === "prompt"} className={source === "prompt" ? "active" : ""} disabled={Boolean(busy)} onClick={() => setSource("prompt")}>Mit KI gestalten</button>
             <button type="button" aria-pressed={source === "upload"} className={source === "upload" ? "active" : ""} disabled={Boolean(busy)} onClick={() => setSource("upload")}>Eigenes Bild verwenden</button>
@@ -293,24 +327,28 @@ export default function CappatexDesigner() {
           <GalleryConsent studio="cappatex" value={galleryChoice} onChange={setGalleryChoice} disabled={Boolean(busy)}/>
           <label className="legal-consent cappatex-consent"><input type="checkbox" checked={confirmed} disabled={!generationEnabled} onChange={e => setConfirmed(e.target.checked)} />
             <span>{pilotOwner ? "Ein Testmotiv als Betreiber erstellen. Es entstehen OpenAI-API-Kosten; kein Design-Token wird abgezogen." : "Ein Motiv für 1 Design-Token erstellen."}</span></label>
-          <button className="button primary cappatex-generate" onClick={generate} disabled={!confirmed || !generationEnabled || prompt.trim().length < 12 || Boolean(busy) || !galleryChoiceValid(galleryChoice,"cappatex")}>
+          <p className="cappatex-action-hint" id="cappatex-generation-hint" role="status">{generationHint}</p>
+          {creationError?.source === "prompt" && <p className="cappatex-error cappatex-action-error" role="alert">{creationError.message}</p>}
+          <button className="button primary cappatex-generate" aria-describedby="cappatex-generation-hint" onClick={generate} disabled={!confirmed || !generationEnabled || prompt.trim().length < 12 || Boolean(busy) || !galleryChoiceValid(galleryChoice,"cappatex")}>
             {busy === "generation" ? "Motiv wird erstellt …" : "Motiv erstellen"}</button>
           <p className="cappatex-wait-note">{generationEnabled ? "Die Vorschau ist eine verkleinerte Ansicht deiner Druckdatei. Es gibt keine automatische zweite Generierung."
             : "Die KI-Generierung wartet auf den freigegebenen Test. Du kannst deine Idee bereits formulieren; es entstehen keine API-Kosten."}</p>
           </> : <div className="cappatex-upload">
-            <label className="cappatex-field">Bild auswählen<input type="file" accept="image/png,image/jpeg" disabled={Boolean(busy)} onChange={e => { setUploadFile(e.target.files?.[0] || null); setImageRights(false); setError(""); }} /></label>
+            <label className="cappatex-field">Bild auswählen<input type="file" accept="image/png,image/jpeg" disabled={Boolean(busy)} onChange={e => { setUploadFile(e.target.files?.[0] || null); setImageRights(false); setError(""); setCreationError(null); }} /></label>
             <p>PNG oder JPG, bis 12 MB und 6,29 Megapixel. Dein Bild wird ohne KI-Bearbeitung und ohne Verkleinerung als PNG-Druckdatei gespeichert. Bitte prüfe danach Farben, Ausrichtung und Platzierung in der Vorschau.</p>
             <label className="legal-consent cappatex-consent"><input type="checkbox" checked={imageRights} onChange={e => setImageRights(e.target.checked)} />
               <span>Ich darf dieses Bild verwenden und bedrucken lassen.</span></label>
             <GalleryConsent studio="cappatex" value={galleryChoice} onChange={setGalleryChoice} disabled={Boolean(busy)}/>
-            <button className="button primary cappatex-generate" onClick={upload} disabled={!uploadFile || !imageRights || !uploadEnabled || Boolean(busy) || !galleryChoiceValid(galleryChoice,"cappatex")}>{busy === "upload" ? "Bild wird geprüft …" : "Eigenes Bild übernehmen"}</button>
+            <p className="cappatex-action-hint" id="cappatex-upload-hint" role="status">{uploadHint}</p>
+            {creationError?.source === "upload" && <p className="cappatex-error cappatex-action-error" role="alert">{creationError.message}</p>}
+            <button className="button primary cappatex-generate" aria-describedby="cappatex-upload-hint" onClick={upload} disabled={!uploadFile || !imageRights || !uploadEnabled || Boolean(busy) || !galleryChoiceValid(galleryChoice,"cappatex")}>{busy === "upload" ? "Bild wird geprüft …" : "Eigenes Bild übernehmen"}</button>
             <p className="cappatex-wait-note">{uploadEnabled ? "Keine KI-Kosten und kein Design-Token. Bis zu zehn Upload-Versuche innerhalb von 24 Stunden."
               : "Der Upload ist noch nicht freigegeben. Für den Test ist ein angemeldetes Betreiberkonto erforderlich."}</p>
           </div>}
         </section>
       </div>
-      <section className="cappatex-preview-panel">
-        <div className="cappatex-preview-head"><div><small>Vorschau & Platzierung</small><h3>{product?.name || "Dein Motiv"}</h3></div>
+      <section className="cappatex-preview-panel" id="cappatex-product" ref={previewPanel} tabIndex={-1} aria-labelledby="cappatex-product-heading">
+        <div className="cappatex-preview-head"><div><small>2 · Produkt & Platzierung</small><h3 id="cappatex-product-heading">{product?.name || "Dein Motiv"}</h3></div>
           {variant && <b>{variant.price ? money(Number(variant.price.amount), variant.price.currencyCode) : "Preis noch nicht freigegeben"}</b>}</div>
         {product && variant && <div className="cappatex-variant-fields">
           <label className="cappatex-field">{product.optionLabel || "Farbe"}<select disabled={Boolean(busy)} value={variant.color} onChange={e => {
@@ -372,6 +410,8 @@ export default function CappatexDesigner() {
           </div>
         </>}
         {error && <p className="cappatex-error" role="alert">{error}</p>}
+        <section className="cappatex-save-step" id="cappatex-save" aria-labelledby="cappatex-save-heading">
+        <div className="cappatex-step-heading"><span>3</span><div><h3 id="cappatex-save-heading">Prüfen & speichern</h3><p>Prüfe dein Motiv und die gewünschten Druckseiten.</p></div></div>
         {pilotOwner && product && variant && <CappatexPreparationPanel key={`${product.id}:${product.profileVersion}:${variant.shopifyVariantId}`}
           product={product} variant={variant} side={side} designId={designId} artwork={artwork} placement={placement}
           ready={previewReady && Boolean(geometry?.ok) && !busy} quantity={quantity} country={country}
@@ -385,6 +425,7 @@ export default function CappatexDesigner() {
           <p>{product?.blockedReason || (checkoutEnabled ? "Motiv, Variante, Grösse und Position werden unveränderlich gespeichert. Im Shopify-Checkout siehst du Versand und Gesamtpreis."
             : "Bestellungen bleiben bis zum abgeschlossenen Produkt-, Versand- und Checkout-Test gesperrt.")}</p>
         </div>
+        </section>
       </section>
     </div>
   </section>;

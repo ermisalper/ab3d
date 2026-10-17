@@ -344,43 +344,6 @@ footer{grid-template-columns:1.6fr repeat(3,1fr)}
   --ease-out:cubic-bezier(.22,.8,.24,1);
 }
 
-.brand-intro{
-  position:fixed;
-  inset:0;
-  z-index:9999;
-  display:grid;
-  place-items:center;
-  overflow:hidden;
-  pointer-events:none;
-  color:#f7f3ec;
-  background:#17211b;
-  animation:printCurtain 2.05s var(--ease-out) forwards;
-}
-.brand-intro-cappatex{background:#f0e5d7;color:#17211b}
-.brand-print-stage{display:grid;place-items:center;width:min(430px,86vw);text-align:center}
-.brand-print-machine{position:relative;width:100%;height:160px}
-.printer-frame{position:absolute;z-index:3;top:0;left:4%;right:4%;height:78px;border-left:3px solid #7f8c83;border-right:3px solid #7f8c83}
-.printer-rail{position:absolute;left:-6px;right:-6px;top:12px;height:7px;border-radius:2px;background:#aab3ad;box-shadow:0 4px 0 #46544b,0 8px 14px rgba(0,0,0,.2)}
-.printer-cable{position:absolute;left:12px;right:12px;top:3px;height:7px;border-top:2px dotted rgba(215,124,93,.62)}
-.printer-head{position:absolute;top:0;left:0;width:48px;height:48px;border:2px solid #d7ded9;border-radius:5px;background:#26342c;box-shadow:0 8px 15px rgba(0,0,0,.25);animation:printerHeadPass 1.08s .1s linear both}
-.printer-head:before{content:"";position:absolute;left:9px;right:9px;top:8px;height:10px;border-radius:2px;background:#17211b;box-shadow:inset 0 0 0 1px #546359}
-.printer-head i{position:absolute;left:50%;bottom:-17px;width:12px;height:17px;translate:-50% 0;background:linear-gradient(90deg,#8c9690,#e1e5e2 48%,#6d7971);clip-path:polygon(25% 0,75% 0,100% 75%,58% 75%,50% 100%,42% 75%,0 75%)}
-.printer-head b{position:absolute;left:50%;bottom:-23px;width:6px;height:6px;border-radius:50%;translate:-50% 0;background:#d77c5d;box-shadow:0 0 12px #d77c5d}
-.printed-brand{position:absolute;z-index:2;left:0;right:0;bottom:22px;display:flex;justify-content:center;align-items:baseline;overflow:hidden;clip-path:inset(0 100% 0 0);font:700 clamp(54px,9vw,84px)/.92 Arial,sans-serif;letter-spacing:-.075em;animation:printedBrandReveal .98s .18s steps(8,end) forwards}
-.printed-brand span{font-weight:300}.printed-brand b{color:#d77c5d}.brand-intro-ab3d .printed-brand{text-shadow:1px 1px #a34f38,2px 2px #8f4431,3px 3px #733829,4px 4px 0 rgba(0,0,0,.2)}
-.printer-bed{position:absolute;left:1%;right:1%;bottom:8px;height:5px;border-radius:2px;background:#89958e;box-shadow:0 7px 18px rgba(0,0,0,.28)}
-.printer-bed:after{content:"";display:block;width:0;height:100%;background:#d77c5d;animation:printerDeposit 1.05s .14s linear forwards}
-.brand-print-stage>p{display:flex;align-items:center;gap:9px;margin:16px 0 0;color:#bfc9c1;font-size:10px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;opacity:0;animation:printStatus .3s 1.08s ease-out forwards}
-.brand-print-stage>p i{width:6px;height:6px;border-radius:50%;background:#c8ef63;box-shadow:0 0 10px rgba(200,239,99,.65)}
-.brand-intro-cappatex .printer-frame{border-color:#9d715e}.brand-intro-cappatex .printer-rail{background:#c6a48f;box-shadow:0 4px 0 #875c4c,0 8px 14px rgba(64,39,27,.15)}
-.brand-intro-cappatex .printer-head{width:82px;border-color:#553d33;background:#bc6245;animation-name:textileHeadPass}.brand-intro-cappatex .printer-head:before{left:11px;right:11px;background:#e3b59e;box-shadow:none}.brand-intro-cappatex .printer-head i{bottom:-11px;width:56px;height:11px;background:#6b493b;clip-path:polygon(5% 0,95% 0,100% 100%,0 100%)}.brand-intro-cappatex .printer-head b{bottom:-17px;width:48px;height:6px;border-radius:0;background:#bc6245;box-shadow:0 3px 12px rgba(188,98,69,.5)}
-.brand-intro-cappatex .printed-brand{font-family:Georgia,"Times New Roman",serif;font-size:clamp(43px,8vw,72px);font-weight:400;letter-spacing:.07em}.brand-intro-cappatex .printed-brand b{color:#9f4d37;font-weight:400}.brand-intro-cappatex .printer-bed{background:#c9ad9d}.brand-intro-cappatex .brand-print-stage>p{color:#765f54}.brand-intro-cappatex .brand-print-stage>p i{background:#bc6245;box-shadow:0 0 10px rgba(188,98,69,.45)}
-@keyframes printerHeadPass{0%{left:0}18%{left:calc(100% - 48px)}36%{left:5%}55%{left:calc(95% - 48px)}74%{left:10%}100%{left:calc(100% - 48px)}}
-@keyframes textileHeadPass{0%{left:0}48%{left:calc(100% - 82px)}58%{left:calc(100% - 82px)}100%{left:0}}
-@keyframes printedBrandReveal{to{clip-path:inset(0 0 0 0)}}
-@keyframes printerDeposit{to{width:100%}}
-@keyframes printStatus{to{opacity:1;transform:none}}
-@keyframes printCurtain{0%,74%{opacity:1;clip-path:inset(0 0 0 0)}100%{opacity:1;visibility:hidden;clip-path:inset(0 0 100% 0)}}
 
 .announcement{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:30px;padding:7px 4vw;font-size:10px}
 .announcement b{font-weight:600}.announcement span{color:#c7d0c9}

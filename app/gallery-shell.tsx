@@ -17,6 +17,6 @@ export default async function GalleryShell({studio,scope="public",detailId}:{stu
     // Keep existing shared links working while moving motifs into CAPPATEX.
     if(!studio&&currentStudio==="cappatex")redirect(galleryWorkPath(currentStudio,detailId));
   }
-  return <main id="main-content" className="gallery-page"><SiteHeader area={currentStudio==="cappatex"?"cappatex":"objects"} userName={user?.fullName||user?.displayName||null}/>
+  return <main id="main-content" className={`gallery-page gallery-page-${currentStudio}`}><SiteHeader area={currentStudio==="cappatex"?"cappatex":"objects"} userName={user?.fullName||user?.displayName||null}/>
     <div className="gallery-content"><CreationGallery key={`${currentStudio}-${scope}-${detailId||"list"}`} studio={currentStudio} scope={scope} detailId={detailId}/></div></main>;
 }

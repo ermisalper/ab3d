@@ -223,7 +223,7 @@ test("CAPPATEX hero behaves like an accessible interactive print press", async (
 test("route-aware brand intro prints AB3D and CAPPATEX with reduced-motion support", async () => {
   const [intro, css] = await Promise.all([
     read("app/brand-intro.tsx"),
-    read("app/globals.css"),
+    read("app/ui-refresh.css"),
   ]);
 
   assert.match(intro, /usePathname/);
@@ -233,7 +233,10 @@ test("route-aware brand intro prints AB3D and CAPPATEX with reduced-motion suppo
   assert.match(css, /@keyframes printerHeadPass/);
   assert.match(css, /@keyframes textileHeadPass/);
   assert.match(css, /@keyframes printedBrandReveal/);
-  assert.match(css, /@media\(prefers-reduced-motion:reduce\)[\s\S]*?\.brand-intro\{display:none\}/);
+  assert.match(intro, /INTRO_DURATION_MS = 5000/);
+  assert.match(intro, /Startanimation überspringen/);
+  assert.match(intro, /sessionStorage/);
+  assert.match(css, /@media \(prefers-reduced-motion:reduce\)[\s\S]*?display: none !important/);
 });
 
 test("CAPPATEX keeps generation guarded and never generates or submits production after payment", async () => {

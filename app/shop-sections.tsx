@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { creatorPlans, tokenRules } from "./creator-plans";
+import { ReplayBrandIntro } from "./brand-intro";
 
 export function ShopHero({ productCount }: { productCount: number }) {
   return (
@@ -8,8 +9,9 @@ export function ShopHero({ productCount }: { productCount: number }) {
         <p className="eyebrow hero-kicker">Designed in Zürich · Für dich gefertigt</p>
         <h1>Objekte, die kein zweites Mal <em>genauso entstehen.</em></h1>
         <p className="hero-lead">Skulpturale Wohnobjekte und persönliche 3D-Kreationen – lokal, auf Bestellung und in deiner Wunschfarbe gefertigt.</p>
-        <div className="hero-actions"><a className="button primary" href="#kollektion">Kollektion entdecken</a><a className="button ghost" href="#studio">Eigenes Design erschaffen</a></div>
-        <div className="trust-row"><span><b>360°</b> Produktvorschau</span><span><b>100%</b> erst nach Bestellung</span><span><b>{productCount}</b> Shopify-Produkte</span></div>
+        <div className="hero-actions"><a className="button primary" href="#kollektion">Kollektion entdecken</a><a className="button ghost" href="#studio">3D-Modell gestalten</a></div>
+        <div className="trust-row"><span><b>360°</b> Produktvorschau</span><span><b>100%</b> erst nach Bestellung</span><span><b>{productCount}</b> Objekte in der Kollektion</span></div>
+        <div className="studio-quick-links"><Link href="/modelle">Modellgalerie entdecken ↗</Link><Link href="/sammlung">Meine 3D-Modelle ↗</Link></div>
       </div>
       <div className="hero-art hero-product-stage" aria-label="Interaktive dreidimensionale AB3D Produktvorschau">
         <div className="sun-disc" aria-hidden="true" />
@@ -67,15 +69,15 @@ export function FaqSection() {
 }
 
 const footerGroups = [
-  { title: "3D Design", links: [["Kollektion", "/#kollektion"], ["3D AI Studio", "/#studio"], ["Creator Plans", "/#preise"]] },
-  { title: "CAPPATEX", links: [["Print Studio", "/cappatex"], ["So funktioniert es", "/cappatex#ablauf"]] },
+  { title: "3D Objekte", links: [["Kollektion", "/#kollektion"], ["3D gestalten", "/#studio"], ["Modellgalerie", "/modelle"], ["Meine 3D-Modelle", "/sammlung"], ["Creator Plans", "/#preise"]] },
+  { title: "CAPPATEX", links: [["Motiv gestalten", "/cappatex#studio"], ["Designgalerie", "/cappatex/designs"], ["Meine Motive", "/cappatex/sammlung"]] },
   { title: "Service & Recht", links: [["Kontakt", "mailto:hello@ab3d.ch"], ["Rechtscenter", "/recht"], ["Impressum", "/recht/impressum"], ["Datenschutz", "/recht/datenschutz"], ["AGB", "/recht/agb"], ["Versand & Rückgabe", "/recht/versand-rueckgabe"]] },
 ] as const;
 
 export function ShopFooter() {
   return (
     <footer>
-      <div className="footer-brand"><a className="brand" href="#top"><span>AB</span><b>3D</b></a><p>Schweizer 3D-Design für Räume mit Persönlichkeit.</p></div>
+      <div className="footer-brand"><a className="brand" href="#top"><span>AB</span><b>3D</b></a><p>Schweizer 3D-Design für Räume mit Persönlichkeit.</p><ReplayBrandIntro studio="ab3d"/></div>
       {footerGroups.map((group) => <div key={group.title}><b>{group.title}</b>{group.links.map(([label, href]) => href.startsWith("mailto:") ? <a href={href} key={href}>{label}</a> : <Link href={href} key={href}>{label}</Link>)}</div>)}
       <small>© 2026 AB3D · Designed & made in Switzerland</small>
     </footer>

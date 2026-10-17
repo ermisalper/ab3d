@@ -5,6 +5,7 @@
 import type { CSSProperties } from "react";
 import { productPrice, type Product, type ProductSize } from "./products";
 import { formatChf, type ProductSelection } from "./shop-types";
+import useDialogFocus from "./use-dialog-focus";
 
 export function ProductPhoto({ product, color }: { product: Product; color?: string }) {
   const selectedColor = product.colors.find((entry) => entry.name === color) || product.colors[0];
@@ -45,6 +46,7 @@ export function ProductCollection({ categories, filter, products, selectionFor, 
         {!products.length && <div className="catalog-empty" role="status"><strong>Kollektion wird synchronisiert</strong><p>Shopify liefert momentan keine veröffentlichten Produkte für diese Kollektion.</p></div>}
         {products.map((product, index) => {
           const choice = selectionFor(product);
+          const needsSizeChoice = product.sizes.length > 1;
           return (
             <article className="product-card" key={product.id} data-reveal style={{ "--delay": `${(index % 4) * 70}ms` } as CSSProperties}>
               <button type="button" className={`product-visual tone-${index % 4}`} onClick={() => onQuickView(product)} aria-label={`${product.name} ansehen`}>
@@ -62,7 +64,9 @@ export function ProductCollection({ categories, filter, products, selectionFor, 
                   <button type="button" key={color.name} className={choice.color === color.name ? "active" : ""} style={{ background: color.value }} onClick={() => onSelect(product, { color: color.name })} aria-label={`${color.name} wählen`} aria-pressed={choice.color === color.name} />
                 ))}
               </div>
-              <button type="button" className="add-button" onClick={() => onAdd(product)}>In den Warenkorb <span aria-hidden="true">+</span></button>
+              <button type="button" className="add-button" aria-haspopup={needsSizeChoice ? "dialog" : undefined} onClick={() => needsSizeChoice ? onQuickView(product) : onAdd(product)}>
+                {needsSizeChoice ? "Grösse & Farbe wählen" : "In den Warenkorb"}<span aria-hidden="true">{needsSizeChoice ? "→" : "+"}</span>
+              </button>
             </article>
           );
         })}
@@ -80,8 +84,9 @@ type QuickProductModalProps = {
 };
 
 export function QuickProductModal({ product, selection, onClose, onSelect, onAdd }: QuickProductModalProps) {
+  const dialogRef = useDialogFocus<HTMLDivElement>(true);
   return (
-    <div className="quick-modal" role="dialog" aria-modal="true" aria-labelledby="quick-product-title">
+    <div ref={dialogRef} tabIndex={-1} className="quick-modal" role="dialog" aria-modal="true" aria-labelledby="quick-product-title">
       <button type="button" className="quick-close" onClick={onClose} aria-label="Schnellansicht schliessen">×</button>
       <div className="quick-art">
         <ProductPhoto product={product} color={selection.color} />

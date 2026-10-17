@@ -44,7 +44,17 @@ export default function CappatexPreparationPanel({ product, variant, side, desig
   const [receipt, setReceipt] = useState<PreparationSummary | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [savedSignature, setSavedSignature] = useState<string | null>(null);
   const retry = useRef<{ body: PreparationInput; signature: string } | null>(null);
+  const availableSides: PrintSide[] = variant.back ? ["front", "back"] : ["front"];
+  const activeSelection = selections.find(selection => selection.position === side);
+  const activeSelectionChanged = Boolean(activeSelection && (activeSelection.designId !== designId
+    || activeSelection.placement.x !== placement.x || activeSelection.placement.y !== placement.y
+    || activeSelection.placement.scale !== placement.scale));
+  const currentSignature = JSON.stringify({ profileId: product.id, profileVersion: product.profileVersion,
+    shopifyVariantId: variant.shopifyVariantId, quantity, country,
+    sides: selections.map(selection => ({ position: selection.position, designId: selection.designId, placement: selection.placement })) });
+  const hasUnsavedSelections = selections.length > 0 && currentSignature !== savedSignature;
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("preparationId");
     if (!id || !/^CPP-[a-f0-9]{32}$/.test(id)) return;
@@ -76,6 +86,7 @@ export default function CappatexPreparationPanel({ product, variant, side, desig
       // failed reservation permits a new attempt. A completed save must never be duplicated.
       if (!response.ok) { if (result.code === "failed") retry.current = null; throw new Error(result.error || "Speichern fehlgeschlagen."); }
       setReceipt(result);
+      setSavedSignature(signature);
       const url = new URL(window.location.href); url.searchParams.set("preparationId", result.id); url.hash = "order-preparation";
       window.history.replaceState(window.history.state, "", url);
       setMessage("Alle ausgewählten Druckseiten sind unveränderlich gespeichert. Es wurde keine Bestellung ausgelöst.");
@@ -84,13 +95,27 @@ export default function CappatexPreparationPanel({ product, variant, side, desig
   }
   return <section className="cappatex-preparation" id="order-preparation" aria-labelledby="preparation-heading">
     <h3 id="preparation-heading">Druckseiten zusammenstellen</h3>
-    <p>Übernimm jede gewünschte Seite einzeln. Du kannst vorne und hinten unterschiedliche Motive verwenden. Beim Wechsel von Produkt oder Variante beginnt eine neue Zusammenstellung.</p>
-    <button type="button" className="button secondary" disabled={!ready || saving} onClick={capture}>{sideName(side)} übernehmen</button>
+    <p>Übernimm zuerst jede gewünschte Druckseite aus der Vorschau. Speichere danach die gesamte Zusammenstellung. Du kannst vorne und hinten unterschiedliche Motive verwenden.</p>
+    <p className="cappatex-preparation-note">Beim Wechsel von Produkt, Farbe oder Grösse beginnt eine neue Zusammenstellung. Ein bereits gespeicherter Stand bleibt erhalten.</p>
+    <ul className="cappatex-side-status" aria-label="Übernommene Druckseiten">{availableSides.map(position => {
+      const selected = selections.some(selection => selection.position === position);
+      return <li key={position} data-state={selected ? position === side && activeSelectionChanged ? "changed" : "captured" : "empty"}>
+        <b>{sideName(position)}</b><span>{selected ? position === side && activeSelectionChanged ? "Übernommen · neue Änderungen noch offen" : "Übernommen" : "Noch nicht übernommen"}</span>
+      </li>;
+    })}</ul>
+    {activeSelectionChanged && <p className="cappatex-preparation-warning" role="status">Die aktuelle {sideName(side)} wurde seit dem Übernehmen geändert. Übernimm sie erneut, damit das neue Motiv oder die neue Platzierung mitgespeichert wird.</p>}
+    {!ready && !saving && <p className="cappatex-action-hint">{!designId ? "Erstelle oder lade zuerst dein Motiv und prüfe es auf dem Produkt." : "Prüfe die Produktvorschau, Druckfläche und Auflösung, bevor du diese Seite übernimmst."}</p>}
+    <button type="button" className="button secondary" disabled={!ready || saving} onClick={capture}>Aktuelle {sideName(side)} {activeSelection ? "erneut übernehmen" : "übernehmen"}</button>
     <div className="cappatex-preparation-sides">{selections.map(s => <article key={s.position}>
       <h4>{sideName(s.position)}</h4><SidePreview selection={s} /><p>{s.designId} · {Math.round(s.placement.scale * 100)} % Breite</p>
       <button type="button" disabled={saving} onClick={() => setSelections(current => current.filter(item => item.position !== s.position))}>{sideName(s.position)} entfernen</button>
     </article>)}</div>
     {!!selections.length && <p>{product.name} · {variant.color} / {variant.size} · {quantity} Stück · {country} · {selections.length} Druckseite{selections.length === 1 ? "" : "n"}</p>}
+    <p className="cappatex-preparation-save-state" data-state={hasUnsavedSelections ? "unsaved" : selections.length ? "saved" : "empty"} role="status">
+      {saving ? "Die übernommenen Druckseiten werden gespeichert …" : hasUnsavedSelections ? "Diese Zusammenstellung ist noch nicht gespeichert."
+        : selections.length ? "Diese Zusammenstellung ist gespeichert. Weitere Änderungen erzeugen beim Speichern einen neuen Stand."
+        : receipt ? "Deinen gespeicherten Stand siehst du unten. Für eine neue Zusammenstellung übernimm zuerst eine Druckseite." : "Übernimm mindestens eine Druckseite, um deine Zusammenstellung zu speichern."}
+    </p>
     <button type="button" className="button primary" disabled={!selections.length || saving} onClick={save}>{saving ? "Dateien werden vorbereitet …" : "Druckseiten & Dateien speichern"}</button>
     {message && <p role="status">{message}</p>}
     {receipt && <PreparedReceipt receipt={receipt} />}

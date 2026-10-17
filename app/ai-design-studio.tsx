@@ -333,7 +333,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
     setCustomerWish("");
     resetPlanner();
     resetResult();
-    workspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    workspaceRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
   };
 
   const switchMode = (next: InputMode) => {
@@ -745,7 +745,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
 
       <div className="creation-browser">
         <div className="creation-browser-head"><div><p className="eyebrow">Schritt 1 · Frei starten oder Vorlage wählen</p><h3>Was möchtest du gestalten?</h3><p>Schreibe jede beliebige Idee – die Produkte darunter sind nur praktische Abkürzungen.</p></div><span>{shownTemplates.length} Vorlagen</span></div>
-        <button type="button" className={`free-idea-start ${selectedTemplate.id === freeTemplate.id ? "selected" : ""}`} onClick={() => chooseTemplate(freeTemplate)}>
+        <button type="button" aria-pressed={selectedTemplate.id === freeTemplate.id} className={`free-idea-start ${selectedTemplate.id === freeTemplate.id ? "selected" : ""}`} onClick={() => chooseTemplate(freeTemplate)}>
           <span className="free-idea-symbol">✦</span>
           <span><small>Freier Start</small><strong>Eigene Idee beschreiben</strong><em>Vom Kopfhörerständer bis zur Mondlampe: Der Planer erkennt Zweck und Aufbau und fragt nur nach fehlenden Angaben.</em></span>
           <b>{selectedTemplate.id === freeTemplate.id ? "Ausgewählt ✓" : "Idee eingeben →"}</b>
@@ -753,12 +753,12 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
         <div className="creation-paths" aria-label="Optionale Vorlagen"><span><b>Foto-Vorlagen</b> Figuren, Motive und persönliche Produkte</span><span><b>Produkt-Vorlagen</b> Schneller Start mit vorbereiteten Druckregeln</span></div>
         <div className="creation-filters">
           {["Alle", "Figuren", "Personalisieren", "Wohnen & Licht", "Spiel & Hobby"].map((item) => (
-            <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>
+            <button key={item} aria-pressed={category === item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>
           ))}
         </div>
         <div className="creation-grid">
           {shownTemplates.map((template) => (
-            <button className={`creation-card ${selectedTemplate.id === template.id ? "selected" : ""}`} key={template.id} onClick={() => chooseTemplate(template)}>
+            <button aria-pressed={selectedTemplate.id === template.id} className={`creation-card ${selectedTemplate.id === template.id ? "selected" : ""}`} key={template.id} onClick={() => chooseTemplate(template)}>
               <span className="creation-art">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={template.image} alt="" loading="lazy" />
@@ -779,12 +779,12 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
               <img src={selectedTemplate.image} alt="" />
             </span>
             <div><small>Dein Produkt</small><b>{selectedTemplate.name}</b><span>{selectedTemplate.mode === "image" ? "Start mit Foto" : "Start mit Idee"}</span></div>
-            <button type="button" onClick={() => document.querySelector(".creation-browser")?.scrollIntoView({ behavior: "smooth" })}>Ändern</button>
+            <button type="button" onClick={() => document.querySelector(".creation-browser")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}>Ändern</button>
           </div>
           <div className="product-guidance"><span>1</span><div><b>{selectedTemplate.inputHint}</b><small>{selectedTemplate.printRule}</small></div></div>
-          <div className="ai-mode-tabs" role="tablist" aria-label="Eingabeart">
-            <button role="tab" aria-selected={mode === "text"} className={mode === "text" ? "active" : ""} onClick={() => switchMode("text")}><span>Aa</span> Idee eingeben</button>
-            <button role="tab" aria-selected={mode === "image"} className={mode === "image" ? "active" : ""} onClick={() => switchMode("image")}><span>▧</span> Foto verwenden</button>
+          <div className="ai-mode-tabs" role="group" aria-label="Eingabeart">
+            <button type="button" aria-pressed={mode === "text"} className={mode === "text" ? "active" : ""} onClick={() => switchMode("text")}><span>Aa</span> Idee eingeben</button>
+            <button type="button" aria-pressed={mode === "image"} className={mode === "image" ? "active" : ""} onClick={() => switchMode("image")}><span>▧</span> Foto verwenden</button>
           </div>
 
           {mode === "text" ? (
@@ -905,8 +905,8 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           {(mode === "image" || plannerApproved) && <div className="generation-mode-picker">
             <div><span>Wie möchtest du starten?</span></div>
             <div>
-              <button type="button" className={generationMode === "fast" ? "active" : ""} onClick={() => setGenerationMode("fast")} disabled={busy || creativeImage}><b>Schnelle Vorschau</b><small>{creativeImage ? "Im Kreativmodus nicht verfügbar" : mode === "image" && imageDatas.length > 1 ? "Meshy 7.1 · alle Ansichten, ohne Texturen" : "Meshy T2.5 · leichtes Netz, ohne Texturen"}</small></button>
-              <button type="button" className={generationMode === "quality" ? "active" : ""} onClick={() => setGenerationMode("quality")} disabled={busy}><b>Finales Modell</b><small>{creativeImage && isCreativeTemplate(selectedTemplate.id) ? "Spezialmodell mit Material und Farbe" : "Meshy 7.1 · Texturen und feine Details"}</small></button>
+              <button type="button" aria-pressed={generationMode === "fast"} className={generationMode === "fast" ? "active" : ""} onClick={() => setGenerationMode("fast")} disabled={busy || creativeImage}><b>Schnelle Vorschau</b><small>{creativeImage ? "Im Kreativmodus nicht verfügbar" : mode === "image" && imageDatas.length > 1 ? "Meshy 7.1 · alle Ansichten, ohne Texturen" : "Meshy T2.5 · leichtes Netz, ohne Texturen"}</small></button>
+              <button type="button" aria-pressed={generationMode === "quality"} className={generationMode === "quality" ? "active" : ""} onClick={() => setGenerationMode("quality")} disabled={busy}><b>Finales Modell</b><small>{creativeImage && isCreativeTemplate(selectedTemplate.id) ? "Spezialmodell mit Material und Farbe" : "Meshy 7.1 · Texturen und feine Details"}</small></button>
             </div>
           </div>}
 
@@ -955,7 +955,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             <><div className="result-actions">
               <div>{modelUrls.glb && <a href={modelUrls.glb} download>{scaledHeight === heightCm ? `GLB · ${heightCm} cm` : "GLB herunterladen"}</a>}{printFilesReady && canDownload3d && modelUrls.stl && <a href={modelUrls.stl} download>STL · {heightCm} cm</a>}{printFilesReady && canDownload3d && modelUrls["3mf"] && <a href={modelUrls["3mf"]} download>3MF · {heightCm} cm</a>}{printFilesReady && !canDownload3d && <Link href="/konto#plaene">STL selbst laden · Abo wählen</Link>}</div>
               <button className="button light" type="button" onClick={createProductionOrder} disabled={!printFilesReady || orderBusy || Boolean(productionOrderId)}>{orderBusy ? "Auftrag wird gespeichert …" : productionOrderId ? `Gespeichert · ${productionOrderId}` : printFilesReady ? `Für ${money.format(estimate)} fertigen lassen` : "Zuerst Druckpaket vorbereiten"}</button>
-            </div>{generationMode === "fast" && <div className="quality-upgrade"><div><b>Gefällt dir die Grundform?</b><span>Erstelle jetzt Material, Farben und die druckbaren STL-/3MF-Dateien.</span></div><button type="button" onClick={() => { setGenerationMode("quality"); workspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Beste Qualität vorbereiten</button></div>}</>
+            </div>{generationMode === "fast" && <div className="quality-upgrade"><div><b>Gefällt dir die Grundform?</b><span>Erstelle jetzt Material, Farben und die druckbaren STL-/3MF-Dateien.</span></div><button type="button" onClick={() => { setGenerationMode("quality"); workspaceRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" }); }}>Beste Qualität vorbereiten</button></div>}</>
           )}
           {state === "complete" && <div className="file-access-note"><b>Physisch bestellen oder Datei besitzen?</b><span>Bei einer Fertigung geht die geprüfte STL automatisch intern an AB3D. Nur für einen eigenen STL-/3MF-Download brauchst du das 3D-Studio- oder Complete-Abo.</span>{orderMessage && <small role="status">✓ {orderMessage}</small>}</div>}
           {modelTaskId&&<Link className="gallery-collection-link" href="/sammlung">Deine gespeicherten 3D-Modelle ansehen →</Link>}

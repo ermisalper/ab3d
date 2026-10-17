@@ -5,6 +5,7 @@ import SiteHeader from "../site-header";
 import CappatexDesigner from "./cappatex-designer";
 import type { ShopifyCatalogProduct } from "../shopify-catalog";
 import FinishedCollection from "./finished-collection";
+import { ReplayBrandIntro } from "../brand-intro";
 
 const heroPrints = [
   { id: "alpine", label: "Alpine Bloom", mark: "✦", lineOne: "ALPINE", lineTwo: "BLOOM" },
@@ -37,6 +38,7 @@ export default function CappatexStudio({ userName, finishedProducts, storeDomain
           <h1>Deine Idee.<br /><em>Dein Statement.</em></h1>
           <p>Beschreibe dein Wunschmotiv, sieh es direkt auf deinem Produkt und passe Grösse sowie Position selbst an.</p>
           <a className="button primary" href="#studio">Jetzt gestalten</a>
+          <div className="studio-quick-links"><Link href="/cappatex/designs">Designgalerie entdecken ↗</Link><Link href="/cappatex/sammlung">Meine Motive ↗</Link></div>
         </div>
         <div className="cappatex-hero-art">
           <button
@@ -99,8 +101,8 @@ export default function CappatexStudio({ userName, finishedProducts, storeDomain
       </section>
 
       <footer className="cappatex-footer">
-        <div className="footer-brand"><Link className="brand" href="/#top"><span>AB</span><b>3D</b></Link><p>CAPPATEX verbindet deine Idee mit hochwertigem Print on Demand.</p></div>
-        <div><b>Studios</b><Link href="/#studio">3D AI Studio</Link><a href="#studio">CAPPATEX Studio</a><Link href="/cappatex#kollektion">Kollektion</Link></div>
+        <div className="footer-brand"><Link className="brand" href="/#top"><span>AB</span><b>3D</b></Link><p>CAPPATEX verbindet deine Idee mit hochwertigem Print on Demand.</p><ReplayBrandIntro studio="cappatex"/></div>
+        <div><b>CAPPATEX</b><a href="#studio">Motiv gestalten</a><Link href="/cappatex/designs">Designgalerie</Link><Link href="/cappatex/sammlung">Meine Motive</Link><Link href="/cappatex#kollektion">Fertige Artikel</Link><Link href="/#studio">3D-Modell gestalten</Link></div>
         <div><b>Service & Recht</b><a href="mailto:hello@ab3d.ch">Kontakt</a><Link href="/recht">Rechtscenter</Link><Link href="/recht/datenschutz">Datenschutz</Link><Link href="/recht/agb">AGB</Link><Link href="/recht/versand-rueckgabe">Versand & Rückgabe</Link></div>
         <small>© 2026 AB3D · CAPPATEX · Designed in Switzerland</small>
       </footer>

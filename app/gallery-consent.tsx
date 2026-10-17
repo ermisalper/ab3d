@@ -16,7 +16,7 @@ export default function GalleryConsent({studio,value,onChange,disabled=false}:{s
     {value.visibility==="public"&&<div className="gallery-consent-disclosure">
       <p>{studio==="ab3d"?"Die Galerie zeigt dein Modell samt Vorschau. Die angezeigte GLB-Datei ist dabei öffentlich abrufbar.":"Die Galerie zeigt eine verkleinerte Motivvorschau. Deine Original-Druckdatei bleibt geschützt."} Titel und Kategorie werden sichtbar; dein Name, deine E-Mail, Prompts und hochgeladene Referenzbilder werden nicht gezeigt.</p>
       <label><input type="checkbox" checked={value.rightsConfirmed} onChange={e=>patch({rightsConfirmed:e.target.checked})}/><span>Ich darf dieses Ergebnis öffentlich zeigen und möchte es zur Galerieprüfung einreichen.</span></label>
-      <p>Du kannst die Veröffentlichung in „Meine Sammlung“ zurückziehen. Bereits gespeicherte Kopien anderer Besucher können wir nicht zurückrufen.</p>
+      <p>Du kannst die Veröffentlichung unter „{studio==="cappatex"?"Meine Motive":"Meine 3D-Modelle"}“ zurückziehen. Bereits gespeicherte Kopien anderer Besucher können wir nicht zurückrufen.</p>
     </div>}
     {!value.visibility&&<p className="gallery-choice-note">Bitte triff deine Auswahl vor der Erstellung. Privat und öffentlich haben denselben Erstellungspreis.</p>}
   </fieldset>;

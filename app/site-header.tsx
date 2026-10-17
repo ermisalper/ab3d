@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 
 type SiteHeaderProps = {
   area: "objects" | "cappatex";
@@ -12,7 +13,7 @@ type SiteHeaderProps = {
 
 const objectLinks = [
   ["Kollektion", "/#kollektion"],
-  ["3D AI Studio", "/#studio"],
+  ["3D gestalten", "/#studio"],
   ["Modellgalerie", "/modelle"],
   ["Meine 3D-Modelle", "/sammlung"],
   ["Creator Plans", "/#preise"],
@@ -20,7 +21,7 @@ const objectLinks = [
 ] as const;
 
 const cappatexLinks = [
-  ["Design Studio", "/cappatex#studio"],
+  ["Motiv gestalten", "/cappatex#studio"],
   ["Designgalerie", "/cappatex/designs"],
   ["Meine Motive", "/cappatex/sammlung"],
   ["So funktioniert es", "/cappatex#ablauf"],
@@ -29,6 +30,8 @@ const cappatexLinks = [
 
 export default function SiteHeader({ area, userName, cartCount = 0, onCartOpen }: SiteHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const current = (href: string) => !href.includes("#") && href === pathname ? "page" as const : undefined;
   const isObjects = area === "objects";
   const links = isObjects ? objectLinks : cappatexLinks;
   const accountHref = userName ? "/konto" : "/signin-with-chatgpt?return_to=%2Fkonto";
@@ -83,7 +86,7 @@ export default function SiteHeader({ area, userName, cartCount = 0, onCartOpen }
 
         <div className="section-nav">
           <nav aria-label={isObjects ? "3D-Shop Navigation" : "CAPPATEX Navigation"}>
-            {links.map(([label, href]) => <Link key={href} href={href}>{label}</Link>)}
+            {links.map(([label, href]) => <Link key={href} href={href} aria-current={current(href)}>{label}</Link>)}
           </nav>
           <span>{isObjects ? "Entworfen & gefertigt in Zürich" : "KI-Motiv · Print on Demand"}</span>
         </div>
@@ -95,10 +98,10 @@ export default function SiteHeader({ area, userName, cartCount = 0, onCartOpen }
             <Link className={!isObjects ? "active cappatex-active" : ""} href="/cappatex" onClick={() => setMenuOpen(false)}><span className="division-mark">POD</span><span className="division-copy"><b>CAPPATEX</b><small>Kleidung gestalten</small></span></Link>
           </nav>
           <nav className="mobile-section-links" aria-label="Seitennavigation mobil">
-            {links.map(([label, href]) => <Link key={href} href={href} onClick={() => setMenuOpen(false)}>{label}<span>↗</span></Link>)}
+            {links.map(([label, href]) => <Link key={href} href={href} aria-current={current(href)} onClick={() => setMenuOpen(false)}>{label}<span>↗</span></Link>)}
           </nav>
           <Link className="mobile-account-link" href={accountHref} onClick={() => setMenuOpen(false)}>
-            {userName ? `Konto von ${userName.split(" ")[0]}` : "Anmelden & Designs speichern"}
+            {userName ? `Konto von ${userName.split(" ")[0]}` : isObjects ? "Anmelden & 3D-Modelle speichern" : "Anmelden & Motive speichern"}
           </Link>
         </div>
       </header>
