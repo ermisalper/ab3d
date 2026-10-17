@@ -2,6 +2,8 @@
 
 Stand: 17.10.2026. Umsetzungsschritt 1, ausschließlich AB3D / codex/cappatex-production.
 
+Fortsetzung: Die bisher als Folgeschritt beschriebene Anbindung an Schema-2-Checkout und Paid-Webhook wird in [SHOP-LAUNCH-READINESS.md](SHOP-LAUNCH-READINESS.md) dokumentiert. Sie bleibt hinter expliziten Preis-, Seiten-, Varianten- und Fulfillment-Freigaben gesperrt; die Beschreibung unten belegt die ursprüngliche Druckvorbereitungsstufe.
+
 ## Ziel und Abgrenzung
 
 Ein angemeldeter Pilotbetreiber kann eine verfügbare Blanko-Variante mit Front, Back oder beiden Seiten ausdrücklich zusammenstellen, die Seiten unabhängig mit demselben oder unterschiedlichen vorhandenen Motiven und Positionen belegen und einen unveränderlichen Stand speichern. Dabei entstehen echte transparente PNG-Druckdateien in den geprüften Providermaßen. Speichern löst weder Shopify-Warenkorb, Printify-Upload/Produkt/Bestellung noch KI-Generierung aus. Preise, mehrseitige Verkaufstarife, Checkout und Produktionsfreigabe sind eigene Folgeschritte und bleiben gesperrt.

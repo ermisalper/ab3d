@@ -1,6 +1,6 @@
-import type { CheckoutSnapshot } from "./cappatex-snapshot";
+import type { LegacyCheckoutSnapshot } from "./cappatex-snapshot";
 
-export function draftProductPayload(snapshot: CheckoutSnapshot, imageId: string, templatePrice: number) {
+export function draftProductPayload(snapshot: LegacyCheckoutSnapshot, imageId: string, templatePrice: number) {
   if (!imageId || !Number.isInteger(templatePrice) || templatePrice <= 0) throw new Error("invalid_printify_template");
   return { title: `CAPPATEX ${snapshot.id}`, description: "Individuelles Kundendesign. Nicht veröffentlichen.",
     blueprint_id: snapshot.profile.blueprintId, print_provider_id: snapshot.profile.providerId,
@@ -13,7 +13,7 @@ type Draft = { id?: string; visible?: boolean; blueprint_id?: number; print_prov
   variants?: Array<{ id: number; is_enabled: boolean }>;
   print_areas?: Array<{ variant_ids: number[]; background?: string | null; placeholders: Array<{ position: string; decoration_method?: string; images: Array<{ id: string; x: number; y: number; scale: number; angle: number }> }> }> };
 
-export function draftMatchesSnapshot(draft: Draft, snapshot: CheckoutSnapshot, imageId: string) {
+export function draftMatchesSnapshot(draft: Draft, snapshot: LegacyCheckoutSnapshot, imageId: string) {
   const areas = draft.print_areas?.filter(area => area.variant_ids.includes(snapshot.variant.printifyVariantId));
   const positions = areas?.flatMap(area => area.placeholders);
   const images = positions?.[0]?.images;

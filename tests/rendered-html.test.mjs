@@ -256,10 +256,11 @@ test("CAPPATEX keeps generation guarded and never generates or submits productio
 });
 
 test("legal launch phase is visible and both checkout flows require versioned consent", async () => {
-  const [shop, cartDrawer, cappatex, orderRoute, cappatexCheckout, legalVersion, privacy, terms, shipping, safety, sitemap] = await Promise.all([
+  const [shop, cartDrawer, cappatex, preparedReview, orderRoute, cappatexCheckout, legalVersion, privacy, terms, shipping, safety, sitemap] = await Promise.all([
     read("app/shop-experience.tsx"),
     read("app/shop-cart-drawer.tsx"),
     read("app/cappatex/cappatex-designer.tsx"),
+    read("app/cappatex/vorbereitung/[id]/review.tsx"),
     read("app/api/shopify/checkout/route.ts"),
     read("app/api/cappatex/checkout/route.ts"),
     read("app/legal-version.ts"),
@@ -274,8 +275,12 @@ test("legal launch phase is visible and both checkout flows require versioned co
   assert.doesNotMatch(cartDrawer, /Bestellanfrage verbindlich senden/);
   assert.match(shop, /termsAccepted/);
   assert.match(cartDrawer, /\/recht\/agb/);
-  assert.match(cappatex, /termsAccepted/);
-  assert.match(cappatex, /Shopify-Checkout vorbereiten/);
+  assert.doesNotMatch(cappatex, /fetch\("\/api\/cappatex\/checkout"|termsAccepted|setCheckoutEnabled|setTerms/);
+  assert.match(cappatex, /href="#cappatex-save"/);
+  assert.match(preparedReview, /JSON\.stringify\(\{ preparationId: id, termsAccepted: true \}\)/);
+  assert.match(preparedReview, /Weiter zu Shopify/);
+  assert.match(preparedReview, /\/recht\/agb/);
+  assert.match(preparedReview, /\/recht\/datenschutz/);
   assert.match(orderRoute, /body\?\.termsAccepted !== true/);
   assert.match(orderRoute, /LEGAL_TERMS_VERSION/);
   assert.match(cappatexCheckout, /terms_required/);

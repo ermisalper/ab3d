@@ -46,8 +46,8 @@ test("profiles require both countries, exact shop, future expiry and unlink/manu
   ]) assert.equal(profileIsVerified(changed,"test",now),false);
 });
 const sid="CPS-"+"a".repeat(32);
-const snapshot={id:sid,email:"owner@example.test",profile,variant,quantity:2,country:"CH",currency:"CHF",unitPriceCents:3000};
-const line={id:4,product_id:3,variant_id:2,sku:"TEST-ONLY",quantity:2,price:"30.00",properties:[{name:"CAPPATEX_SNAPSHOT_ID",value:sid}]};
+const snapshot={id:sid,designId:"CPX-AAAAAAAAAAAA",email:"owner@example.test",profile,variant,quantity:2,country:"CH",currency:"CHF",unitPriceCents:3000};
+const line={id:4,product_id:3,variant_id:2,sku:"TEST-ONLY",quantity:2,price:"30.00",properties:[{name:"CAPPATEX_SNAPSHOT_ID",value:sid},{name:"CAPPATEX_DESIGN_ID",value:snapshot.designId}]};
 const order={email:"owner@example.test",country:"CH",currency:"CHF"};
 test("paid lines cannot alter variant, quantity, identity, SKU or destination", () => {
   assert.equal(validatePaidLine(snapshot,line,order),true);
@@ -62,6 +62,15 @@ test("paid prices reject fractional cents and malformed decimal money", () => {
     assert.equal(validatePaidLine(snapshot,{...line,price},order),false,price);
   for(const price of ["30","30.0","30.00","30.0000"])
     assert.equal(validatePaidLine(snapshot,{...line,price},order),true,price);
+});
+test("legacy paid lines require the exact unique design ID and cannot silently discard protected back metadata", () => {
+  for (const properties of [
+    line.properties.filter(p=>p.name!=="CAPPATEX_DESIGN_ID"),
+    line.properties.map(p=>p.name==="CAPPATEX_DESIGN_ID"?{...p,value:"CPX-BBBBBBBBBBBB"}:p),
+    [...line.properties,{name:"CAPPATEX_DESIGN_ID",value:snapshot.designId}],
+    [...line.properties,{name:"CAPPATEX_BACK_DESIGN_ID",value:snapshot.designId}],
+    [...line.properties,{name:"_CAPPATEX_BACK",value:"pending"}],
+  ]) assert.equal(validatePaidLine(snapshot,{...line,properties},order),false);
 });
 test("discounted paid lines require manual review even when the original unit price matches", () => {
   assert.equal(validatePaidLine(snapshot,{...line,total_discount:"0.00",discount_allocations:[]},order),true);

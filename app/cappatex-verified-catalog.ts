@@ -1,7 +1,7 @@
 import { CAPPATEX_PRINT_PROFILES } from "./cappatex-profiles";
 import { profileIsVerified, type PrintProfile } from "./cappatex-print-profile";
 import { duplicateShopifySkus, fetchPrintifyProducts, uniquePrintifySkuIndex } from "./printify-catalog";
-import { fetchShopifyCollection, SHOPIFY_COLLECTIONS } from "./shopify-catalog";
+import { fetchShopifyCollection, SHOPIFY_COLLECTIONS, shopifyVariantOption } from "./shopify-catalog";
 
 export async function verifiedCatalog() {
   const shopId = process.env.PRINTIFY_SHOP_ID?.trim() || "";
@@ -15,6 +15,8 @@ export async function verifiedCatalog() {
   const index = uniquePrintifySkuIndex(products);
   const result = [];
   for (const profile of profiles) {
+    const optionKey = profile.optionKey || "color";
+    if (!["color", "paper", "surface"].includes(optionKey)) continue;
     const product = catalog.products.find(item => item.shopifyId === profile.shopifyProductId);
     if (!product) continue;
     // Check today's provider geometry and shipping instead of trusting an old saved SKU.
@@ -25,7 +27,7 @@ export async function verifiedCatalog() {
       fetch(`${root}/shipping.json`, { headers, signal: AbortSignal.timeout(20_000) }),
     ]);
     if (!variantResponse.ok || !shippingResponse.ok) continue;
-    const variantData = await variantResponse.json() as { variants?: Array<{ id: number; options?: { color?: string; size?: string }; placeholders?: Array<{ position: string; width: number; height: number; decoration_method?: string }> }> };
+    const variantData = await variantResponse.json() as { variants?: Array<{ id: number; options?: { color?: string; size?: string; paper?: string; surface?: string }; placeholders?: Array<{ position: string; width: number; height: number; decoration_method?: string }> }> };
     const shippingData = await shippingResponse.json() as { profiles?: Array<{ variant_ids: number[]; countries: string[]; first_item: { cost: number; currency: string }; additional_items: { cost: number; currency: string } }> };
     const variants = profile.variants.flatMap(verified => {
       const shopify = product.variants.find(item => item.id === verified.shopifyVariantId && item.sku === verified.sku);
@@ -38,8 +40,8 @@ export async function verifiedCatalog() {
         && live.first_item.currency === rate.currency && live.first_item.cost === rate.firstCents
         && live.additional_items.currency === rate.currency && live.additional_items.cost === rate.additionalCents));
       if (!shopify?.available || !printify || duplicates.has(verified.sku) || !shippingMatches
-        || shopify.color !== verified.color || shopify.size !== verified.size
-        || providerVariant?.options?.color !== verified.color || providerVariant?.options?.size !== verified.size
+        || shopifyVariantOption(shopify, optionKey) !== verified.color || shopifyVariantOption(shopify, "size") !== verified.size
+        || providerVariant?.options?.[optionKey] !== verified.color || providerVariant?.options?.size !== verified.size
         || printify.product.id !== profile.printifyProductId || printify.product.blueprint_id !== profile.blueprintId
         || printify.product.print_provider_id !== profile.providerId || printify.variant.id !== verified.printifyVariantId
         || printify.variant.is_enabled !== true || printify.variant.is_available !== true

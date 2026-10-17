@@ -304,6 +304,8 @@ function paidOrder(snapshots, id = 501) {
     line_items: list.map((snapshot, index) => ({ id: 601 + index, title: profile.name, product_id: 303, variant_id: 202,
       sku: variant.sku, quantity: snapshot.quantity, price: "30.00", properties: [
         { name: "CAPPATEX_SNAPSHOT_ID", value: snapshot.id }, { name: "CAPPATEX_DESIGN_ID", value: snapshot.designId },
+        ...(snapshot.schemaVersion === 2 ? [{ name: "CAPPATEX_PREPARATION_ID", value: snapshot.preparation.id },
+          { name: "CAPPATEX_PREPARATION_SHA256", value: snapshot.preparationSha256 }] : []),
       ] })) };
 }
 
@@ -1418,8 +1420,215 @@ describe("offline immutable multi-side print preparations", { concurrency: false
     const design = await seedDesign();
     for(const overrides of [{sides:[]},{preparationId:"CPP-"+"a".repeat(32)},{schemaVersion:2},{side:"back"}]) {
       const response=await callCheckout(design,overrides);assert.equal(response.status,409);
-      assert.equal((await response.json()).code,"multiside_checkout_pending");
+      assert.equal((await response.json()).code,overrides.preparationId ? "mixed_checkout_input" : "multiside_checkout_pending");
     }
     assert.equal(fixture.carts.length,0);
+  });
+
+  function approvePrepared(candidate, sideSets = [["front", "back"]]) {
+    runtime.profiles.splice(0, runtime.profiles.length, { ...structuredClone(profile), backVariants: candidate.backVariants,
+      preparedCheckout: { rendererVersion: "rgba-area-v1", offers: [{ shopifyVariantId: variant.shopifyVariantId, unitPriceCents: 3000,
+        currency: "CHF", sideSets }] } });
+  }
+  async function preparedCheckout(id, overrides = {}) {
+    return checkout(new Request(APP_ORIGIN + "/api/cappatex/checkout", { method: "POST",
+      headers: { Origin: APP_ORIGIN, "Content-Type": "application/json" }, body: JSON.stringify({ preparationId: id, termsAccepted: true, ...overrides }) }));
+  }
+  async function preparedSnapshot(id) {
+    const response = await preparedCheckout(id), result = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(result));
+    const row = fixture.db.sqlite.prepare("SELECT * FROM cappatex_snapshots WHERE id = ?").get(result.snapshotId);
+    assert.equal(row.state, "checkout_created");
+    assert.equal(row.payload_sha256, await sha256(row.payload_json));
+    return JSON.parse(row.payload_json);
+  }
+  async function readyPrepared(mode = "both") {
+    const candidate = prepareProfile(), front = await seedDesign("A", 30), back = await seedDesign("B", 210);
+    const body = input(front, back);
+    if (mode === "front") body.sides.splice(1);
+    if (mode === "back") body.sides.splice(0, 1);
+    const response = await post(body), result = await response.json();
+    assert.equal(response.status, 201, JSON.stringify(result));
+    return { candidate, id: result.id, saved: JSON.parse(savedRow(result.id).payload_json), front, back };
+  }
+
+  test("prepared checkout stays disabled without explicit sale, side-price and renderer approval", async () => {
+    const { id } = await readyPrepared();
+    let status = await (await get(id)).json();
+    assert.equal(status.checkout.enabled, false);
+    assert.match(status.checkout.reason, /Verkaufspreis|Verkauf|Druckseiten/);
+    assert.equal((await preparedCheckout(id)).status, 409);
+    assert.equal(fixture.carts.length + fixture.uploads.length + fixture.orders.length, 0);
+  });
+
+  test("approved decimal CHF prices retain exact cents without floating-point multiplication", async () => {
+    const { candidate, id } = await readyPrepared(); approvePrepared(candidate);
+    runtime.profiles[0].preparedCheckout.offers[0].unitPriceCents = 1990;
+    fixture.interceptFetch = url => {
+      if (url.hostname !== STORE_DOMAIN) return undefined;
+      const collection = storefrontCollection(); collection.data.collection.products.nodes[0].variants.nodes[0].price.amount = "19.90";
+      return Response.json(collection);
+    };
+    const data = await (await get(id)).json(); assert.equal(data.checkout.enabled, true, JSON.stringify(data.checkout));
+    assert.equal(data.checkout.unitPriceCents, 1990);
+    assert.equal(fixture.carts.length + fixture.orders.length + fixture.uploads.length, 0);
+  });
+
+  test("prepared product approval cannot be bypassed by creating a new legacy front-only checkout", async () => {
+    const { candidate, front } = await readyPrepared(); approvePrepared(candidate, [["front", "back"]]);
+    const response = await callCheckout(front); assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, "prepared_checkout_required");
+    assert.equal(fixture.carts.length, 0); assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_snapshots").get().n, 0);
+  });
+
+  test("legacy paid webhook holds unexpected back properties instead of placing a front-only order", async () => {
+    const snapshot = await checkedSnapshot(await seedDesign()), order = paidOrder(snapshot);
+    order.line_items[0].properties.push({ name: "CAPPATEX_BACK_DESIGN_ID", value: snapshot.designId });
+    const response = await callWebhook(order); assert.equal(response.status, 200); assert.equal((await response.json()).status, "manual_review");
+    assert.equal(fixture.uploads.length + fixture.drafts.length + fixture.orders.length, 0);
+  });
+
+  test("multiple prepared line items share only this request's fresh catalog reads", async () => {
+    const { candidate, id } = await readyPrepared(); approvePrepared(candidate);
+    const first = await preparedSnapshot(id), second = await preparedSnapshot(id);
+    fixture.requests.splice(0);
+    const response = await callWebhook(paidOrder([first, second])); assert.equal(response.status, 200);
+    assert.equal((await response.json()).status, "draft_ready"); assert.equal(fixture.orders.length, 1); assert.equal(fixture.uploads.length, 4);
+    assert.equal(fixture.requests.filter(r => r.method === "GET" && r.url.includes("/variants.json")).length, 3,
+      "One fresh pair of sales/design provider reads plus the legacy availability guard, independent of line count");
+  });
+
+  for (const mode of ["front", "back", "both"]) test(`approved ${mode} preparation reaches exactly one order with exact full-canvas files and centred placement`, async () => {
+    const { candidate, id, saved, front, back } = await readyPrepared(mode);
+    approvePrepared(candidate, [saved.sides.map(s => s.position)]);
+    const ready = await (await get(id)).json();
+    assert.equal(ready.checkout.enabled, true, JSON.stringify(ready.checkout));
+    assert.equal(ready.checkout.unitPriceCents, 3000); assert.equal(ready.checkout.currency, "CHF");
+    const snapshot = await preparedSnapshot(id);
+    assert.equal(snapshot.schemaVersion, 2); assert.deepEqual(snapshot.preparation, saved);
+    assert.equal(snapshot.preparationSha256, await sha256(JSON.stringify(saved)));
+    assert.equal(snapshot.quantity, saved.quantity); assert.equal(snapshot.country, saved.country);
+    assert.ok(fixture.carts[0].lines[0].attributes.some(a => a.key === "CAPPATEX_PREPARATION_ID" && a.value === id));
+    // The approved full-canvas print survives changes to source-object bytes: no post-payment rendering or fresh AI generation.
+    fixture.bucket.objects.get(front.key).bytes = imageBytes(11); fixture.bucket.objects.get(back.key).bytes = imageBytes(12);
+    const order = paidOrder(snapshot);
+    const responses = await Promise.all([callWebhook(order), callWebhook(order, "local-prepared-event-2")]);
+    assert.ok(responses.every(r => r.status === 200));
+    assert.equal(fixture.orders.length, 1); assert.equal(fixture.drafts.length, 1); assert.equal(fixture.uploads.length, saved.sides.length);
+    for (const [index, side] of saved.sides.entries()) {
+      assert.deepEqual(fixture.uploads[index].bytes, fixture.bucket.objects.get(side.file.key).bytes);
+      assert.equal(fixture.uploads[index].fileName, `${id}-${side.position}.png`);
+      const p = fixture.drafts[0].print_areas[0].placeholders.find(p => p.position === side.position);
+      assert.deepEqual(p.images, [{ id: fixture.uploads[index].id, x: .5, y: .5, scale: 1, angle: 0 }]);
+    }
+    assert.equal(fixture.drafts[0].print_areas[0].placeholders.length, saved.sides.length);
+    assert.equal(fulfillment().state, "draft_ready");
+    const line = fixture.db.sqlite.prepare("SELECT * FROM cappatex_fulfillment_lines WHERE snapshot_id = ?").get(snapshot.id);
+    assert.deepEqual(JSON.parse(line.printify_image_id), { schemaVersion: 2,
+      images: Object.fromEntries(saved.sides.map((s, i) => [s.position, fixture.uploads[i].id])) });
+    assert.equal(fixture.requests.some(r => /send_to_production|publish|openai|meshy/.test(r.url)), false);
+    assert.equal((await callWebhook(order, "local-prepared-event-3")).status, 200); assert.equal(fixture.orders.length, 1);
+  });
+
+  for (const issue of ["price approval", "unapproved side set", "renderer", "native import", "manual approval", "back profile", "back live geometry", "back live photo", "shopify price", "shopify currency", "print file hash", "print file dimensions", "stored preparation", "source ownership", "extra client fields"]) test(`prepared checkout rejects ${issue} before cart creation or Printify writes`, async () => {
+    const { candidate, id, saved } = await readyPrepared(); approvePrepared(candidate);
+    const sale = runtime.profiles[0]; let overrides = {};
+    if (issue === "price approval") delete sale.preparedCheckout;
+    if (issue === "unapproved side set") sale.preparedCheckout.offers[0].sideSets = [["front"]];
+    if (issue === "renderer") sale.preparedCheckout.rendererVersion = "unapproved-renderer";
+    if (issue === "native import") sale.fulfillment.nativeImportUnlinked = false;
+    if (issue === "manual approval") sale.fulfillment.manualApproval = false;
+    if (issue === "back profile") delete sale.backVariants;
+    if (issue === "back live geometry") fixture.changeProvider = p => p.variants[0].placeholders.push({ position: "back", decoration_method: "dtg", width: 899, height: 1200 });
+    if (issue === "back live photo") fixture.changeTemplate = () => {};
+    if (issue === "shopify price" || issue === "shopify currency") fixture.interceptFetch = url => {
+      if (url.hostname !== STORE_DOMAIN) return undefined;
+      const collection = storefrontCollection();
+      collection.data.collection.products.nodes[0].variants.nodes[0].price = { amount: issue === "shopify price" ? "31.00" : "30.00", currencyCode: issue === "shopify currency" ? "EUR" : "CHF" };
+      return Response.json(collection);
+    };
+    if (issue === "print file hash") fixture.bucket.objects.get(saved.sides[1].file.key).bytes[40]++;
+    if (issue === "print file dimensions") {
+      const json = structuredClone(saved); json.sides[1].file.width++;
+      const text = JSON.stringify(json); fixture.db.sqlite.prepare("UPDATE cappatex_preparations SET payload_json=?,payload_sha256=? WHERE id=?").run(text, await sha256(text), id);
+    }
+    if (issue === "stored preparation") fixture.db.sqlite.prepare("UPDATE cappatex_preparations SET payload_sha256='changed' WHERE id=?").run(id);
+    if (issue === "source ownership") fixture.db.sqlite.prepare("UPDATE cappatex_designs SET status='upload_failed' WHERE id=?").run(saved.sides[1].designId);
+    if (issue === "extra client fields") overrides = { unitPriceCents: 1, sides: [{ position: "front" }] };
+    const response = await preparedCheckout(id, overrides); assert.equal(response.status, 409, await response.clone().text());
+    assert.equal(fixture.carts.length + fixture.orders.length + fixture.uploads.length, 0);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_snapshots").get().n, 0);
+  });
+
+  test("prepared checkout requires owner identity, legal consent and rejects changed Shopify cart references", async () => {
+    const { candidate, id } = await readyPrepared(); approvePrepared(candidate);
+    runtime.actor = null; assert.equal((await preparedCheckout(id)).status, 401);
+    runtime.actor = "other@example.test"; assert.equal((await preparedCheckout(id)).status, 409);
+    runtime.actor = EMAIL; assert.equal((await preparedCheckout(id, { termsAccepted: false })).status, 400);
+    fixture.changeCart = cart => { cart.lines.nodes[0].attributes = cart.lines.nodes[0].attributes.filter(a => a.key !== "CAPPATEX_PREPARATION_ID"); };
+    const response = await preparedCheckout(id); assert.equal(response.status, 409); assert.equal((await response.json()).code, "cart_changed");
+    assert.equal(fixture.db.sqlite.prepare("SELECT state FROM cappatex_snapshots").get().state, "prepared");
+    assert.equal(fixture.orders.length, 0);
+  });
+
+  for (const issue of ["missing back file", "changed back file", "revoked price", "changed source", "changed preparation", "missing preparation property", "changed preparation hash", "duplicate preparation hash", "unknown back property", "changed prepared draft"]) test(`paid prepared order holds ${issue} without creating an order`, async () => {
+    const { candidate, id, saved } = await readyPrepared(); approvePrepared(candidate);
+    const snapshot = await preparedSnapshot(id), order = paidOrder(snapshot);
+    if (issue === "missing back file") fixture.bucket.objects.delete(saved.sides[1].file.key);
+    if (issue === "changed back file") fixture.bucket.objects.get(saved.sides[1].file.key).bytes[40]++;
+    if (issue === "revoked price") delete runtime.profiles[0].preparedCheckout;
+    if (issue === "changed source") fixture.db.sqlite.prepare("UPDATE cappatex_designs SET artwork_width=241 WHERE id=?").run(saved.sides[1].designId);
+    if (issue === "changed preparation") {
+      const changed = structuredClone(saved); changed.sides.pop();
+      const text = JSON.stringify(changed); fixture.db.sqlite.prepare("UPDATE cappatex_preparations SET payload_json=?,payload_sha256=? WHERE id=?").run(text, await sha256(text), id);
+    }
+    if (issue === "missing preparation property") order.line_items[0].properties = order.line_items[0].properties.filter(p => p.name !== "CAPPATEX_PREPARATION_ID");
+    if (issue === "changed preparation hash") order.line_items[0].properties.find(p => p.name === "CAPPATEX_PREPARATION_SHA256").value = "a".repeat(64);
+    if (issue === "duplicate preparation hash") order.line_items[0].properties.push({ name: "CAPPATEX_PREPARATION_SHA256", value: snapshot.preparationSha256 });
+    if (issue === "unknown back property") order.line_items[0].properties.push({ name: "CAPPATEX_BACK_DESIGN_ID", value: saved.sides[0].designId });
+    if (issue === "changed prepared draft") fixture.changeDraft = draft => { draft.print_areas[0].placeholders[1].images[0].scale = .2; };
+    const response = await callWebhook(order); assert.equal(response.status, 200, await response.clone().text());
+    assert.equal((await response.json()).status, "manual_review"); assert.equal(fulfillment().state, "manual_review"); assert.equal(fixture.orders.length, 0);
+    if (issue !== "changed prepared draft") assert.equal(fixture.uploads.length, 0);
+    assert.equal((await callWebhook(order, "local-prepared-hold-repeat")).status, 200); assert.equal(fixture.orders.length, 0);
+  });
+
+  test("ambiguous prepared order creation is locked and never retries either side upload or order", async () => {
+    const { candidate, id } = await readyPrepared(); approvePrepared(candidate); const snapshot = await preparedSnapshot(id);
+    fixture.orderTimeout = true; const order = paidOrder(snapshot);
+    const response = await callWebhook(order); assert.equal((await response.json()).status, "creation_uncertain");
+    assert.equal(fulfillment().state, "creating"); assert.equal(fixture.orders.length, 1); assert.equal(fixture.uploads.length, 2);
+    await callWebhook(order, "local-prepared-uncertain-repeat"); assert.equal(fixture.orders.length, 1); assert.equal(fixture.uploads.length, 2);
+  });
+
+  test("sales catalog retains verified back/photos without promoting a design-only variant", async () => {
+    const candidate = prepareProfile(); approvePrepared(candidate);
+    const extra = structuredClone(variant); extra.printifyVariantId = 102; extra.shopifyVariantId = "gid://shopify/ProductVariant/203"; extra.sku = "LOCAL-DESIGN-ONLY-L"; extra.size = "L";
+    candidate.variants.push(extra);
+    const previousProvider = fixture.changeProvider, previousTemplate = fixture.changeTemplate;
+    fixture.changeProvider = data => { previousProvider(data); const extraProvider = structuredClone(data.variants[0]); extraProvider.id = 102; extraProvider.options.size = "L"; data.variants.push(extraProvider); };
+    fixture.changeTemplate = data => { previousTemplate(data); data.variants.push({ id: 102, sku: extra.sku, price: 1750, is_enabled: true, is_available: true }); data.images.push({ src: extra.mockup.url, position: "front", variant_ids: [102] }); };
+    const response = await getDesignCatalog(); assert.equal(response.status, 200);
+    const data = await response.json(); assert.equal(data.products.length, 1); assert.equal(data.products[0].purchaseReady, true);
+    assert.equal(data.products[0].variants.length, 1); assert.equal(data.products[0].variants[0].shopifyVariantId, variant.shopifyVariantId);
+    assert.deepEqual(data.products[0].variants[0].price, { amount: "30.00", currencyCode: "CHF" });
+    assert.equal(data.products[0].variants[0].back.area.position, "back");
+    assert.ok(data.products[0].variants[0].photos.some(photo => photo.url === candidate.backVariants[0].mockup.url));
+  });
+
+  test("sales catalog does not merge back metadata from another Shopify variant identity", async () => {
+    const candidate = prepareProfile(); approvePrepared(candidate);
+    candidate.variants[0].shopifyVariantId = "gid://shopify/ProductVariant/999";
+    candidate.backVariants[0].shopifyVariantId = "gid://shopify/ProductVariant/999";
+    const data = await (await getDesignCatalog()).json();
+    assert.equal(data.products[0].variants[0].shopifyVariantId, variant.shopifyVariantId);
+    assert.equal(data.products[0].variants[0].back, undefined);
+    assert.equal(data.products[0].variants[0].photos, undefined);
+  });
+
+  for (const altered of [`https://user:pass@${STORE_DOMAIN}/checkouts/test`, `https://${STORE_DOMAIN}:8443/checkouts/test`, `https://${STORE_DOMAIN}/checkouts/test#changed`]) test(`checkout rejects a credential, port or fragment in the returned Shopify URL: ${altered}`, async () => {
+    const design = await seedDesign(); fixture.changeCart = cart => { cart.checkoutUrl = altered; };
+    const response = await callCheckout(design); assert.equal(response.status, 502); assert.equal((await response.json()).code, "checkout_failed");
+    assert.equal(fixture.db.sqlite.prepare("SELECT state FROM cappatex_snapshots").get().state, "prepared");
   });
 });

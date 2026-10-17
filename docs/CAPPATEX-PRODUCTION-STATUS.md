@@ -1,5 +1,7 @@
 # CAPPATEX: geprüfter Arbeitsstand, 17.10.2026
 
+Neuester Umsetzungsschritt: [Verkaufsvorbereitung und Schema-2-Bestellkonzept](SHOP-LAUNCH-READINESS.md). Dort stehen der aktuelle 75-Varianten-Abgleich, die abgesicherte Mehrseiten-Anbindung, Betreiberübersicht und offenen Verkaufsfreigaben. Ältere Einträge unten bleiben als zeitlich zugeordnete Nachweise erhalten.
+
 Ausschliesslich AB3D unter C:\Users\berk1\OneDrive\Desktop\ab3d; GitHub ermisalper/ab3d, Branch codex/cappatex-production. Der aktuelle private Generator-/Upload-Pilot ist veröffentlicht. Das Abnahmekriterium für Verkauf und Fulfillment ist **noch nicht erfüllt**; dieser Stand ist keine Verkaufsfreigabe.
 
 ## Aktuell am 17.10.2026: gemeinsame Druckseiten und Dateien, Version 49

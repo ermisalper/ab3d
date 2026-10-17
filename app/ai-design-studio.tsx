@@ -7,6 +7,7 @@ import ModelViewer from "./model-viewer";
 import { printReportVerified, type Printability } from "./meshy-policy";
 import GalleryConsent from "./gallery-consent";
 import { galleryChoiceValid, newGalleryDraft } from "./gallery-policy";
+import { productionQuote } from "./production-quote";
 
 type InputMode = "text" | "image";
 type GenerationMode = "fast" | "quality";
@@ -197,14 +198,8 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
     printReady ? `Manufacturing constraint: ${selectedTemplate.printRule} Watertight manufacturable parts, stable flat base, minimum practical wall thickness, no floating parts, no paper-thin or fragile details.` : "",
     mode === "text" ? "Complete product assembly, centered, no scene, no text, no logo." : "Single complete object, centered, no scene, no text, no logo.",
   ].filter(Boolean).join(". ").slice(0, 1200), [colorMood, customerWish, designPlan, mode, printReady, selectedTemplate, style, surface]);
-  const estimate = useMemo(() => {
-    const scale = Math.pow(heightCm / 20, 2.25);
-    const materialFactor = material === "PETG" ? 1.16 : 1;
-    const finishing = finish === "Premium" ? 24 + heightCm * .65 : 0;
-    const unit = Math.max(24, 14 + 24 * scale * selectedTemplate.complexity * materialFactor + finishing);
-    const discount = quantity >= 5 ? .86 : quantity >= 3 ? .92 : 1;
-    return Math.ceil(unit * quantity * discount / 5) * 5;
-  }, [finish, heightCm, material, quantity, selectedTemplate]);
+  const quote = useMemo(() => productionQuote({ templateId: selectedTemplate.id, heightCm, material, finish, quantity }),
+    [finish, heightCm, material, quantity, selectedTemplate.id]);
 
   useEffect(() => {
     import("@google/model-viewer");
@@ -689,7 +684,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   };
 
   const createProductionOrder = async () => {
-    if (!printFilesReady || !taskId || orderBusy) return;
+    if (!printFilesReady || scaledHeight !== heightCm || !taskId || !quote || orderBusy) return;
     setOrderBusy(true);
     setError("");
     setOrderMessage("");
@@ -699,20 +694,19 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sourceTaskId: taskId,
-          templateName: selectedTemplate.name,
+          templateId: selectedTemplate.id,
           heightCm,
           material,
           finish,
           quantity,
-          estimatedTotal: estimate,
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Der Fertigungsauftrag konnte nicht gespeichert werden.");
+      if (!response.ok) throw new Error(data.error || "Die unverbindliche Anfrage konnte nicht gespeichert werden.");
       setProductionOrderId(data.order.id);
       setOrderMessage(data.message);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Der Fertigungsauftrag konnte nicht gespeichert werden.");
+      setError(caught instanceof Error ? caught.message : "Die unverbindliche Anfrage konnte nicht gespeichert werden.");
     } finally {
       setOrderBusy(false);
     }
@@ -933,15 +927,15 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             <div className="production-config">
               <div className="size-config">
                 <label>Zielhöhe <b>{heightCm} cm</b></label>
-                <input type="range" min={selectedTemplate.minHeight} max={selectedTemplate.maxHeight} step="1" value={heightCm} onChange={(event) => { setHeightCm(Number(event.target.value)); setScaledHeight(null); setPrintFilesReady(false); setPrintability(null); }} disabled={busy} />
+                <input type="range" min={selectedTemplate.minHeight} max={selectedTemplate.maxHeight} step="1" value={heightCm} onChange={(event) => { setHeightCm(Number(event.target.value)); setScaledHeight(null); setPrintFilesReady(false); setPrintability(null); setProductionOrderId(""); setOrderMessage(""); }} disabled={busy || orderBusy} />
                 <small>{printFilesReady && scaledHeight === heightCm ? "✓ GLB, STL und 3MF sind exakt skaliert und geprüft." : `Empfohlener Bereich für ${selectedTemplate.name}: ${selectedTemplate.minHeight}–${selectedTemplate.maxHeight} cm.`}</small>
                 <button onClick={preparePrintFiles} disabled={busy || (printFilesReady && scaledHeight === heightCm)}>{busy && printPipeline ? "Druckpaket wird vorbereitet …" : `Druckpaket für ${heightCm} cm vorbereiten`}{unlimited ? " · Launch-Pass" : " · 2–3 Token"}</button>
               </div>
               <div className="price-config">
-                <label>Material<select value={material} onChange={(event) => setMaterial(event.target.value as "PLA" | "PETG")}><option>PLA</option><option>PETG</option></select></label>
-                <label>Finish<select value={finish} onChange={(event) => setFinish(event.target.value as "Roh" | "Premium")}><option>Roh</option><option>Premium</option></select></label>
-                <label>Menge<input type="number" min="1" max="20" value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.min(20, Number(event.target.value) || 1)))} /></label>
-                <div className="price-total"><span>Automatischer Richtpreis</span><b>{money.format(estimate)}</b><small>inkl. Fertigung · final nach Druckbarkeitsprüfung</small></div>
+                <label>Material<select value={material} disabled={orderBusy} onChange={(event) => { setMaterial(event.target.value as "PLA" | "PETG"); setProductionOrderId(""); setOrderMessage(""); }}><option>PLA</option><option>PETG</option></select></label>
+                <label>Finish<select value={finish} disabled={orderBusy} onChange={(event) => { setFinish(event.target.value as "Roh" | "Premium"); setProductionOrderId(""); setOrderMessage(""); }}><option>Roh</option><option>Premium</option></select></label>
+                <label>Menge<input type="number" min="1" max="20" step="1" value={quantity} disabled={orderBusy} onChange={(event) => { setQuantity(Math.max(1, Math.min(20, Math.trunc(Number(event.target.value) || 1)))); setProductionOrderId(""); setOrderMessage(""); }} /></label>
+                <div className="price-total"><span>Unverbindlicher Richtpreis</span><b>{quote ? money.format(quote.estimatedTotalCents / 100) : "Eingaben prüfen"}</b><small>Modell, Herstellung und endgültigen Preis prüft AB3D persönlich.</small></div>
               </div>
               {printability && <div className={`printability-report status-${printability.status}`}>
                 <div><span>{printFilesReady ? "✓" : "!"}</span><p><b>{printFilesReady ? "Druckpaket bereit" : "Geometrie geprüft"}</b><small>{printRepaired ? "Geometrie wurde automatisch repariert." : printability.status === "healthy" ? "Die Geometrie ist sauber und geschlossen." : "Auffälligkeiten werden im Druckpaket repariert."}</small></p></div>
@@ -954,10 +948,10 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           {state === "complete" && (
             <><div className="result-actions">
               <div>{modelUrls.glb && <a href={modelUrls.glb} download>{scaledHeight === heightCm ? `GLB · ${heightCm} cm` : "GLB herunterladen"}</a>}{printFilesReady && canDownload3d && modelUrls.stl && <a href={modelUrls.stl} download>STL · {heightCm} cm</a>}{printFilesReady && canDownload3d && modelUrls["3mf"] && <a href={modelUrls["3mf"]} download>3MF · {heightCm} cm</a>}{printFilesReady && !canDownload3d && <Link href="/konto#plaene">STL selbst laden · Abo wählen</Link>}</div>
-              <button className="button light" type="button" onClick={createProductionOrder} disabled={!printFilesReady || orderBusy || Boolean(productionOrderId)}>{orderBusy ? "Auftrag wird gespeichert …" : productionOrderId ? `Gespeichert · ${productionOrderId}` : printFilesReady ? `Für ${money.format(estimate)} fertigen lassen` : "Zuerst Druckpaket vorbereiten"}</button>
+              <button className="button light" type="button" onClick={createProductionOrder} disabled={!printFilesReady || scaledHeight !== heightCm || !quote || orderBusy || Boolean(productionOrderId)}>{orderBusy ? "Anfrage wird gespeichert …" : productionOrderId ? `Anfrage gespeichert · ${productionOrderId}` : printFilesReady ? "Unverbindlich bei AB3D anfragen" : "Zuerst Druckpaket vorbereiten"}</button>
             </div>{generationMode === "fast" && <div className="quality-upgrade"><div><b>Gefällt dir die Grundform?</b><span>Erstelle jetzt Material, Farben und die druckbaren STL-/3MF-Dateien.</span></div><button type="button" onClick={() => { setGenerationMode("quality"); workspaceRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" }); }}>Beste Qualität vorbereiten</button></div>}</>
           )}
-          {state === "complete" && <div className="file-access-note"><b>Physisch bestellen oder Datei besitzen?</b><span>Bei einer Fertigung geht die geprüfte STL automatisch intern an AB3D. Nur für einen eigenen STL-/3MF-Download brauchst du das 3D-Studio- oder Complete-Abo.</span>{orderMessage && <small role="status">✓ {orderMessage}</small>}</div>}
+          {state === "complete" && <div className="file-access-note"><b>Erst prüfen lassen, später fertigen.</b><span>Deine Anfrage ist unverbindlich und löst keine Zahlung oder Produktion aus. AB3D prüft zuerst Modell und Richtpreis. Eigene STL-/3MF-Downloads sind im 3D-Studio- oder Complete-Abo enthalten.</span>{orderMessage && <small role="status">✓ {orderMessage}</small>}</div>}
           {modelTaskId&&<Link className="gallery-collection-link" href="/sammlung">Deine gespeicherten 3D-Modelle ansehen →</Link>}
         </div>
       </div>

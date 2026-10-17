@@ -3,6 +3,7 @@ import { getChatGPTUser } from "../../../../chatgpt-auth";
 import { sha256 } from "../../../../cappatex-artwork";
 import { readPreparation, preparationDownloadAllowed } from "../../../../cappatex-preparation-storage";
 import { preparationSummary } from "../../../../cappatex-preparation";
+import { preparedCheckoutStatus } from "../../../../cappatex-prepared-checkout";
 
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -15,7 +16,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     if (!saved) return Response.json({ error: "Nicht gefunden" }, { status: 404, headers });
     const canDownload = await preparationDownloadAllowed(saved, user.email);
     const side = new URL(request.url).searchParams.get("side");
-    if (side === null) return Response.json(preparationSummary(saved, canDownload), { headers });
+    if (side === null) return Response.json(preparationSummary(saved, canDownload, await preparedCheckoutStatus(saved, user.email)), { headers });
     if (!canDownload) return Response.json({ error: "Für diese Druckdatei fehlt die Original-Downloadfreigabe." }, { status: 403, headers });
     const selected = saved.sides.find(s => s.position === side);
     if (!selected) return Response.json({ error: "Nicht gefunden" }, { status: 404, headers });

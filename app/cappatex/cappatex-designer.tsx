@@ -71,7 +71,6 @@ function ProductComparisonCard({ product, variant, placement, image, artwork, pr
 export default function CappatexDesigner() {
   const [products, setProducts] = useState<CappatexDesignProduct[]>([]);
   const [message, setMessage] = useState("Blanko-Produkte werden geprüft …");
-  const [checkoutEnabled, setCheckoutEnabled] = useState(false);
   const [generationEnabled, setGenerationEnabled] = useState(false);
   const [pilotOwner, setPilotOwner] = useState(false);
   const [uploadEnabled, setUploadEnabled] = useState(false);
@@ -97,7 +96,6 @@ export default function CappatexDesigner() {
   const [configurations, setConfigurations] = useState<ProductConfigurations>({});
   const [quantity, setQuantity] = useState(1);
   const [country, setCountry] = useState<"CH" | "LI">("CH");
-  const [terms, setTerms] = useState(false);
   const [busy, setBusy] = useState("restore");
   const [error, setError] = useState("");
   const [creationError, setCreationError] = useState<{ source: "prompt" | "upload"; message: string } | null>(null);
@@ -173,7 +171,6 @@ export default function CappatexDesigner() {
         setSelectionNeedsReview(selection.requiresSelection);
         if (selection.requiresSelection) setError("Die gespeicherte Produktvariante ist nicht mehr verfügbar oder das Druckprofil wurde geändert. Bitte wähle Produkt und Variante erneut.");
         setMessage(data.message || "Die Blanko-Produkte sind derzeit nicht verfügbar.");
-        setCheckoutEnabled(data.checkoutEnabled === true);
       } else {
         setMessage("Die Blanko-Produkte konnten gerade nicht geladen werden. Bitte lade die Seite erneut.");
         setSelectionNeedsReview(Boolean(restored.profileId || restored.variantId || restored.placement));
@@ -211,18 +208,18 @@ export default function CappatexDesigner() {
     const saved = rememberedConfiguration(nextProduct, updated);
     const next = nextProduct.variants.find(item => item.shopifyVariantId === saved?.variantId) || nextProduct.variants[0];
     setConfigurations(updated); setProductId(nextProduct.id); setVariantId(next.shopifyVariantId); setSide("front"); setPhotoUrl("");
-    setPlacement(saved?.placement || null); setSelectionNeedsReview(false); setTerms(false); setError("");
+    setPlacement(saved?.placement || null); setSelectionNeedsReview(false); setError("");
   }
 
   function selectVariant(nextProduct: CappatexDesignProduct, nextId: string) {
     const next = nextProduct.variants.find(v => v.shopifyVariantId === nextId) || nextProduct.variants[0];
     setProductId(nextProduct.id); setVariantId(next.shopifyVariantId); setPhotoUrl("");
-    if (side === "back" && !next.back) { setSide("front"); setPlacement(null); setTerms(false); setError("Für diese Variante ist nur die Vorderseite geprüft. Bitte prüfe die Platzierung neu."); return; }
+    if (side === "back" && !next.back) { setSide("front"); setPlacement(null); setError("Für diese Variante ist nur die Vorderseite geprüft. Bitte prüfe die Platzierung neu."); return; }
     const nextPlacement = selectionNeedsReview ? null : retainedPlacement(product?.id, nextProduct.id, placement);
     setPlacement(nextPlacement);
     setConfigurations(current => rememberConfiguration(current, { ...nextProduct, id: side === "back" ? `${nextProduct.id}:back` : nextProduct.id }, next.shopifyVariantId,
       nextPlacement || initialPlacement(side === "back" && next.back ? next.back.area : next.area, artwork)));
-    setSelectionNeedsReview(false); setTerms(false); setError("");
+    setSelectionNeedsReview(false); setError("");
   }
   function selectSide(nextSide: "front" | "back") {
     if (!product || !baseVariant || !variant || (nextSide === "back" && !baseVariant.back)) return;
@@ -230,7 +227,7 @@ export default function CappatexDesigner() {
     const target = { ...product, id: nextSide === "back" ? `${product.id}:back` : product.id };
     const saved = rememberedConfiguration(target, updated);
     setConfigurations(updated); setSide(nextSide); setPhotoUrl("");
-    setPlacement(saved?.variantId === variant.shopifyVariantId ? saved.placement : null); setTerms(false); setError("");
+    setPlacement(saved?.variantId === variant.shopifyVariantId ? saved.placement : null); setError("");
   }
   async function generate() {
     if (!confirmed || !generationEnabled || busy || !galleryChoiceValid(galleryChoice,"cappatex")) return;
@@ -246,7 +243,7 @@ export default function CappatexDesigner() {
       setUploadedArtwork(false); setLoadedArtwork(""); setPhotoUrl("");
       setConfigurations({});
       if (variant) setPlacement(initialPlacement(variant.area, { width: data.width, height: data.height }));
-      setTerms(false);
+
       showProductPreview();
     } catch (caught) { setCreationError({ source: "prompt", message: caught instanceof Error ? caught.message : "Bilddienst nicht erreichbar." }); }
     finally { setBusy(""); }
@@ -263,26 +260,12 @@ export default function CappatexDesigner() {
       setImage(data.image); setDesignId(data.designId); setArtwork(size);
       setGalleryChoice(newGalleryDraft());
       setPreviewSize({ width: data.previewWidth, height: data.previewHeight });
-      setUploadedArtwork(true); setLoadedArtwork(""); setPhotoUrl(""); setTerms(false);
+      setUploadedArtwork(true); setLoadedArtwork(""); setPhotoUrl("");
       setConfigurations({});
       if (variant) setPlacement(initialPlacement(variant.area, size));
       showProductPreview();
     } catch (caught) { setCreationError({ source: "upload", message: caught instanceof Error ? caught.message : "Das Bild konnte nicht verarbeitet werden." }); }
     finally { setBusy(""); }
-  }
-  async function checkout() {
-    if (side !== "front" || !product?.purchaseReady || !variant?.price || !previewReady || !geometry?.ok || !checkoutEnabled || !terms || !designId || busy) return;
-    setBusy("checkout"); setError("");
-    try {
-      const response = await fetch("/api/cappatex/checkout", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ designId, profileId: product.id, profileVersion: product.profileVersion,
-          shopifyVariantId: variant.shopifyVariantId, placement, quantity, country, termsAccepted: terms }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Checkout konnte nicht vorbereitet werden.");
-      const url = new URL(data.checkoutUrl);
-      if (url.protocol !== "https:") throw new Error("Ungültiger Checkout.");
-      window.location.assign(url.toString());
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Checkout nicht erreichbar."); setBusy(""); }
   }
   return <section className="cappatex-flow" id="studio">
     <div className="cappatex-flow-intro"><p className="eyebrow">Selbst gestalten</p><h2>Erst dein Motiv.<br />Dann dein Einzelstück.</h2>
@@ -373,12 +356,12 @@ export default function CappatexDesigner() {
         <div className="cappatex-verified-preview">
           {variant ? <div className="cappatex-blank-photo" style={{ aspectRatio: `${variant.mockup.width}/${variant.mockup.height}` }}>
             <img key={blankIdentity} className="cappatex-blank-image" src={variant.mockup.url} alt={`${product?.name || "Blanko"}, ${variant.color}, ${variant.size}, unbedruckt`}
-              onLoad={e => { if (e.currentTarget.naturalWidth === variant.mockup.width && e.currentTarget.naturalHeight === variant.mockup.height) setLoadedBlank(blankIdentity); else { setLoadedBlank(""); setTerms(false); setError("Die Produktansicht stimmt nicht mit der geprüften Vorlage überein."); } }}
-              onError={() => { setLoadedBlank(""); setTerms(false); setError("Die Produktansicht konnte nicht geladen werden."); }} />
+              onLoad={e => { if (e.currentTarget.naturalWidth === variant.mockup.width && e.currentTarget.naturalHeight === variant.mockup.height) setLoadedBlank(blankIdentity); else { setLoadedBlank(""); setError("Die Produktansicht stimmt nicht mit der geprüften Vorlage überein."); } }}
+              onError={() => { setLoadedBlank(""); setError("Die Produktansicht konnte nicht geladen werden."); }} />
             <div className="cappatex-verified-area" style={photoPrintArea(variant)}>
               {image && <img key={image} src={image} alt="Dein unverändertes Motiv in der Druckfläche"
-                onLoad={e => { if (e.currentTarget.naturalWidth === previewSize.width && e.currentTarget.naturalHeight === previewSize.height) setLoadedArtwork(image); else { setLoadedArtwork(""); setTerms(false); setError("Die Motivdatei stimmt nicht mit der Druckdatei überein."); } }}
-                onError={() => { setLoadedArtwork(""); setTerms(false); setError("Das Motiv konnte nicht geladen werden. Die Bestellung bleibt gesperrt."); }}
+                onLoad={e => { if (e.currentTarget.naturalWidth === previewSize.width && e.currentTarget.naturalHeight === previewSize.height) setLoadedArtwork(image); else { setLoadedArtwork(""); setError("Die Motivdatei stimmt nicht mit der Druckdatei überein."); } }}
+                onError={() => { setLoadedArtwork(""); setError("Das Motiv konnte nicht geladen werden. Die Bestellung bleibt gesperrt."); }}
                 style={{ ...placedArtwork(variant, artwork, placement), opacity: loadedBlank === blankIdentity && loadedArtwork === image ? 1 : 0 }} />}
             </div>
             <MockupForeground variant={variant} />
@@ -387,11 +370,11 @@ export default function CappatexDesigner() {
             <div className="cappatex-preview-placeholder"><span aria-hidden="true">✦</span><b>Hier beginnt dein Einzelstück</b><p>Beschreibe deine Idee oder wähle ein eigenes Bild. Dein Motiv erscheint hier.</p></div>}
         </div>
         {variant && <div className="cappatex-customize">
-          <button type="button" disabled={!image || Boolean(busy)} onClick={() => { setPlacement(initialPlacement(variant.area, artwork)); setTerms(false); }}>Passend einfügen</button>
-          <button type="button" disabled={!image || Boolean(busy)} onClick={() => { setPlacement({ ...placement, x: .5, y: .5 }); setTerms(false); }}>Zentrieren</button>
-          <label>Motivbreite <b>{Math.round(placement.scale * 100)} %</b><input type="range" disabled={!image || Boolean(busy)} min={variant.area.minScale} max={variant.area.maxScale} step="0.01" value={placement.scale} onChange={e => { setPlacement({ ...placement, scale: Number(e.target.value) }); setTerms(false); }} /></label>
-          <label>Horizontal <b>{Math.round(placement.x * 100)} %</b><input type="range" disabled={!image || Boolean(busy)} min="0" max="1" step="0.01" value={placement.x} onChange={e => { setPlacement({ ...placement, x: Number(e.target.value) }); setTerms(false); }} /></label>
-          <label>Vertikal <b>{Math.round(placement.y * 100)} %</b><input type="range" disabled={!image || Boolean(busy)} min="0" max="1" step="0.01" value={placement.y} onChange={e => { setPlacement({ ...placement, y: Number(e.target.value) }); setTerms(false); }} /></label>
+          <button type="button" disabled={!image || Boolean(busy)} onClick={() => { setPlacement(initialPlacement(variant.area, artwork)); }}>Passend einfügen</button>
+          <button type="button" disabled={!image || Boolean(busy)} onClick={() => { setPlacement({ ...placement, x: .5, y: .5 }); }}>Zentrieren</button>
+          <label>Motivbreite <b>{Math.round(placement.scale * 100)} %</b><input type="range" disabled={!image || Boolean(busy)} min={variant.area.minScale} max={variant.area.maxScale} step="0.01" value={placement.scale} onChange={e => { setPlacement({ ...placement, scale: Number(e.target.value) }); }} /></label>
+          <label>Horizontal <b>{Math.round(placement.x * 100)} %</b><input type="range" disabled={!image || Boolean(busy)} min="0" max="1" step="0.01" value={placement.x} onChange={e => { setPlacement({ ...placement, x: Number(e.target.value) }); }} /></label>
+          <label>Vertikal <b>{Math.round(placement.y * 100)} %</b><input type="range" disabled={!image || Boolean(busy)} min="0" max="1" step="0.01" value={placement.y} onChange={e => { setPlacement({ ...placement, y: Number(e.target.value) }); }} /></label>
         </div>}
         </div>
         {image && geometry && <p className={geometry.ok ? "cappatex-quality-ok" : "cappatex-error"} role="status">{geometry.reason}
@@ -404,8 +387,8 @@ export default function CappatexDesigner() {
               {product?.kind === "accessory" ? " Oberfläche und Bildschirmfarben können vom Druck abweichen. Fotohalterungen gehören nicht zum Lieferumfang."
                 : " Stofffalten werden vereinfacht dargestellt. Stoffstruktur und Bildschirmfarben können vom Druck abweichen."}</p>
           <div className="cappatex-order-config">
-            <label>Menge<select disabled={Boolean(busy)} value={quantity} onChange={e => { setQuantity(Number(e.target.value)); setTerms(false); }}>{[1,2,3,4,5].map(n => <option key={n}>{n}</option>)}</select></label>
-            <label>Lieferland<select disabled={Boolean(busy)} value={country} onChange={e => { setCountry(e.target.value === "LI" ? "LI" : "CH"); setTerms(false); }}><option value="CH">Schweiz</option><option value="LI">Liechtenstein</option></select></label>
+            <label>Menge<select disabled={Boolean(busy)} value={quantity} onChange={e => { setQuantity(Number(e.target.value)); }}>{[1,2,3,4,5].map(n => <option key={n}>{n}</option>)}</select></label>
+            <label>Lieferland<select disabled={Boolean(busy)} value={country} onChange={e => { setCountry(e.target.value === "LI" ? "LI" : "CH"); }}><option value="CH">Schweiz</option><option value="LI">Liechtenstein</option></select></label>
             <div><small>{variant.price ? "Artikelpreis · zzgl. Versand" : "Gestaltungsvorschau"}</small><strong>{variant.price ? money(Number(variant.price.amount) * quantity, variant.price.currencyCode) : `${quantity} Artikel ausgewählt`}</strong></div>
           </div>
         </>}
@@ -418,12 +401,10 @@ export default function CappatexDesigner() {
           onSaving={saving => setBusy(saving ? "preparation" : "")} />}
         <div className="cappatex-ready">
           {designId&&<Link className="text-link" href="/cappatex/sammlung">Deine gespeicherten CAPPATEX-Motive ansehen →</Link>}
-          <label className="legal-consent cappatex-consent"><input type="checkbox" checked={terms} disabled={side !== "front" || !product?.purchaseReady || !previewReady || !geometry?.ok} onChange={e => setTerms(e.target.checked)} />
-            <span>Motiv und Platzierung sind geprüft. Ich akzeptiere die <Link href="/recht/agb" target="_blank">AGB</Link> und habe die <Link href="/recht/datenschutz" target="_blank">Datenschutzerklärung</Link> gelesen.</span></label>
-          <button className="button primary" onClick={checkout} disabled={side !== "front" || !product?.purchaseReady || !variant?.price || !checkoutEnabled || !previewReady || !terms || !designId || !geometry?.ok || Boolean(busy)}>
-            {busy === "checkout" ? "Checkout wird vorbereitet …" : "Shopify-Checkout vorbereiten →"}</button>
-          <p>{product?.blockedReason || (checkoutEnabled ? "Motiv, Variante, Grösse und Position werden unveränderlich gespeichert. Im Shopify-Checkout siehst du Versand und Gesamtpreis."
-            : "Bestellungen bleiben bis zum abgeschlossenen Produkt-, Versand- und Checkout-Test gesperrt.")}</p>
+          <p className="cappatex-action-hint">Übernimm und speichere zuerst alle gewünschten Druckseiten. Öffne anschliessend deinen gespeicherten Stand,
+            um Motive, Positionen und Preis gemeinsam zu prüfen. Von dort geht es nach der Verkaufsfreigabe zu Shopify.</p>
+          <a className="text-link" href="#cappatex-save">Druckseiten übernehmen und speichern →</a>
+          <p>{product?.blockedReason || "Bestellungen bleiben bis zum abgeschlossenen Produkt-, Versand- und Checkout-Test gesperrt."}</p>
         </div>
         </section>
       </section>

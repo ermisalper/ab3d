@@ -54,6 +54,7 @@ type ProductionOrder = {
 };
 
 const productionStatuses: Record<string, string> = {
+  inquiry: "Unverbindliche Anfrage · AB3D prüft",
   awaiting_payment: "Zahlung ausstehend",
   paid: "Bezahlt · STL druckbereit",
   production: "In Produktion",
@@ -190,8 +191,8 @@ export default function AccountDashboard({ user }: { user: { displayName: string
 
       <section className="order-history">
         <div className="section-heading">
-          <div><p className="eyebrow">Fertigungsaufträge</p><h2>{account?.isOwner ? "Druckwarteschlange." : "Deine 3D-Aufträge."}</h2></div>
-          <p>Nach bestätigter Zahlung wird die STL für AB3D freigeschaltet. Eigene STL-Downloads sind im 3D-Studio- und Complete-Abo enthalten.</p>
+          <div><p className="eyebrow">3D-Anfragen & Fertigung</p><h2>{account?.isOwner ? "Anfragen und Druckaufträge." : "Deine 3D-Anfragen."}</h2></div>
+          <p>Neue Anfragen sind unverbindlich: AB3D prüft Modell, Herstellbarkeit und Richtpreis. Sie lösen keine Zahlung oder Produktion aus. Frühere Fertigungsaufträge behalten ihren bisherigen Status.</p>
         </div>
         {productionOrders.length ? (
           <div className="production-order-list">
@@ -205,11 +206,11 @@ export default function AccountDashboard({ user }: { user: { displayName: string
                 </div>
                 <div className="production-order-actions">
                   <span className={`order-status status-${order.status}`}>{productionStatuses[order.status] || order.status}</span>
-                  <strong>{new Intl.NumberFormat("de-CH", { style: "currency", currency: order.currency }).format(order.estimatedTotalCents / 100)}</strong>
+                  <strong>{order.status === "inquiry" ? "Richtpreis: " : ""}{new Intl.NumberFormat("de-CH", { style: "currency", currency: order.currency }).format(order.estimatedTotalCents / 100)}</strong>
                   {canDownloadProductionFile(order) ? (
                     <a className="production-file-link" href={`/api/meshy?format=stl&productionOrderId=${encodeURIComponent(order.id)}`} download>STL herunterladen</a>
                   ) : account?.isOwner ? (
-                    <small>STL nach Zahlungsfreigabe verfügbar</small>
+                    <small>{order.status === "inquiry" ? "Anfrage wird persönlich geprüft; keine Produktionsfreigabe." : "STL nach Zahlungsfreigabe verfügbar"}</small>
                   ) : (
                     <Link className="production-file-link" href="#plaene">Eigenen STL-Download freischalten</Link>
                   )}
@@ -224,7 +225,7 @@ export default function AccountDashboard({ user }: { user: { displayName: string
               </article>
             ))}
           </div>
-        ) : <div className="no-orders">Noch kein individueller Fertigungsauftrag. <Link href="/#studio">3D-Design erstellen →</Link></div>}
+        ) : <div className="no-orders">Noch keine individuelle 3D-Anfrage. <Link href="/#studio">3D-Design erstellen →</Link></div>}
       </section>
 
       <section className="order-history">

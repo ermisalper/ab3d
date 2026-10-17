@@ -21,6 +21,30 @@ test("Shopify's actual cart must retain the complete checkout snapshot", () => {
   assert.equal(cartMatchesSnapshot(unchanged, snapshot), true);
 });
 
+test("prepared carts bind both print sides through one preparation ID and immutable fingerprint", () => {
+  const prepared = { ...snapshot, schemaVersion: 2, preparation: { id: "CPP-" + "b".repeat(32) }, preparationSha256: "c".repeat(64) };
+  const actual = cart();
+  actual.lines.nodes[0].attributes.push({ key: "CAPPATEX_PREPARATION_ID", value: prepared.preparation.id },
+    { key: "CAPPATEX_PREPARATION_SHA256", value: prepared.preparationSha256 });
+  assert.equal(cartMatchesSnapshot(actual, prepared), true);
+  for (const mutate of [
+    value => { value.lines.nodes[0].attributes.pop(); },
+    value => { value.lines.nodes[0].attributes.at(-1).value = "d".repeat(64); },
+    value => { value.lines.nodes[0].attributes.push(value.lines.nodes[0].attributes.at(-1)); },
+    value => { value.lines.nodes[0].attributes.push({ key: "CAPPATEX_BACK_DESIGN_ID", value: "unapproved" }); },
+  ]) {
+    const changed = structuredClone(actual); mutate(changed); assert.equal(cartMatchesSnapshot(changed, prepared), false);
+  }
+  assert.equal(cartMatchesSnapshot(actual, snapshot), false, "Legacy cart cannot silently ignore prepared sides");
+});
+
+test("legacy carts cannot silently discard protected back or private CAPPATEX metadata", () => {
+  for (const key of ["CAPPATEX_BACK_DESIGN_ID", "_CAPPATEX_BACK", "CAPPATEX_PREPARATION_ID"]) {
+    const changed = cart(); changed.lines.nodes[0].attributes.push({ key, value: "unapproved" });
+    assert.equal(cartMatchesSnapshot(changed, snapshot), false);
+  }
+});
+
 test("Shopify stock adjustments, dropped lines and partial responses cannot redirect to payment", () => {
   for (const mutate of [
     value => { value.totalQuantity = 1; },

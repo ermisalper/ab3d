@@ -166,3 +166,30 @@ body:has(.brand-intro[open]) { overflow: hidden; }
   .brand-intro, .intro-replay { display: none !important; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Keep product controls and saved print sides usable on narrow screens. */
+.account-nav { height: auto; min-height: 80px; display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 16px 6vw; }
+.account-nav > a { min-width: 0; max-width: 100%; min-height: 44px; display: inline-flex; align-items: center; white-space: normal; overflow-wrap: anywhere; }
+.account-nav > a:not(.brand) { font-size: 13px; line-height: 1.4; }
+.account-nav > .brand { margin-right: auto; }
+.account-nav > a:nth-child(2) { display: inline-flex; }
+@media (max-width:760px) {
+  .cappatex-preview-panel > .cappatex-variant-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .cappatex-variant-fields > .cappatex-field { min-width: 0; }
+  .cappatex-variant-fields select { min-width: 0; max-width: 100%; }
+  .cappatex-placement-workbench .cappatex-customize { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .cappatex-placement-workbench .cappatex-customize > label { min-width: 0; }
+  .cappatex-placement-workbench .cappatex-customize > label:first-of-type { grid-column: 1 / -1; }
+  .cappatex-placement-workbench .cappatex-customize > button { min-width: 0; min-height: 44px; }
+  .cappatex-placement-workbench .cappatex-customize input[type="range"] { min-height: 44px; }
+  .cappatex-print-sides button, .cappatex-photo-options button { min-height: 44px; }
+  .cappatex-preparation > .button {
+    width: 100%; min-width: 0; max-width: 100%; padding: 12px 14px;
+    white-space: normal; overflow-wrap: anywhere; text-align: center;
+  }
+}
+@media (max-width:390px) {
+  .site-header .nav-shell { grid-template-columns: auto minmax(0,1fr) auto; }
+  .mobile-area-label { display: block; min-width: 0; font-size: 13px; white-space: nowrap; }
+  .nav-actions { grid-column: 3; }
+}

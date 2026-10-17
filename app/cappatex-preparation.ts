@@ -1,4 +1,5 @@
 import type { Placement, ProfileVariant } from "./cappatex-print-profile";
+import type { PreparedCheckoutStatus } from "./cappatex-prepared-checkout";
 
 export type PrintSide = "front" | "back";
 export type PreparationInput = { requestId: string; profileId: string; profileVersion: string; shopifyVariantId: string;
@@ -38,10 +39,12 @@ export function preparationInput(body: unknown): PreparationInput {
 }
 
 /** No storage paths or account identifiers are exposed by the review API. */
-export function preparationSummary(saved: PreparedDesign, canDownload: boolean) {
+export function preparationSummary(saved: PreparedDesign, canDownload: boolean, checkout: PreparedCheckoutStatus = {
+  enabled: false, reason: "Preis, Versand und der Bestellablauf sind für diese Druckseiten noch nicht freigegeben.",
+}) {
   return { id: saved.id, schemaVersion: saved.schemaVersion, createdAt: saved.createdAt, name: saved.name,
     profileId: saved.profileId, profileVersion: saved.profileVersion, variant: saved.variant, quantity: saved.quantity, country: saved.country,
-    purchaseReady: false, sides: saved.sides.map(s => ({ position: s.position, designId: s.designId, area: s.area, mockup: s.mockup,
+    purchaseReady: checkout.enabled, checkout, sides: saved.sides.map(s => ({ position: s.position, designId: s.designId, area: s.area, mockup: s.mockup,
       placement: s.placement, artwork: { width: s.artwork.width, height: s.artwork.height }, dpi: s.dpi, raster: s.raster,
       file: { width: s.file.width, height: s.file.height, sha256: s.file.sha256 },
       previewUrl: `/api/cappatex/artwork/${s.designId}`,

@@ -8,7 +8,8 @@ export async function GET(request: Request) {
   const user = await getChatGPTUser();
   const access = generationAccess(user?.email || "", "owner", process.env.CAPPATEX_GENERATION_ALLOWED_EMAILS);
   if (!user || !access.allowed) return new Response("Forbidden", { status: 403 });
-  const token = process.env.PRINTIFY_API_TOKEN?.trim();
+  const catalogToken = process.env.PRINTIFY_CATALOG_API_TOKEN?.trim();
+  const token = catalogToken || process.env.PRINTIFY_API_TOKEN?.trim();
   const shopId = process.env.PRINTIFY_SHOP_ID?.trim();
   if (!token || !shopId) return Response.json({ error: "printify_not_configured" }, { status: 503 });
   const params = new URL(request.url).searchParams;
@@ -28,6 +29,9 @@ export async function GET(request: Request) {
       get(`catalog/blueprints/${blueprint}/print_providers/${provider}/shipping.json`),
     ]) : null;
     return Response.json({ checkedAt: new Date().toISOString(), shopId, shops: await get("shops.json"), products,
+      catalogCredential: catalogToken ? "catalog_read_token" : "production_token_fallback",
+      productionWritePermissions: { status: "unverified", requiredScopes: ["products.write", "uploads.write", "orders.write"],
+        message: "Produktions-Schreibrechte sind ungeprüft. Erfolgreiche Leseabfragen bestätigen keine Schreibberechtigung." },
       finishedCatalog: catalog, blankCatalog: blanks, providerVariants: details?.[0], providerShipping: details?.[1],
       flags: { generation: process.env.CAPPATEX_GENERATION_ENABLED === "true", checkout: process.env.CAPPATEX_CHECKOUT_ENABLED === "true", fulfillment: process.env.CAPPATEX_FULFILLMENT_ENABLED === "true" } },
     { headers: { "Cache-Control": "private, no-store" } });

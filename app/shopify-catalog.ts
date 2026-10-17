@@ -18,6 +18,7 @@ export type ShopifyCatalogVariant = {
   currency: string;
   size: string;
   color: string;
+  selectedOptions: Array<{ name: string; value: string }>;
   image: string | null;
   imageAlt: string | null;
 };
@@ -146,8 +147,17 @@ function colorValue(name: string) {
   return colorPalette[normalizedKey(name)] || "#d8d0c3";
 }
 
-function optionValue(variant: StorefrontVariant, pattern: RegExp, fallback: string) {
-  return variant.selectedOptions?.find((option) => pattern.test(option.name || ""))?.value?.trim() || fallback;
+const optionNames = {
+  size: /^(gr[oö]sse|größe|size)$/i,
+  color: /^(farbe|color|colour)$/i,
+  paper: /^(paper|papier)$/i,
+  surface: /^(surface|oberfläche|oberflaeche)$/i,
+};
+
+/** Exact, unambiguous supplier-option identity. Display fallbacks must never approve a sale. */
+export function shopifyVariantOption(variant: Pick<ShopifyCatalogVariant, "selectedOptions">, key: keyof typeof optionNames) {
+  const matches = variant.selectedOptions?.filter(option => optionNames[key].test(option.name)) || [];
+  return matches.length === 1 && matches[0].value.length > 0 ? matches[0].value : null;
 }
 
 function cleanDescription(description = "") {
@@ -196,8 +206,12 @@ function normalizeProduct(product: StorefrontProduct): ShopifyCatalogProduct | n
   if (!product.id || !product.handle || !product.title) return null;
   const variants = (product.variants?.nodes || []).flatMap((variant): ShopifyCatalogVariant[] => {
     if (!variant.id || !variant.price) return [];
-    const size = optionValue(variant, /^(gr[oö]sse|größe|size)$/i, "Standard");
-    const color = optionValue(variant, /^(farbe|color|colour)$/i, "Standard");
+    if (variant.selectedOptions !== undefined && !Array.isArray(variant.selectedOptions)) return [];
+    const selectedOptions = (variant.selectedOptions || []).flatMap(option => option && typeof option.name === "string" && typeof option.value === "string"
+      ? [{ name: option.name, value: option.value }] : []);
+    if (selectedOptions.length !== (variant.selectedOptions || []).length) return [];
+    const size = shopifyVariantOption({ selectedOptions }, "size") || "Standard";
+    const color = shopifyVariantOption({ selectedOptions }, "color") || "Standard";
     return [{
       id: variant.id,
       title: variant.title || `${size} / ${color}`,
@@ -207,6 +221,7 @@ function normalizeProduct(product: StorefrontProduct): ShopifyCatalogProduct | n
       currency: variant.price.currencyCode || "CHF",
       size,
       color,
+      selectedOptions,
       image: variant.image?.url || product.featuredImage?.url || null,
       imageAlt: variant.image?.altText || product.featuredImage?.altText || null,
     }];

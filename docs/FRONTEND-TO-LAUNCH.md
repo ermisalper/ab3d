@@ -1,5 +1,7 @@
 # AB3D: von Frontend-Fertigstellung bis Verkaufsstart
 
+Aktueller konkreter Arbeitsstand und verbleibende Freigaben: [Verkaufsvorbereitung vom 17.10.2026](SHOP-LAUNCH-READINESS.md). Die folgenden Punkte beschreiben den ursprünglichen Stufenplan; eine implementierte Funktion ist noch keine Verkaufsabnahme.
+
 Diese Punkte bleiben bewusst deaktiviert, bis Oberfläche, Bedienung und mobile Darstellung freigegeben sind.
 
 ## Danach verbinden

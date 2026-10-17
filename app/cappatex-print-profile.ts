@@ -10,9 +10,14 @@ export type PrintProfile = {
   providerId: number;
   shopifyProductId: string;
   kind: "tshirt" | "tanktop" | "hoodie" | "sweatshirt" | "accessory";
+  optionKey?: "paper" | "surface";
   name: string;
   evidence: string[];
   fulfillment: { route: "ab3d-api"; nativeImportUnlinked: true; manualApproval: true };
+  backVariants?: Array<ProfileVariant>;
+  /** Explicit operator approval. A front-only price never implies a second print side. */
+  preparedCheckout?: { rendererVersion: string; offers: Array<{ shopifyVariantId: string; unitPriceCents: number;
+    currency: "CHF"; sideSets: Array<Array<"front" | "back">> }> };
   variants: Array<{
     printifyVariantId: number;
     shopifyVariantId: string;

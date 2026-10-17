@@ -32,7 +32,8 @@ export function PreparedReceipt({ receipt }: { receipt: PreparationSummary }) {
       {s.downloadUrl ? <a className="text-link" href={s.downloadUrl}>{sideName(s.position)} als Druck-PNG herunterladen</a> : <p>Original-Download für dein Konto noch nicht freigegeben.</p>}
     </article>)}</div>
     <a className="text-link" href={`/cappatex/vorbereitung/${receipt.id}`}>Gespeicherten Stand öffnen →</a>
-    <p>Nur für dein Konto sichtbar. Preis, Checkout und Produktion sind noch nicht freigegeben.</p>
+    <p>Nur für dein Konto sichtbar. {receipt.checkout?.enabled ? "Eine Bestellung wird erst im Shopify-Checkout abgeschlossen."
+      : "Preis, Checkout und Produktion sind noch nicht freigegeben."}</p>
   </div>;
 }
 

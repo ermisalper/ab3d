@@ -1,13 +1,12 @@
 import type { Placement, PrintProfile, ProfileVariant } from "./cappatex-print-profile";
+import type { PreparedDesign } from "./cappatex-preparation";
 
-export type CheckoutSnapshot = {
+type SnapshotBase = {
   id: string;
   email: string;
   designId: string;
-  artwork: { key: string; sha256: string; width: number; height: number; format: "png" };
   profile: PrintProfile;
   variant: ProfileVariant;
-  placement: Placement;
   quantity: number;
   country: "CH" | "LI";
   unitPriceCents: number;
@@ -15,12 +14,16 @@ export type CheckoutSnapshot = {
   legalVersion: string;
   consentAt: number;
 };
+export type LegacyCheckoutSnapshot = SnapshotBase & { schemaVersion?: 1;
+  artwork: { key: string; sha256: string; width: number; height: number; format: "png" }; placement: Placement };
+export type PreparedCheckoutSnapshot = SnapshotBase & { schemaVersion: 2; preparation: PreparedDesign; preparationSha256: string };
+export type CheckoutSnapshot = LegacyCheckoutSnapshot | PreparedCheckoutSnapshot;
 
 export type PaidLine = { id?: number | string; variant_id?: number | string; product_id?: number | string;
   quantity?: number; sku?: string; price?: string; total_discount?: string; discount_allocations?: Array<{ amount?: string }>;
   properties?: Array<{ name: string; value: string }> };
 
-function moneyCents(amount: string | undefined) {
+export function moneyCents(amount: string | undefined) {
   if (typeof amount !== "string" || !/^\d+(?:\.\d{1,2}0*)?$/.test(amount)) return null;
   const [whole, fraction = ""] = amount.split(".");
   const value = Number(whole) * 100 + Number(fraction.slice(0, 2).padEnd(2, "0"));
@@ -33,7 +36,19 @@ export function snapshotId(line: PaidLine) {
 }
 
 export function validatePaidLine(snapshot: CheckoutSnapshot, line: PaidLine, order: { currency?: string; email?: string; country?: string }) {
+  const preparations = line.properties?.filter(item => item.name === "CAPPATEX_PREPARATION_ID") || [];
+  const exactProperty = (name: string, value: string) => {
+    const matches = line.properties?.filter(item => item.name === name) || [];
+    return matches.length === 1 && matches[0].value === value;
+  };
   return snapshotId(line) === snapshot.id && Boolean(line.id)
+    && (snapshot.schemaVersion === 2 ? exactProperty("CAPPATEX_PREPARATION_ID", snapshot.preparation.id)
+      && exactProperty("CAPPATEX_DESIGN_ID", snapshot.designId) && exactProperty("CAPPATEX_PREPARATION_SHA256", snapshot.preparationSha256)
+      && !line.properties?.some(item => /^(CAPPATEX_|_CAPPATEX_)/.test(item.name)
+        && !["CAPPATEX_SNAPSHOT_ID", "CAPPATEX_DESIGN_ID", "CAPPATEX_PREPARATION_ID", "CAPPATEX_PREPARATION_SHA256"].includes(item.name))
+      : preparations.length === 0 && exactProperty("CAPPATEX_DESIGN_ID", snapshot.designId)
+        && !line.properties?.some(item => /^(CAPPATEX_|_CAPPATEX_)/.test(item.name)
+          && !["CAPPATEX_SNAPSHOT_ID", "CAPPATEX_DESIGN_ID"].includes(item.name)))
     && `gid://shopify/ProductVariant/${line.variant_id}` === snapshot.variant.shopifyVariantId
     && `gid://shopify/Product/${line.product_id}` === snapshot.profile.shopifyProductId
     && line.sku === snapshot.variant.sku && line.quantity === snapshot.quantity

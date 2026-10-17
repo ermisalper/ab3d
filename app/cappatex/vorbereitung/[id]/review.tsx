@@ -1,18 +1,80 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PreparedReceipt } from "../../cappatex-preparation-panel";
 import type { PreparationSummary } from "../../../cappatex-preparation";
 
+type ReviewReceipt = PreparationSummary & {
+  checkout?: { enabled: boolean; reason: string; unitPriceCents?: number; currency?: string };
+};
+const money = (cents: number) => new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF" }).format(cents / 100);
+
 export default function PreparedReview({ id }: { id: string }) {
-  const [receipt, setReceipt] = useState<PreparationSummary | null>(null);
-  const [message, setMessage] = useState("Gespeicherte Druckseiten werden geladen …");
+  const [receipt, setReceipt] = useState<ReviewReceipt | null>(null);
+  const [refresh, setRefresh] = useState(0);
+  const [busy, setBusy] = useState<"loading" | "checkout" | "">("loading");
+  const [error, setError] = useState("");
+  const [terms, setTerms] = useState(false);
   useEffect(() => {
     let active = true;
-    fetch(`/api/cappatex/preparations/${encodeURIComponent(id)}`, { cache: "no-store" }).then(async response => {
+    fetch(`/api/cappatex/preparations/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) }).then(async response => {
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Stand nicht verfügbar.");
-      if (active) { setReceipt(data); setMessage(""); }
-    }).catch(error => { if (active) setMessage(error.message); });
+      if (!data || data.id !== id) throw new Error("Der gespeicherte Stand konnte nicht eindeutig bestätigt werden.");
+      if (active) { setReceipt(data); setTerms(false); setBusy(""); }
+    }).catch(caught => {
+      if (active) { setError(caught instanceof Error ? caught.message : "Stand nicht verfügbar."); setBusy(""); }
+    });
     return () => { active = false; };
-  }, [id]);
-  return <>{message && <p role="status">{message}</p>}{receipt && <PreparedReceipt receipt={receipt} />}</>;
+  }, [id, refresh]);
+  const current = receipt?.id === id ? receipt : null;
+  const cents = current?.checkout?.unitPriceCents;
+  const validPrice = typeof cents === "number" && Number.isSafeInteger(cents) && cents >= 1
+    && current?.checkout?.currency === "CHF" && Number.isSafeInteger(current.quantity) && current.quantity >= 1 && current.quantity <= 5
+    && Number.isSafeInteger(cents * current.quantity) && ["CH", "LI"].includes(current.country);
+  const checkoutReady = current?.checkout?.enabled === true && validPrice;
+  const blockedReason = current?.checkout?.enabled === true && !validPrice
+    ? "Der freigegebene Preis konnte nicht bestätigt werden. Bitte prüfe den Stand erneut."
+    : typeof current?.checkout?.reason === "string" && current.checkout.reason.trim()
+      ? current.checkout.reason : "Checkout und Produktion warten auf die Produkt-, Preis- und Versandfreigabe.";
+  function reload() {
+    if (busy) return;
+    setReceipt(null); setTerms(false); setError(""); setBusy("loading"); setRefresh(value => value + 1);
+  }
+  async function checkout() {
+    if (!checkoutReady || !terms || busy) return;
+    setBusy("checkout"); setError("");
+    try {
+      const response = await fetch("/api/cappatex/checkout", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preparationId: id, termsAccepted: true }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Der Shopify-Checkout konnte nicht vorbereitet werden.");
+      if (typeof data.checkoutUrl !== "string") throw new Error("Der Shopify-Checkout hat keine gültige Adresse zurückgegeben.");
+      const url = new URL(data.checkoutUrl);
+      if (url.protocol !== "https:" || url.username || url.password) throw new Error("Die Checkout-Adresse konnte nicht sicher bestätigt werden.");
+      window.location.assign(url.toString());
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Der Shopify-Checkout ist gerade nicht erreichbar."); setBusy("");
+    }
+  }
+  return <>
+    <p role="status" aria-live="polite">{busy === "loading" ? "Gespeicherte Druckseiten und Checkout-Freigabe werden geprüft …"
+      : busy === "checkout" ? "Dein gespeicherter Stand wird für Shopify geprüft …" : ""}</p>
+    {error && <p className="cappatex-action-error" role="alert">{error}</p>}
+    {current && <>
+      <PreparedReceipt receipt={current} />
+      <section className="cappatex-preparation-receipt" aria-labelledby="prepared-checkout-heading" aria-busy={Boolean(busy)}>
+        <h2 id="prepared-checkout-heading">{checkoutReady ? "Bestellung vorbereiten" : "Preise und Versand werden noch geprüft"}</h2>
+        {checkoutReady && typeof cents === "number" ? <>
+          <p>{current.quantity} Stück · Lieferland: {current.country === "LI" ? "Liechtenstein" : "Schweiz"}</p>
+          <p>Stückpreis: <strong>{money(cents)}</strong> · Artikel gesamt: <strong>{money(cents * current.quantity)}</strong></p>
+          <p>Versand und endgültigen Gesamtpreis prüfst du im Shopify-Checkout. Deine gespeicherten Motive und Positionen werden gemeinsam übernommen.</p>
+          <label className="legal-consent cappatex-consent"><input type="checkbox" checked={terms} disabled={Boolean(busy)} onChange={event => setTerms(event.target.checked)} />
+            <span>Ich habe die gespeicherten Druckseiten geprüft und akzeptiere die <Link href="/recht/agb" target="_blank" rel="noopener noreferrer">AGB</Link>.
+              Die <Link href="/recht/datenschutz" target="_blank" rel="noopener noreferrer">Datenschutzerklärung</Link> habe ich gelesen.</span></label>
+          <button type="button" className="button primary" disabled={!terms || Boolean(busy)} onClick={checkout}>Weiter zu Shopify</button>
+        </> : <p>{blockedReason}</p>}
+      </section>
+    </>}
+    <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={reload}>Stand erneut prüfen</button>
+  </>;
 }

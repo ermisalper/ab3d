@@ -18,7 +18,6 @@ export type CappatexCheckoutCart = {
 };
 
 function moneyCents(amount: string | undefined) {
-  // MoneyV2 is decimal text. Reject fractional cents instead of rounding a changed price.
   if (typeof amount !== "string" || !/^\d+(?:\.\d{1,2}0*)?$/.test(amount)) return null;
   const [whole, fraction = ""] = amount.split(".");
   const value = Number(whole) * 100 + Number(fraction.slice(0, 2).padEnd(2, "0"));
@@ -49,5 +48,11 @@ export function cartMatchesSnapshot(cart: CappatexCheckoutCart, snapshot: Checko
     && moneyCents(line.cost?.totalAmount?.amount) === totalCents
     && line.cost?.totalAmount?.currencyCode === snapshot.currency
     && matchesAttribute("CAPPATEX_SNAPSHOT_ID", snapshot.id)
-    && matchesAttribute("CAPPATEX_DESIGN_ID", snapshot.designId);
+    && matchesAttribute("CAPPATEX_DESIGN_ID", snapshot.designId)
+    && (snapshot.schemaVersion === 2 ? matchesAttribute("CAPPATEX_PREPARATION_ID", snapshot.preparation.id)
+      && matchesAttribute("CAPPATEX_PREPARATION_SHA256", snapshot.preparationSha256)
+      && !attributes.some(attribute => /^(CAPPATEX_|_CAPPATEX_)/.test(attribute.key)
+        && !["CAPPATEX_SNAPSHOT_ID", "CAPPATEX_DESIGN_ID", "CAPPATEX_PREPARATION_ID", "CAPPATEX_PREPARATION_SHA256"].includes(attribute.key))
+      : !attributes.some(attribute => /^(CAPPATEX_|_CAPPATEX_)/.test(attribute.key)
+        && !["CAPPATEX_SNAPSHOT_ID", "CAPPATEX_DESIGN_ID"].includes(attribute.key)));
 }
