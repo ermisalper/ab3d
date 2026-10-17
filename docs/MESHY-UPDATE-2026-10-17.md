@@ -41,3 +41,11 @@ Kein kostenpflichtiger Meshy-Auftrag, keine KI-Bildgenerierung, keine Bestellung
 Der lokale Meshy-Skill-Check findet keinen lokalen Meshy-Schlüssel und kein Python-requests; die Web-Anbindung nutzt ihren bestehenden Hosting-Schlüssel. Für das Update werden weder ein neuer lokaler Schlüssel noch Python-Pakete benötigt.
 
 Der separate Live-Verbindungstest per Service-Zugang erreicht die private Site, wird aber ohne Besucheridentität vom geschützten Health-Endpunkt mit 401 abgewiesen. Dabei wird Meshy nicht kontaktiert. Das bestätigt keinen Schlüsseldefekt; die Browseranmeldung und der reine Sites-Service-Zugang sind bewusst getrennt. Die Kontoprüfung wird nicht umgangen und der Endpunkt nicht öffentlich gemacht. Ein erfolgreicher aktueller Anbieter-Healthcheck bleibt deshalb unbestätigt.
+
+## Privater Live-Nachweis
+
+Version **50**, Quellcommit **52cb0881588455f7a8e2519adadcc80597569f1a**, Version-ID `appgprj_6a69247390f08191811183b6a04bae94~appgver_fc8c8c557ecc8191841869c069970145`. Deployment `appgdep_6ad37808a9c081919e14d462da09c3a2` erfolgreich am 17.10.2026 um 13:29:02 UTC, Umgebung weiterhin Revision 11 und Zugriff owner-private.
+
+Im angemeldeten Live-Browser Foto-Vorlage gewählt, Schnellvorschau T2.5 und finales Modell 7.1 ausgewählt, passende Prozessanzeige bestätigt. Desktop und Mobilansicht 390 × 844 geprüft, keine horizontale Überbreite, keine Konsolenfehler im geprüften Studio. Kein Upload und keine Generierung ausgelöst. Bildnachweis: `outputs/ab3d-meshy-update-live-20261017.png`. GitHub-Branch gesichert. Spätere Dokumentationscommits ändern den oben genannten Live-Quellstand nicht.
+
+Bei der Paketvorbereitung wurde eine veraltete Quellstandangabe von der automatischen Freigabe abgelehnt. Nach erneutem Vergleich von sauberem lokalem HEAD und GitHub-Branch wurde ausschliesslich der bestätigte neue Commit verwendet. Der offizielle Sites-Helfer scheiterte danach wie zuvor am Windows-Bash-Packager; das vorhandene Windows-Verfahren prüfte Commit, Hosting-Manifest, Migrationen und Paketinhalt (keine lokalen Schlüssel enthalten), bevor das private Deployment ausgeführt wurde.
