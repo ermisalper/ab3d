@@ -120,6 +120,7 @@ test("owner response contains only operational metadata, generic reasons and boo
   assert.equal(result.configuration.automaticProductionRequested, false); assert.equal(result.configuration.productionWritePermissions, "unverified");
   assert.equal(result.configuration.webhookConfigured, true);
   assert.equal(typeof result.configuration.registeredProfiles, "number");
+  assert.equal(result.configuration.registeredShippingReleases, 0);
   assert.ok(Number.isSafeInteger(result.checkedAt));
   const serialized = JSON.stringify(result);
   for (const hidden of ["hidden@example.test", "private/artwork", "secret-customer", "offline-webhook-secret", "fixture-shop.myshopify.com", "payload_json", "input_sha256", "request_sha256"])
@@ -176,7 +177,7 @@ test("uncertain creation is always reviewable, while stale preparation and creat
 });
 
 test("known review reasons are human-readable and unknown provider messages are not reflected", () => {
-  for (const code of ["order_changed", "snapshot_already_consumed", "preparation_failed"])
+  for (const code of ["order_changed", "snapshot_already_consumed", "preparation_failed", "shipping_unapproved"])
     assert.ok(!fulfillmentSummary(row("manual_review", 0, code)).reason.includes(code));
   assert.equal(fulfillmentSummary(row("manual_review", 0, "private-error-payload")).reason, "Weitere Prüfung erforderlich.");
   assert.equal(fulfillmentSummary(row("pending", 0)).reason, null);

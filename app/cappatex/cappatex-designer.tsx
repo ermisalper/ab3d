@@ -6,6 +6,7 @@ import CappatexPreparationPanel from "./cappatex-preparation-panel";
 import GalleryConsent from "../gallery-consent";
 import { galleryChoiceValid, newGalleryDraft } from "../gallery-policy";
 import { initialPlacement, placementGeometry, type ArtworkSize, type Placement } from "../cappatex-print-profile";
+import { maximumPrintSizeCm, printSizeHelp } from "../cappatex-print-size";
 import type { CappatexDesignProduct } from "../cappatex-design-catalog";
 import { prepareCustomerImage } from "../cappatex-upload-client";
 import { designStateUrl, readDesignState, retainedPlacement, verifiedDesignSelection, rememberConfiguration, rememberedConfiguration, reconcileConfigurations,
@@ -13,6 +14,7 @@ import { designStateUrl, readDesignState, retainedPlacement, verifiedDesignSelec
 
 const styles = ["Minimal", "Illustrativ", "Retro", "Streetwear"];
 const money = (amount: number, currency: string) => new Intl.NumberFormat("de-CH", { style: "currency", currency }).format(amount);
+const centimetres = (value: number) => value < .1 ? "<0.1" : new Intl.NumberFormat("de-CH", { maximumFractionDigits: 1 }).format(Math.floor(value * 10 + 1e-9) / 10);
 type DesignVariant = CappatexDesignProduct["variants"][number];
 
 function photoPrintArea(variant: DesignVariant): CSSProperties {
@@ -113,6 +115,9 @@ export default function CappatexDesigner() {
   const placement = useMemo(() => selectedPlacement || (variant ? initialPlacement(variant.area, artwork) : { x: .5, y: .5, scale: .5 }),
     [selectedPlacement, variant, artwork]);
   const geometry = variant ? placementGeometry(variant.area, artwork, placement) : null;
+  const printHelp = image && variant ? printSizeHelp(artwork, variant.area) : null;
+  const uploadExampleDpi = variant?.area.minDpi || 300;
+  const uploadExample = maximumPrintSizeCm({ width: 2048, height: 3072 }, uploadExampleDpi)!;
   const blankIdentity = variant ? `${product?.id}:${product?.profileVersion}:${variant.shopifyVariantId}:${variant.mockup.url}` : "";
   const previewReady = Boolean(image && loadedArtwork === image && variant && loadedBlank === blankIdentity);
   const galleryHint = !galleryChoice.visibility ? "Bitte wähle, ob dein Motiv privat bleibt oder für die Galerie vorgeschlagen wird."
@@ -318,7 +323,9 @@ export default function CappatexDesigner() {
             : "Die KI-Generierung wartet auf den freigegebenen Test. Du kannst deine Idee bereits formulieren; es entstehen keine API-Kosten."}</p>
           </> : <div className="cappatex-upload">
             <label className="cappatex-field">Bild auswählen<input type="file" accept="image/png,image/jpeg" disabled={Boolean(busy)} onChange={e => { setUploadFile(e.target.files?.[0] || null); setImageRights(false); setError(""); setCreationError(null); }} /></label>
-            <p>PNG oder JPG, bis 12 MB und 6,29 Megapixel. Dein Bild wird ohne KI-Bearbeitung und ohne Verkleinerung als PNG-Druckdatei gespeichert. Bitte prüfe danach Farben, Ausrichtung und Platzierung in der Vorschau.</p>
+            <p>PNG oder JPG, bis 12 MB und 6,29 Megapixel. Als Grössenvergleich: 2048 × 3072 Pixel reichen bei {uploadExampleDpi} dpi für höchstens {centimetres(uploadExample.maxWidthCm)} × {centimetres(uploadExample.maxHeightCm)} cm Motivgrösse.
+              Grosse Druckflächen können damit nur teilweise bedeckt werden. Nach der Übernahme siehst du die Druckgrössen-Hilfe für deine Datei.
+              Dein Bild wird ohne KI-Bearbeitung und ohne Verkleinerung als PNG-Druckdatei gespeichert.</p>
             <label className="legal-consent cappatex-consent"><input type="checkbox" checked={imageRights} onChange={e => setImageRights(e.target.checked)} />
               <span>Ich darf dieses Bild verwenden und bedrucken lassen.</span></label>
             <GalleryConsent studio="cappatex" value={galleryChoice} onChange={setGalleryChoice} disabled={Boolean(busy)}/>
@@ -379,6 +386,14 @@ export default function CappatexDesigner() {
         </div>
         {image && geometry && <p className={geometry.ok ? "cappatex-quality-ok" : "cappatex-error"} role="status">{geometry.reason}
           {geometry.dpi !== undefined && <> · {Math.floor(geometry.dpi)} dpi · {Math.round(geometry.widthMm!)} × {Math.round(geometry.heightMm!)} mm</>}</p>}
+        {printHelp && <div className="cappatex-profile-note" role="note" aria-label="Druckgrösse deiner Datei">
+          <p><strong>Druckgrösse deiner Datei:</strong> Bei mindestens {printHelp.minDpi} dpi reicht die Originalauflösung für höchstens {centimetres(printHelp.maxWidthCm)} × {centimetres(printHelp.maxHeightCm)} cm Motivgrösse.
+            Zusätzlich gilt die geprüfte Druckfläche des Produkts.</p>
+          {printHelp.insufficientResolutionForFullArea && <p>{printHelp.canPlaceAtMinimumDpi
+            ? "Dieses Motiv eignet sich für einen Teilbereich; randfüllend ist mit dieser Auflösung nicht möglich."
+            : "Die Auflösung reicht auf diesem Produkt auch bei der kleinsten erlaubten Motivgrösse nicht aus."}</p>}
+          {!printHelp.aspectMatches && <p>Motiv und Druckfläche haben unterschiedliche Seitenverhältnisse. Beim proportionalen Einpassen bleiben Ränder.</p>}
+        </div>}
         {image && (canDownloadHd || uploadedArtwork) && <a className="text-link" href={`${image}?download=1`}>Freigegebene PNG-Druckdatei herunterladen →</a>}
         {variant && <>
           {product?.mockupReferenceSize && <p className="cappatex-profile-note">Produktansicht: Referenzgrösse {product.mockupReferenceSize}. Druckmasse für deine gewählte Grösse.</p>}

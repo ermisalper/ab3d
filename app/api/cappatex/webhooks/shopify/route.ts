@@ -11,8 +11,10 @@ import { preparedDraftPayload, preparedDraftMatches } from "../../../../cappatex
 import { preparedPrintFiles, validatePreparedSnapshot, type PreparedCheckoutContext } from "../../../../cappatex-prepared-checkout";
 import type { PrintSide } from "../../../../cappatex-preparation";
 import { snapshotId, validatePaidLine, verifyShopifyHmac, type CheckoutSnapshot, type PaidLine } from "../../../../cappatex-snapshot";
+import { paidShippingMatchesRelease, shippingReleaseForBasket, snapshotShippingBasket, snapshotShippingReleaseIsCurrent,
+  type ShippingPaidOrder } from "../../../../cappatex-shipping";
 
-type PaidOrder = Omit<ShopifyOrderPayload, "line_items"> & { test?: boolean; cancelled_at?: string | null; line_items: PaidLine[] };
+type PaidOrder = Omit<ShopifyOrderPayload, "line_items"> & ShippingPaidOrder & { test?: boolean; cancelled_at?: string | null; line_items: PaidLine[] };
 const reply = (status: string) => Response.json({ ok: true, status }, { headers: { "Cache-Control": "no-store" } });
 
 export async function POST(request: Request) {
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
   if (!await verifyShopifyHmac(raw, request.headers.get("x-shopify-hmac-sha256") || "", secret)) return new Response("Invalid signature", { status: 401 });
   let order: PaidOrder;
   try { order = JSON.parse(new TextDecoder().decode(raw)); } catch { return new Response("Invalid JSON", { status: 400 }); }
-  if (!order.id || order.financial_status !== "paid" || !Array.isArray(order.line_items) || !order.shipping_address
+  if (!order || typeof order !== "object" || !order.id || order.financial_status !== "paid" || !Array.isArray(order.line_items) || !order.shipping_address
     || order.cancelled_at || order.test) return new Response("Order not eligible", { status: 400 });
   try {
     await recordPaidShopifyOrder(order);
@@ -39,21 +41,37 @@ export async function POST(request: Request) {
       || CAPPATEX_PRINT_PROFILES.some(p => p.variants.some(v => v.shopifyVariantId === `gid://shopify/ProductVariant/${line.variant_id}`)));
     if (!customLines.length) return reply("order_recorded");
     const id = `${domain}:${order.id}`;
-    const inputHash = await sha256(JSON.stringify({ id, lines: customLines, address: order.shipping_address,
-      email: order.email, currency: order.currency }));
+    const inputHash = await sha256(JSON.stringify({ id, lines: order.line_items, address: order.shipping_address,
+      email: order.email, currency: order.currency, presentmentCurrency: order.presentment_currency,
+      shippingLines: order.shipping_lines, totalShipping: order.total_shipping_price_set, currentShipping: order.current_shipping_price_set }));
     const existing = await env.DB.prepare("SELECT input_sha256,state FROM cappatex_fulfillments WHERE id = ?").bind(id)
       .first<{ input_sha256: string; state: string }>();
     if (existing && (existing.input_sha256 !== inputHash || existing.state !== "pending")) {
-      if (existing.input_sha256 !== inputHash) await env.DB.prepare(
-        "UPDATE cappatex_fulfillments SET state = CASE WHEN state IN ('pending','preparing') THEN 'manual_review' ELSE state END, error_code = 'order_changed', updated_at = ? WHERE id = ?",
-      ).bind(Date.now(), id).run();
+      if (existing.input_sha256 !== inputHash) {
+        // Classify a changed shipping envelope without replaying provider calls or touching an existing remote order.
+        const prior = [];
+        for (const line of customLines) {
+          const sid = snapshotId(line);
+          const stored = sid ? await env.DB.prepare("SELECT payload_json,payload_sha256 FROM cappatex_snapshots WHERE id = ?")
+            .bind(sid).first<{ payload_json: string; payload_sha256: string }>() : null;
+          if (!stored || await sha256(stored.payload_json) !== stored.payload_sha256) break;
+          prior.push(JSON.parse(stored.payload_json) as CheckoutSnapshot);
+        }
+        const shipping = prior.length === customLines.length && customLines.length === order.line_items.length
+          ? shippingReleaseForBasket(prior.map(snapshotShippingBasket), order.shipping_address.country_code) : null;
+        const code = shipping && paidShippingMatchesRelease(order, shipping) ? "order_changed" : "shipping_unapproved";
+        await env.DB.prepare(
+          "UPDATE cappatex_fulfillments SET state = CASE WHEN state IN ('pending','preparing') THEN 'manual_review' ELSE state END, error_code = ?, updated_at = ? WHERE id = ?",
+        ).bind(code, Date.now(), id).run();
+      }
       return reply(existing.input_sha256 === inputHash ? existing.state : "order_changed_manual_review");
     }
     const shopId = process.env.PRINTIFY_SHOP_ID?.trim() || "";
     const snapshots: CheckoutSnapshot[] = [];
     const preparedContext: PreparedCheckoutContext = {};
-    let valid = customLines.length <= 5;
-    for (const line of customLines) {
+    let shippingUnapproved = customLines.length !== order.line_items.length;
+    let valid = customLines.length <= 5 && !shippingUnapproved;
+    for (const line of valid ? customLines : []) {
       const sid = snapshotId(line);
       const row = sid ? await env.DB.prepare("SELECT payload_json,payload_sha256,state FROM cappatex_snapshots WHERE id = ?")
         .bind(sid).first<{ payload_json: string; payload_sha256: string; state: string }>() : null;
@@ -63,9 +81,14 @@ export async function POST(request: Request) {
       const current = CAPPATEX_PRINT_PROFILES.find(p => p.id === snapshot.profile.id && p.version === snapshot.profile.version);
       if (!current || JSON.stringify(current) !== JSON.stringify(snapshot.profile) || !profileIsVerified(current, shopId)
         || !validatePaidLine(snapshot, line, { currency: order.currency, email: order.email, country: order.shipping_address.country_code })) { valid = false; break; }
+      if (!await snapshotShippingReleaseIsCurrent(snapshot)) { valid = false; shippingUnapproved = true; break; }
       if (snapshot.schemaVersion === 2 ? !(await validatePreparedSnapshot(snapshot, preparedContext)).ok
         : !placementGeometry(snapshot.variant.area, snapshot.artwork, snapshot.placement).ok) { valid = false; break; }
       snapshots.push(snapshot);
+    }
+    if (valid) {
+      const shipping = shippingReleaseForBasket(snapshots.map(snapshotShippingBasket), order.shipping_address.country_code);
+      if (!shipping || !paidShippingMatchesRelease(order, shipping)) { valid = false; shippingUnapproved = true; }
     }
     const now = Date.now();
     const enabled = process.env.CAPPATEX_FULFILLMENT_ENABLED === "true"
@@ -73,8 +96,8 @@ export async function POST(request: Request) {
     const state = valid && enabled ? "pending" : "manual_review";
     try {
       if (!existing) await env.DB.batch([
-        env.DB.prepare("INSERT INTO cappatex_fulfillments (id,external_id,input_sha256,state,created_at,updated_at) VALUES (?,?,?,?,?,?)")
-          .bind(id, `ab3d-${order.id}`, inputHash, state, now, now),
+        env.DB.prepare("INSERT INTO cappatex_fulfillments (id,external_id,input_sha256,state,error_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?)")
+          .bind(id, `ab3d-${order.id}`, inputHash, state, shippingUnapproved ? "shipping_unapproved" : null, now, now),
         ...(valid ? snapshots.map((snapshot, index) => env.DB.prepare(
           "INSERT INTO cappatex_fulfillment_lines (snapshot_id,fulfillment_id,shopify_line_id) VALUES (?,?,?)",
         ).bind(snapshot.id, id, String(customLines[index].id))) : []),
@@ -82,7 +105,8 @@ export async function POST(request: Request) {
     } catch {
       const duplicate = await env.DB.prepare("SELECT input_sha256,state FROM cappatex_fulfillments WHERE id = ?").bind(id).first<{ input_sha256: string; state: string }>();
       if (duplicate && duplicate.input_sha256 !== inputHash) {
-        await env.DB.prepare("UPDATE cappatex_fulfillments SET state = CASE WHEN state IN ('pending','preparing') THEN 'manual_review' ELSE state END, error_code = 'order_changed', updated_at = ? WHERE id = ?").bind(Date.now(), id).run();
+        await env.DB.prepare("UPDATE cappatex_fulfillments SET state = CASE WHEN state IN ('pending','preparing') THEN 'manual_review' ELSE state END, error_code = ?, updated_at = ? WHERE id = ?")
+          .bind(shippingUnapproved ? "shipping_unapproved" : "order_changed", Date.now(), id).run();
         return reply("order_changed_manual_review");
       }
       if (duplicate && duplicate.state !== "pending") return reply(duplicate.state);
@@ -101,17 +125,22 @@ export async function POST(request: Request) {
     await env.DB.prepare("INSERT OR IGNORE INTO cappatex_webhook_events (id,topic,received_at) VALUES (?,?,?)")
       .bind(eventId, topic, now).run();
     if (state !== "pending") {
-      await env.DB.prepare("UPDATE cappatex_fulfillments SET state = 'manual_review', updated_at = ? WHERE id = ? AND state = 'pending'").bind(now, id).run();
+      await env.DB.prepare("UPDATE cappatex_fulfillments SET state = 'manual_review', error_code = COALESCE(?,error_code), updated_at = ? WHERE id = ? AND state = 'pending'")
+        .bind(shippingUnapproved ? "shipping_unapproved" : null, now, id).run();
       return reply("manual_review");
     }
     const token = process.env.PRINTIFY_API_TOKEN?.trim();
+    let preparationErrorCode = "preparation_failed";
     const result = await createDraftOnce({
       claim: async () => Boolean(await env.DB.prepare(CLAIM_FULFILLMENT).bind(Date.now(), id).first()),
       prepare: async () => {
         if (!token) throw new Error("printify_unconfigured");
+        const shipping = shippingReleaseForBasket(snapshots.map(snapshotShippingBasket), order.shipping_address?.country_code);
+        if (!shipping || !paidShippingMatchesRelease(order, shipping)) { preparationErrorCode = "shipping_unapproved"; throw new Error("shipping_unapproved"); }
         const live = await verifiedCatalog();
         const lines = [];
         for (const snapshot of snapshots) {
+          if (!await snapshotShippingReleaseIsCurrent(snapshot)) { preparationErrorCode = "shipping_unapproved"; throw new Error("shipping_unapproved"); }
           if (!live.some(p => p.id === snapshot.profile.id && p.variants.some(v => v.shopifyVariantId === snapshot.variant.shopifyVariantId)))
             throw new Error("availability_changed");
           const images: Partial<Record<PrintSide, { id: string; width: number; height: number }>> = {};
@@ -166,7 +195,7 @@ export async function POST(request: Request) {
         const a = order.shipping_address!;
         if (!a.first_name || !a.last_name || !a.address1 || !a.city || !a.zip || !["CH","LI"].includes(a.country_code || "")) throw new Error("invalid_address");
         return { external_id: `ab3d-${order.id}`, label: order.name || `Shopify ${order.id}`, line_items: lines,
-          shipping_method: 1, send_shipping_notification: false,
+          shipping_method: shipping.printifyMethod, send_shipping_notification: false,
           address_to: { first_name: a.first_name, last_name: a.last_name, email: order.email || "",
             phone: a.phone || order.phone || "", country: a.country_code, region: a.province_code || "",
             ...(typeof a.company === "string" && a.company.trim() ? { company: a.company } : {}),
@@ -183,7 +212,8 @@ export async function POST(request: Request) {
         return created.id;
       },
       finish: async printifyId => { await env.DB.prepare(FINISH_CREATE).bind(printifyId, Date.now(), id).run(); },
-      hold: async () => { await env.DB.prepare("UPDATE cappatex_fulfillments SET state = 'manual_review', error_code = 'preparation_failed', updated_at = ? WHERE id = ? AND state = 'preparing'").bind(Date.now(), id).run(); },
+      hold: async () => { await env.DB.prepare("UPDATE cappatex_fulfillments SET state = 'manual_review', error_code = ?, updated_at = ? WHERE id = ? AND state = 'preparing'")
+        .bind(preparationErrorCode, Date.now(), id).run(); },
     });
     // Production always requires manual approval. This route has no production-submit action.
     return reply(result);

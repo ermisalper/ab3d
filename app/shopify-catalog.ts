@@ -15,6 +15,8 @@ export type ShopifyCatalogVariant = {
   sku: string;
   available: boolean;
   price: number;
+  /** Unmodified MoneyV2 amount for exact monetary validation; price remains the display number. */
+  priceAmount: string;
   currency: string;
   size: string;
   color: string;
@@ -205,7 +207,11 @@ export async function shopifyStorefrontRequest<T>(query: string, variables: Reco
 function normalizeProduct(product: StorefrontProduct): ShopifyCatalogProduct | null {
   if (!product.id || !product.handle || !product.title) return null;
   const variants = (product.variants?.nodes || []).flatMap((variant): ShopifyCatalogVariant[] => {
-    if (!variant.id || !variant.price) return [];
+    if (!variant.id || !variant.price || typeof variant.price.amount !== "string") return [];
+    const price = Number(variant.price.amount);
+    const currency = variant.price.currencyCode;
+    if (!/^\d+(?:\.\d+)?$/.test(variant.price.amount) || !Number.isFinite(price)
+      || typeof currency !== "string" || !/^[A-Z]{3}$/.test(currency)) return [];
     if (variant.selectedOptions !== undefined && !Array.isArray(variant.selectedOptions)) return [];
     const selectedOptions = (variant.selectedOptions || []).flatMap(option => option && typeof option.name === "string" && typeof option.value === "string"
       ? [{ name: option.name, value: option.value }] : []);
@@ -217,8 +223,9 @@ function normalizeProduct(product: StorefrontProduct): ShopifyCatalogProduct | n
       title: variant.title || `${size} / ${color}`,
       sku: variant.sku?.trim() || "",
       available: Boolean(variant.availableForSale),
-      price: Number(variant.price.amount),
-      currency: variant.price.currencyCode || "CHF",
+      price,
+      priceAmount: variant.price.amount,
+      currency,
       size,
       color,
       selectedOptions,
@@ -230,7 +237,7 @@ function normalizeProduct(product: StorefrontProduct): ShopifyCatalogProduct | n
   const availableVariants = variants.filter((variant) => variant.available);
   const pricedVariants = availableVariants.length ? availableVariants : variants;
   const minPrice = Math.min(...pricedVariants.map((variant) => variant.price));
-  const currency = pricedVariants[0]?.currency || "CHF";
+  const currency = pricedVariants[0].currency;
   const colorNames = unique(variants.map((variant) => variant.color));
   return {
     id: product.handle,

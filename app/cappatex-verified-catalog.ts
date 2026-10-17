@@ -2,6 +2,7 @@ import { CAPPATEX_PRINT_PROFILES } from "./cappatex-profiles";
 import { profileIsVerified, type PrintProfile } from "./cappatex-print-profile";
 import { duplicateShopifySkus, fetchPrintifyProducts, uniquePrintifySkuIndex } from "./printify-catalog";
 import { fetchShopifyCollection, SHOPIFY_COLLECTIONS, shopifyVariantOption } from "./shopify-catalog";
+import { moneyCents } from "./cappatex-snapshot";
 
 export async function verifiedCatalog() {
   const shopId = process.env.PRINTIFY_SHOP_ID?.trim() || "";
@@ -39,14 +40,14 @@ export async function verifiedCatalog() {
         live.variant_ids.includes(verified.printifyVariantId) && live.countries.includes(rate.country)
         && live.first_item.currency === rate.currency && live.first_item.cost === rate.firstCents
         && live.additional_items.currency === rate.currency && live.additional_items.cost === rate.additionalCents));
-      if (!shopify?.available || !printify || duplicates.has(verified.sku) || !shippingMatches
+      if (!shopify?.available || moneyCents(shopify.priceAmount) === null || !printify || duplicates.has(verified.sku) || !shippingMatches
         || shopifyVariantOption(shopify, optionKey) !== verified.color || shopifyVariantOption(shopify, "size") !== verified.size
         || providerVariant?.options?.[optionKey] !== verified.color || providerVariant?.options?.size !== verified.size
         || printify.product.id !== profile.printifyProductId || printify.product.blueprint_id !== profile.blueprintId
         || printify.product.print_provider_id !== profile.providerId || printify.variant.id !== verified.printifyVariantId
         || printify.variant.is_enabled !== true || printify.variant.is_available !== true
         || area?.width !== verified.area.widthPx || area?.height !== verified.area.heightPx) return [];
-      return [{ ...verified, title: shopify.title, available: true, price: { amount: shopify.price.toFixed(2), currencyCode: shopify.currency } }];
+      return [{ ...verified, title: shopify.title, available: true, price: { amount: shopify.priceAmount, currencyCode: shopify.currency } }];
     });
     if (variants.length) result.push({ id: profile.id, name: profile.name, kind: profile.kind,
       profileVersion: profile.version, profile, variants });

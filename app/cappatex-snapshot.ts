@@ -1,5 +1,6 @@
 import type { Placement, PrintProfile, ProfileVariant } from "./cappatex-print-profile";
 import type { PreparedDesign } from "./cappatex-preparation";
+import type { ShippingReleaseBinding } from "./cappatex-shipping";
 
 type SnapshotBase = {
   id: string;
@@ -13,10 +14,12 @@ type SnapshotBase = {
   currency: string;
   legalVersion: string;
   consentAt: number;
+  shippingRelease?: ShippingReleaseBinding;
 };
 export type LegacyCheckoutSnapshot = SnapshotBase & { schemaVersion?: 1;
   artwork: { key: string; sha256: string; width: number; height: number; format: "png" }; placement: Placement };
-export type PreparedCheckoutSnapshot = SnapshotBase & { schemaVersion: 2; preparation: PreparedDesign; preparationSha256: string };
+export type PreparedCheckoutSnapshot = SnapshotBase & { schemaVersion: 2; preparation: PreparedDesign; preparationSha256: string;
+  shippingRelease: ShippingReleaseBinding };
 export type CheckoutSnapshot = LegacyCheckoutSnapshot | PreparedCheckoutSnapshot;
 
 export type PaidLine = { id?: number | string; variant_id?: number | string; product_id?: number | string;

@@ -24,7 +24,7 @@ const { fetchShopifyCollection, shopifyVariantOption } = await import("../app/sh
 const oldFetch = globalThis.fetch, oldEnv = { ...process.env };
 const envNames = ["PRINTIFY_SHOP_ID", "PRINTIFY_API_TOKEN", "PRINTIFY_CATALOG_API_TOKEN", "SHOPIFY_STORE_DOMAIN", "SHOPIFY_STOREFRONT_ACCESS_TOKEN"];
 const productId = "gid://shopify/Product/303", variantId = "gid://shopify/ProductVariant/202";
-let selectedOptions, providerOptions, requests;
+let selectedOptions, providerOptions, requests, priceAmount, currencyCode;
 const makeProfile = (optionKey = "paper", value = "Matte") => ({
   id: "offline-options-only", version: "fixture-v1", verifiedAt: "2020-01-01T00:00:00Z", validUntil: "2100-01-01T00:00:00Z",
   shopId: "fixture-shop", printifyProductId: "fixture-blank", blueprintId: 301, providerId: 401, shopifyProductId: productId,
@@ -40,12 +40,14 @@ function storefront() {
   return { data: { collection: { id: "gid://shopify/Collection/1", handle: "cappatex-selbst-gestalten", title: "Offline catalog",
     products: { pageInfo: { hasNextPage: false }, nodes: [{ id: productId, handle: "offline-poster", title: "Offline poster",
       variants: { pageInfo: { hasNextPage: false }, nodes: [{ id: variantId, sku: "OFFLINE-PAPER-A4", title: "Matte / A4", availableForSale: true,
-        price: { amount: "30.00", currencyCode: "CHF" }, ...(selectedOptions === undefined ? {} : { selectedOptions }) }] } }] } } } };
+        price: { amount: priceAmount, currencyCode }, ...(selectedOptions === undefined ? {} : { selectedOptions }) }] } }] } } } };
 }
 beforeEach(() => {
   fixture.profiles.splice(0, fixture.profiles.length, makeProfile());
   selectedOptions = [{ name: "Paper", value: "Matte" }, { name: "Size", value: "A4" }];
   providerOptions = { paper: "Matte", size: "A4" }; requests = [];
+  priceAmount = "30.00";
+  currencyCode = "CHF";
   Object.assign(process.env, { PRINTIFY_SHOP_ID: "fixture-shop", PRINTIFY_API_TOKEN: "offline-placeholder", PRINTIFY_CATALOG_API_TOKEN: "", SHOPIFY_STORE_DOMAIN: "option-fixture.myshopify.com", SHOPIFY_STOREFRONT_ACCESS_TOKEN: "" });
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(input); requests.push({ url: url.href, method: init.method || "GET" });
@@ -123,4 +125,31 @@ test("paper support grants no native-import, production or sales approval", asyn
   assert.deepEqual(await verifiedCatalog(), []); assert.equal(requests.length, 0);
   fixture.profiles.length = 0;
   assert.deepEqual(await verifiedCatalog(), []); assert.equal(requests.length, 0);
+});
+
+for (const amount of ["19.90", "19.9000", "19.9", "19", "0.01"]) test(`Shopify MoneyV2 preserves the exact valid amount ${amount} through sales validation`, async () => {
+  priceAmount = amount;
+  const normalized = (await fetchShopifyCollection("cappatex-selbst-gestalten")).products[0].variants[0];
+  assert.equal(normalized.priceAmount, amount);
+  assert.equal(normalized.price, Number(amount), "Existing display-price consumers remain compatible");
+  const sales = await verifiedCatalog(); assert.equal(sales.length, 1);
+  assert.deepEqual(sales[0].variants[0].price, { amount, currencyCode: "CHF" });
+});
+
+for (const amount of ["19.901", "19.9001", "NaN", "Infinity", "-Infinity", "1e2", " 19.90 ", "", "-1.00", "19.", "19,90", "9007199254740992", 19.9, null, undefined]) test(`invalid or fractional-cent MoneyV2 amount cannot become a rounded sales approval: ${String(amount)}`, async () => {
+  priceAmount = amount;
+  assert.deepEqual(await verifiedCatalog(), []);
+});
+
+for (const code of [undefined, null, "", "chf", "CH", "CHFF", " CHF", "CHF ", 756]) test(`missing or malformed MoneyV2 currency cannot become an invented CHF approval: ${String(code)}`, async () => {
+  currencyCode = code;
+  assert.deepEqual((await fetchShopifyCollection("cappatex-selbst-gestalten")).products, []);
+  assert.deepEqual(await verifiedCatalog(), []);
+});
+
+for (const code of ["CHF", "EUR", "USD", "JPY"]) test(`normalization preserves the original valid MoneyV2 currency ${code}`, async () => {
+  currencyCode = code;
+  const normalized = (await fetchShopifyCollection("cappatex-selbst-gestalten")).products[0];
+  assert.equal(normalized.currency, code); assert.equal(normalized.variants[0].currency, code);
+  assert.equal((await verifiedCatalog())[0].variants[0].price.currencyCode, code);
 });

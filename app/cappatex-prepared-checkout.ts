@@ -8,6 +8,7 @@ import { pngSize, sha256 } from "./cappatex-artwork";
 import { readPreparation } from "./cappatex-preparation-storage";
 import type { PreparedDesign, PrintSide } from "./cappatex-preparation";
 import { moneyCents, type PreparedCheckoutSnapshot } from "./cappatex-snapshot";
+import { shippingReleaseForBasket, shippingReleaseBinding, type ShippingReleaseBinding } from "./cappatex-shipping";
 
 export type PreparedCheckoutStatus = { enabled: boolean; reason: string; unitPriceCents?: number; currency?: "CHF" };
 type Rejected = { ok: false; code: string; reason: string };
@@ -42,6 +43,7 @@ export async function* preparedPrintFiles(saved: PreparedDesign) {
 /** Both catalog reads are required: the sales price/route and each current photographic print side. */
 export async function validatePreparedCheckout(saved: PreparedDesign, email: string, context: PreparedCheckoutContext = {}): Promise<Rejected | {
   ok: true; profile: PrintProfile; variant: ProfileVariant; unitPriceCents: number; currency: "CHF";
+  shippingRelease: ShippingReleaseBinding;
 }> {
   if (process.env.CAPPATEX_CHECKOUT_ENABLED !== "true") return rejected("checkout_disabled", "Bestellungen bleiben bis zur Preis-, Versand- und Checkout-Abnahme gesperrt.");
   try {
@@ -67,6 +69,9 @@ export async function validatePreparedCheckout(saved: PreparedDesign, email: str
       || offer.unitPriceCents <= 0 || offer.currency !== "CHF" || !permittedSets?.length || permittedSets.some(set => set === null)
       || new Set(permittedSets).size !== permittedSets.length || !permittedSets.includes(sideKey(saved.sides.map(s => s.position))))
       return rejected("side_price_unapproved", "Für diese Druckseiten fehlt ein ausdrücklich genehmigter Verkaufspreis.");
+    const shipping = shippingReleaseForBasket([{ profileId: profile.id, profileVersion: profile.version,
+      shopifyVariantId: variant.shopifyVariantId, quantity: saved.quantity }], saved.country);
+    if (!shipping) return rejected("shipping_unapproved", "Für diese Variante, Menge und dieses Lieferland fehlt eine bestätigte Shopify-Versandfreigabe.");
     if (context.email !== undefined && context.email !== email) return rejected("account_changed", "Das Konto stimmt nicht mit dem Gestaltungsstand überein.");
     context.email = email;
     context.catalogs ||= currentCatalogs(email);
@@ -94,7 +99,8 @@ export async function validatePreparedCheckout(saved: PreparedDesign, email: str
     }
     // Validate all sides before the first upload, discarding each buffer before reading the next.
     for (const side of saved.sides) await preparedPrintFile(side);
-    return { ok: true, profile, variant, unitPriceCents: offer.unitPriceCents, currency: offer.currency };
+    return { ok: true, profile, variant, unitPriceCents: offer.unitPriceCents, currency: offer.currency,
+      shippingRelease: await shippingReleaseBinding(shipping) };
   } catch { return rejected("preparation_unavailable", "Preis, Varianten und Druckdateien konnten gerade nicht vollständig bestätigt werden."); }
 }
 
@@ -113,6 +119,7 @@ export async function validatePreparedSnapshot(snapshot: PreparedCheckoutSnapsho
   const checked = await validatePreparedCheckout(saved, snapshot.email, context);
   if (!checked.ok) return checked;
   if (!equal(checked.profile, snapshot.profile) || !equal(checked.variant, snapshot.variant) || checked.currency !== snapshot.currency
-    || checked.unitPriceCents !== snapshot.unitPriceCents) return rejected("approval_changed", "Die Freigabe oder der Preis hat sich geändert.");
+    || checked.unitPriceCents !== snapshot.unitPriceCents || !equal(checked.shippingRelease, snapshot.shippingRelease))
+    return rejected("approval_changed", "Die Freigabe, der Preis oder der Versand hat sich geändert.");
   return checked;
 }

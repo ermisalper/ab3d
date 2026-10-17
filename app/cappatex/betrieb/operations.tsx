@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { fulfillmentSummary } from "../../cappatex-operations";
 
 type State = { checkedAt: number; configuration: { checkoutEnabled: boolean; fulfillmentEnabled: boolean;
-  automaticProductionRequested: boolean; registeredProfiles: number; webhookConfigured: boolean; productionWritePermissions: string };
+  automaticProductionRequested: boolean; registeredProfiles: number; registeredShippingReleases: number; webhookConfigured: boolean; productionWritePermissions: string };
   counts: Array<{ state: string; total: number }>; orders: Array<ReturnType<typeof fulfillmentSummary>>; limit: number };
 const date = (value: number) => new Date(value).toLocaleString("de-CH");
 export default function Operations() {
@@ -33,11 +33,13 @@ export default function Operations() {
         <li>Shopify-Checkout: {config.checkoutEnabled ? "Konfigurationsschalter aktiv – zusätzliche Produktfreigaben erforderlich" : "gesperrt"}.</li>
         <li>Printify-Auftragsanlage: {config.fulfillmentEnabled ? "Konfigurationsschalter aktiv – weitere Prüfungen gelten" : "gesperrt"}.</li>
         <li>Verkaufsprofile im Register: {config.registeredProfiles}.</li>
+        <li>Shopify-Versandfreigaben im Register: {config.registeredShippingReleases}. Jede Freigabe gilt nur für die belegte Kombination aus Artikeln, Menge und Lieferland.</li>
         <li>Webhook-Konfiguration: {config.webhookConfigured ? "hinterlegt; erfolgreiche Zustellung separat nachweisen" : "unvollständig"}.</li>
         <li>Produktions-Schreibrechte: noch nicht nachgewiesen.</li>
       </ul>
       {config.automaticProductionRequested && <p role="alert">Automatische Produktion ist in der Konfiguration angefordert. Der Bestellweg blockiert diese Einstellung. Vor einer Freigabe korrigieren.</p>}
       <p>Eine Verkaufsfreigabe setzt bestätigte Preise, Shopify-Versand nach CH/LI und die Trennung vom nativen Printify-Import voraus. Die Schalter allein bestätigen keinen funktionierenden Verkauf.</p>
+      <p>Der Gestaltungsablauf ist derzeit ein privater Betreibertest. Ein Shopify-Upgrade allein öffnet weder den Kundenbereich noch die Produktion.</p>
       <h2>Aufträge</h2>
       <p>{data.counts.reduce((sum, count) => sum + count.total, 0)} gespeicherte Aufträge. Angezeigt werden höchstens die {data.limit} zuletzt geänderten Aufträge.</p>
       {!data.orders.length && <p>Es sind noch keine CAPPATEX-Aufträge eingegangen.</p>}

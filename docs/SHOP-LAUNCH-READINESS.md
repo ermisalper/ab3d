@@ -2,6 +2,8 @@
 
 Stand 17.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-production`. Die Site bleibt owner-private. Dieser Schritt ist keine Verkaufsfreigabe.
 
+Fortsetzung nach Version 54: [Preis-, Versand- und Etikettenabnahme](CAPPATEX-SALES-AND-SHIPPING-ACCEPTANCE.md). Dort stehen die neue Bindung bezahlter Versandtarife, der aktuelle Pflichtlayer-Nachweis und die sichtbaren Druckgrössengrenzen. Das nachfolgende Protokoll beschreibt den Stand der Version 54.
+
 ## Bestellkonzept
 
 Neue CAPPATEX-Käufe beginnen beim vollständig gespeicherten Gestaltungsstand. Der Designer führt zur Druckvorbereitung und anschliessend zur Prüfansicht. Ein zweiter direkter Front-Checkout könnte eine bereits gestaltete Rückseite verlieren und wird aus der Bedienung entfernt. Historische einseitige Server-Snapshots bleiben prüfbar.

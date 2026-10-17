@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { generationAccess } from "../../../cappatex-generation-access";
 import { CAPPATEX_PRINT_PROFILES } from "../../../cappatex-profiles";
+import { CAPPATEX_SHIPPING_RELEASES } from "../../../cappatex-shipping-releases";
 import { fulfillmentSummary, type FulfillmentRow } from "../../../cappatex-operations";
 
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
@@ -20,6 +21,7 @@ export async function GET() {
       fulfillmentEnabled: process.env.CAPPATEX_FULFILLMENT_ENABLED === "true",
       automaticProductionRequested: process.env.CAPPATEX_AUTO_PRODUCTION_ENABLED === "true",
       registeredProfiles: CAPPATEX_PRINT_PROFILES.length,
+      registeredShippingReleases: CAPPATEX_SHIPPING_RELEASES.length,
       webhookConfigured: Boolean(process.env.SHOPIFY_WEBHOOK_SECRET?.trim() && process.env.SHOPIFY_STORE_DOMAIN?.trim()),
       productionWritePermissions: "unverified",
     }, counts: counts.results, orders: rows.results.map(row => fulfillmentSummary(row)), limit: 50 }, { headers });

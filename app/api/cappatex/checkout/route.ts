@@ -10,6 +10,7 @@ import { cartMatchesSnapshot, type CappatexCheckoutCart } from "../../../cappate
 import { shopifyStorefrontConfig, shopifyStorefrontRequest } from "../../../shopify-catalog";
 import { readPreparation } from "../../../cappatex-preparation-storage";
 import { validatePreparedCheckout } from "../../../cappatex-prepared-checkout";
+import { shippingReleaseBinding, shippingReleaseForBasket } from "../../../cappatex-shipping";
 
 const CART_CREATE = `mutation CappatexCartCreate($input: CartInput!) {
   cartCreate(input: $input) {
@@ -67,7 +68,8 @@ export async function POST(request: Request) {
       snapshot = { schemaVersion: 2, id: `CPS-${crypto.randomUUID().replaceAll("-", "")}`, email: user.email,
         designId: saved.sides[0].designId, preparation: saved, preparationSha256: await sha256(JSON.stringify(saved)),
         profile: checked.profile, variant: checked.variant, quantity: saved.quantity, country: saved.country,
-        unitPriceCents: checked.unitPriceCents, currency: checked.currency, legalVersion: LEGAL_VERSION, consentAt: Date.now() };
+        unitPriceCents: checked.unitPriceCents, currency: checked.currency, shippingRelease: checked.shippingRelease,
+        legalVersion: LEGAL_VERSION, consentAt: Date.now() };
       motifLabel = saved.sides.map(side => side.position === "front" ? "Vorderseite" : "Rückseite").join(" + ");
     } else {
     if (body?.sides !== undefined || body?.schemaVersion === 2 || body?.side === "back")
@@ -83,6 +85,9 @@ export async function POST(request: Request) {
     const variant = product?.variants.find(v => v.shopifyVariantId === body.shopifyVariantId);
     if (!product || !variant) return error(409, "catalog_mismatch", "Diese Variante ist derzeit nicht für die Produktion freigegeben.");
     if (product.profile.preparedCheckout) return error(409, "prepared_checkout_required", "Bitte bestelle dieses Produkt über den gespeicherten Gestaltungsstand mit allen Druckseiten.");
+    const shipping = shippingReleaseForBasket([{ profileId: product.id, profileVersion: product.profileVersion,
+      shopifyVariantId: variant.shopifyVariantId, quantity: body.quantity }], body.country);
+    if (!shipping) return error(409, "shipping_unapproved", "Für diese Variante, Menge und dieses Lieferland fehlt eine bestätigte Shopify-Versandfreigabe.");
     const artwork = { key: design.artwork_key, sha256: design.artwork_sha256, width: design.artwork_width, height: design.artwork_height, format: "png" as const };
     const placement = { x: Number(body.placement?.x), y: Number(body.placement?.y), scale: Number(body.placement?.scale) };
     const geometry = placementGeometry(variant.area, artwork, placement);
@@ -92,7 +97,7 @@ export async function POST(request: Request) {
     snapshot = { id: `CPS-${crypto.randomUUID().replaceAll("-", "")}`, email: user.email,
       designId: body.designId, artwork, profile: product.profile, variant, placement, quantity: body.quantity, country: body.country,
       unitPriceCents: Math.round(Number(variant.price.amount) * 100), currency: variant.price.currencyCode,
-      legalVersion: LEGAL_VERSION, consentAt: Date.now() };
+      shippingRelease: await shippingReleaseBinding(shipping), legalVersion: LEGAL_VERSION, consentAt: Date.now() };
     motifLabel = `${Math.round(geometry.widthMm!)} × ${Math.round(geometry.heightMm!)} mm · ${variant.area.position}`;
     }
     const payloadJson = JSON.stringify(snapshot);

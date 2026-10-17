@@ -26,7 +26,7 @@ const profile = { id: "local-route-fixture", version: "fixture-v1", verifiedAt: 
   fulfillment: { route: "ab3d-api", nativeImportUnlinked: true, manualApproval: true }, variants: [variant] };
 
 const runtimeKey = "__cappatexOfflineRouteTest";
-const runtime = { env: {}, profiles: [profile], designProfiles: [], actor: EMAIL };
+const runtime = { env: {}, profiles: [profile], designProfiles: [], shippingReleases: [], actor: EMAIL };
 globalThis[runtimeKey] = runtime;
 const virtualSources = new Map([
   ["cloudflare:workers", `export const env = globalThis.${runtimeKey}.env;`],
@@ -34,11 +34,13 @@ const virtualSources = new Map([
   ["next/navigation", "export function redirect() { throw new Error('Unexpected redirect in route test'); }"],
   ["fixture:profiles", `export const CAPPATEX_PRINT_PROFILES = globalThis.${runtimeKey}.profiles;`],
   ["fixture:design-profiles", `export const CAPPATEX_DESIGN_PROFILES = globalThis.${runtimeKey}.designProfiles;`],
+  ["fixture:shipping-releases", `export const CAPPATEX_SHIPPING_RELEASES = globalThis.${runtimeKey}.shippingReleases;`],
 ]);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const key = /(?:^|\/)cappatex-profiles(?:\.ts)?$/.test(specifier) ? "fixture:profiles"
-      : /(?:^|\/)cappatex-design-profiles(?:\.ts)?$/.test(specifier) ? "fixture:design-profiles" : specifier;
+      : /(?:^|\/)cappatex-design-profiles(?:\.ts)?$/.test(specifier) ? "fixture:design-profiles"
+      : /(?:^|\/)cappatex-shipping-releases(?:\.ts)?$/.test(specifier) ? "fixture:shipping-releases" : specifier;
     if (virtualSources.has(key)) return { url: `offline-cappatex:${key}`, shortCircuit: true };
     if (specifier.startsWith(".") && context.parentURL?.startsWith("file:")) {
       const candidate = new URL(`${specifier}.ts`, context.parentURL);
@@ -249,6 +251,12 @@ beforeEach(() => {
   runtime.actor = EMAIL;
   runtime.profiles.splice(0, runtime.profiles.length, profile);
   runtime.designProfiles.splice(0);
+  runtime.shippingReleases.splice(0, runtime.shippingReleases.length, ...["CH", "LI"].flatMap(country => [1, 2, 3, 4, 5].map(quantity => ({
+    id: `offline-shipping-${country}-${quantity}`, version: "fixture-v1", evidence: ["Synthetic offline fixture; never a real tariff"],
+    reviewedAt: "2026-10-01T00:00:00Z", validUntil: "2026-11-01T00:00:00Z", shopifyStoreDomain: STORE_DOMAIN, printifyShopId: profile.shopId,
+    country, currency: "CHF", printifyMethod: 1, service: { source: "shopify", code: "LOCAL-STANDARD", title: "Offline standard shipping" }, amountCents: 500,
+    basket: [{ profileId: profile.id, profileVersion: profile.version, shopifyVariantId: variant.shopifyVariantId, quantity }],
+  }))));
   globalThis.fetch = offlineFetch(fixture);
   fixture.db.sqlite.prepare("INSERT INTO accounts(email,token_balance,created_at,updated_at) VALUES(?,4,?,?)").run(EMAIL, NOW, NOW);
 });
@@ -297,9 +305,14 @@ async function checkedSnapshot(design, overrides = {}) {
 
 function paidOrder(snapshots, id = 501) {
   const list = Array.isArray(snapshots) ? snapshots : [snapshots];
-  return { id, name: `#LOCAL-${id}`, test: false, email: EMAIL, currency: "CHF", financial_status: "paid", cancelled_at: null,
+  const money = { shop_money: { amount: "5.00", currency_code: "CHF" }, presentment_money: { amount: "5.00", currency_code: "CHF" } };
+  return { id, name: `#LOCAL-${id}`, test: false, email: EMAIL, currency: "CHF", presentment_currency: "CHF", financial_status: "paid", cancelled_at: null,
     subtotal_price: String(list.reduce((sum, snapshot) => sum + snapshot.quantity * 30, 0)),
-    total_price: "35.00", created_at: new Date(NOW).toISOString(),
+    total_price: (list.reduce((sum, snapshot) => sum + snapshot.quantity * 30, 0) + 5).toFixed(2), created_at: new Date(NOW).toISOString(),
+    total_shipping_price_set: structuredClone(money), current_shipping_price_set: structuredClone(money),
+    shipping_lines: [{ source: "shopify", code: "LOCAL-STANDARD", title: "Offline standard shipping", is_removed: false,
+      price: "5.00", discounted_price: "5.00", price_set: structuredClone(money), discounted_price_set: structuredClone(money),
+      current_discounted_price_set: structuredClone(money), discount_allocations: [] }],
     shipping_address: { first_name: "Local", last_name: "Fixture", address1: "Teststrasse 1", city: "Zürich", zip: "8000", country_code: list[0].country },
     line_items: list.map((snapshot, index) => ({ id: 601 + index, title: profile.name, product_id: 303, variant_id: 202,
       sku: variant.sku, quantity: snapshot.quantity, price: "30.00", properties: [
@@ -1284,6 +1297,76 @@ describe("offline real CAPPATEX checkout and paid-webhook routes", { concurrency
 });
 
 
+describe("offline explicit Shopify shipping release gates", { concurrency: false }, () => {
+  test("new legacy checkouts require an explicit exact single-product Shopify shipping release", async () => {
+    const design = await seedDesign(); runtime.shippingReleases.splice(0);
+    const response = await callCheckout(design); assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, "shipping_unapproved");
+    assert.equal(fixture.carts.length + fixture.orders.length + fixture.uploads.length, 0);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_snapshots").get().n, 0);
+  });
+
+  for (const issue of ["absent release", "expired release", "changed release evidence", "missing shipping line", "removed shipping line", "duplicate shipping lines",
+    "changed service source", "changed service code", "changed service title", "changed original amount", "shipping discount", "changed current amount",
+    "wrong presentment currency", "missing presentment currency", "missing current order total", "null shipping line", "null allocation", "mixed normal basket"]) test(`paid shipping holds ${issue} without any Printify write`, async () => {
+    const snapshot = await checkedSnapshot(await seedDesign()), order = paidOrder(snapshot);
+    const current = runtime.shippingReleases.find(r => r.id === snapshot.shippingRelease.id);
+    if (issue === "absent release") runtime.shippingReleases.splice(0);
+    if (issue === "expired release") current.validUntil = new Date(NOW).toISOString();
+    if (issue === "changed release evidence") current.evidence.push("Synthetic changed evidence");
+    if (issue === "missing shipping line") order.shipping_lines = [];
+    if (issue === "removed shipping line") order.shipping_lines[0].is_removed = true;
+    if (issue === "duplicate shipping lines") order.shipping_lines.push(structuredClone(order.shipping_lines[0]));
+    if (issue === "changed service source") order.shipping_lines[0].source = "another";
+    if (issue === "changed service code") order.shipping_lines[0].code = "EXPRESS";
+    if (issue === "changed service title") order.shipping_lines[0].title = "Express";
+    if (issue === "changed original amount") order.shipping_lines[0].price_set.shop_money.amount = "4.99";
+    if (issue === "shipping discount") { order.shipping_lines[0].discounted_price = "0.00"; order.shipping_lines[0].discount_allocations = [{ amount: "5.00" }]; }
+    if (issue === "changed current amount") order.shipping_lines[0].current_discounted_price_set.presentment_money.amount = "4.99";
+    if (issue === "wrong presentment currency") order.shipping_lines[0].price_set.presentment_money.currency_code = "EUR";
+    if (issue === "missing presentment currency") delete order.presentment_currency;
+    if (issue === "missing current order total") delete order.current_shipping_price_set;
+    if (issue === "null shipping line") order.shipping_lines[0] = null;
+    if (issue === "null allocation") order.shipping_lines[0].discount_allocations = [null];
+    if (issue === "mixed normal basket") order.line_items.push({ id: 999, product_id: 999, variant_id: 999, sku: "OFFLINE-FINISHED", title: "Normal catalogue", quantity: 1, price: "10.00", properties: [] });
+    const response = await callWebhook(order); assert.equal(response.status, 200, await response.clone().text());
+    assert.equal((await response.json()).status, "manual_review"); assert.equal(fulfillment().state, "manual_review");
+    assert.equal(fulfillment().error_code, "shipping_unapproved");
+    assert.equal(fixture.orders.length + fixture.uploads.length + fixture.drafts.length, 0);
+    assert.equal(fixture.requests.filter(r => r.method === "POST" && r.url.startsWith("https://api.printify.com/")).length, 0);
+  });
+
+  test("a historical legacy snapshot without a shipping fingerprint remains unchanged and requires manual review", async () => {
+    const snapshot = await checkedSnapshot(await seedDesign()); delete snapshot.shippingRelease;
+    const text = JSON.stringify(snapshot);
+    fixture.db.sqlite.prepare("UPDATE cappatex_snapshots SET payload_json=?,payload_sha256=? WHERE id=?").run(text, await sha256(text), snapshot.id);
+    const response = await callWebhook(paidOrder(snapshot)); assert.equal((await response.json()).status, "manual_review");
+    assert.equal(fulfillment().error_code, "shipping_unapproved");
+    assert.equal(fixture.db.sqlite.prepare("SELECT payload_json FROM cappatex_snapshots WHERE id=?").get(snapshot.id).payload_json, text);
+    assert.equal(fixture.orders.length + fixture.uploads.length, 0);
+  });
+
+  test("two individually approved snapshots do not imply an approved combined shipping basket", async () => {
+    const first = await checkedSnapshot(await seedDesign("A")), second = await checkedSnapshot(await seedDesign("B"));
+    runtime.shippingReleases.splice(0, runtime.shippingReleases.length, ...runtime.shippingReleases.filter(r => r.basket[0].quantity === 1));
+    const response = await callWebhook(paidOrder([first, second])); assert.equal((await response.json()).status, "manual_review");
+    assert.equal(fulfillment().error_code, "shipping_unapproved"); assert.equal(fixture.orders.length + fixture.uploads.length, 0);
+  });
+
+  test("a shipping-only change after remote order creation is a persisted conflict and never creates another order", async () => {
+    const snapshot = await checkedSnapshot(await seedDesign()), order = paidOrder(snapshot);
+    assert.equal((await (await callWebhook(order)).json()).status, "draft_ready");
+    const firstHash = fulfillment().input_sha256, changed = structuredClone(order);
+    changed.shipping_lines[0].title = "Unapproved express";
+    const response = await callWebhook(changed, "offline-shipping-changed-event");
+    assert.equal((await response.json()).status, "order_changed_manual_review");
+    assert.equal(fulfillment().error_code, "shipping_unapproved"); assert.equal(fulfillment().state, "draft_ready");
+    assert.equal(fulfillment().input_sha256, firstHash, "The original input and existing remote-order identity remain intact");
+    await callWebhook(changed, "offline-shipping-changed-repeat");
+    assert.equal(fixture.orders.length, 1); assert.equal(fixture.uploads.length, 1); assert.equal(fixture.drafts.length, 1);
+  });
+});
+
 describe("offline immutable multi-side print preparations", { concurrency: false }, () => {
   function prepareProfile() {
     const candidate = structuredClone(profile); delete candidate.fulfillment;
@@ -1458,6 +1541,13 @@ describe("offline immutable multi-side print preparations", { concurrency: false
     assert.equal(status.checkout.enabled, false);
     assert.match(status.checkout.reason, /Verkaufspreis|Verkauf|Druckseiten/);
     assert.equal((await preparedCheckout(id)).status, 409);
+    assert.equal(fixture.carts.length + fixture.uploads.length + fixture.orders.length, 0);
+  });
+
+  test("prepared checkout and review remain disabled when an exact Shopify shipping release is missing", async () => {
+    const { candidate, id } = await readyPrepared(); approvePrepared(candidate); runtime.shippingReleases.splice(0);
+    const review = await (await get(id)).json(); assert.equal(review.checkout.enabled, false); assert.match(review.checkout.reason, /Versandfreigabe/);
+    const response = await preparedCheckout(id); assert.equal(response.status, 409); assert.equal((await response.json()).code, "shipping_unapproved");
     assert.equal(fixture.carts.length + fixture.uploads.length + fixture.orders.length, 0);
   });
 

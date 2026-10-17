@@ -13,6 +13,7 @@ const reasons: Record<string, string> = {
   order_changed: "Die Bestelldaten haben sich geändert.",
   snapshot_already_consumed: "Dieser gespeicherte Stand wurde bereits einem anderen Auftrag zugeordnet.",
   preparation_failed: "Druckdatei, Variante oder Freigabe konnte nicht bestätigt werden.",
+  shipping_unapproved: "Versandart, bezahlter Versandbetrag oder Warenkorbzusammensetzung ist nicht durch eine gültige Freigabe abgedeckt.",
 };
 
 export function fulfillmentSummary(row: FulfillmentRow, now = Date.now()) {
