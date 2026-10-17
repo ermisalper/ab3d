@@ -359,8 +359,8 @@ export default function CappatexDesigner() {
               {product?.kind === "accessory" ? " Oberfläche und Bildschirmfarben können vom Druck abweichen. Fotohalterungen gehören nicht zum Lieferumfang."
                 : " Stofffalten werden vereinfacht dargestellt. Stoffstruktur und Bildschirmfarben können vom Druck abweichen."}</p>
           <div className="cappatex-order-config">
-            <label>Menge<select value={quantity} onChange={e => { setQuantity(Number(e.target.value)); setTerms(false); }}>{[1,2,3,4,5].map(n => <option key={n}>{n}</option>)}</select></label>
-            <label>Lieferland<select value={country} onChange={e => { setCountry(e.target.value === "LI" ? "LI" : "CH"); setTerms(false); }}><option value="CH">Schweiz</option><option value="LI">Liechtenstein</option></select></label>
+            <label>Menge<select disabled={Boolean(busy)} value={quantity} onChange={e => { setQuantity(Number(e.target.value)); setTerms(false); }}>{[1,2,3,4,5].map(n => <option key={n}>{n}</option>)}</select></label>
+            <label>Lieferland<select disabled={Boolean(busy)} value={country} onChange={e => { setCountry(e.target.value === "LI" ? "LI" : "CH"); setTerms(false); }}><option value="CH">Schweiz</option><option value="LI">Liechtenstein</option></select></label>
             <div><small>{variant.price ? "Artikelpreis · zzgl. Versand" : "Gestaltungsvorschau"}</small><strong>{variant.price ? money(Number(variant.price.amount) * quantity, variant.price.currencyCode) : `${quantity} Artikel ausgewählt`}</strong></div>
           </div>
         </>}
