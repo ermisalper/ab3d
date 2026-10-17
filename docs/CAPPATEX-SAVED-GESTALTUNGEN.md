@@ -43,3 +43,11 @@ Gesamtprüfung: **430/430 Tests**, vollständiges ESLint, TypeScript und Produkt
 - Die Site bleibt ausschliesslich für den Betreiber zugänglich. Eigene Motive und Gestaltungen werden nicht veröffentlicht.
 - Anbieterzugänge, reale Checkout-Tarife, Geschäftsangaben und der spätere kontrollierte End-to-End-Kauf bleiben separate Abnahmepunkte.
 - Die Browsersteuerung konnte in dieser Sitzung wegen ihres Sandbox-/Node-Initialisierungsfehlers nicht gestartet werden. Automatisierte HTTP-/Serverprüfungen ersetzen keine visuelle oder Smartphone-Abnahme.
+
+## Private Bereitstellung
+
+Version **56** wurde am 17.10.2026 um 18:15 UTC erfolgreich auf `https://ab3d-swiss-design.berk-ermis.chatgpt.site` bereitgestellt. Anwendungscode `dd8dcbe0a37643b49b23102f7b3e31a118753c15` ist auf GitHub und im Site-Quellstand identisch bestätigt. Deployment `appgdep_6ad3bb397d948191bf301c5ceed5dc95`, Saved-Version `appgprj_6a69247390f08191811183b6a04bae94~appgver_f731a15347b88191af40319192d1d22c`; Status `succeeded`, Umgebungsrevision unverändert **11**. Owner-private blieb erhalten.
+
+Das gespeicherte Paket enthält 116 Dateien, 9.441.280 Bytes im vom Hosting erfassten Tar-Archiv, SHA-256 `ae14a3eeee6d0b561c0b62dd5960f26347d3fa4f986fdd13cf9855d773ab9931`. Keine Migration, Secretänderung oder Verkaufsfreigabe. Nach dem bekannten Windows-Startfehler der offiziellen Paketierung wurde das bestehende Windows-Verfahren aus dem sauberen, geprüften Commit verwendet; der Paket-Scan fand keine vorhandenen lokalen Secretwerte.
+
+Die neue Übersicht `/cappatex/gestaltungen` wurde zum Öffnen in Codex vorgemerkt (`queued`). Das bestätigt keine Browser-Sichtprüfung. Der lokale Prüfserver wurde nach den HTTP-Prüfungen beendet. Dieser abschliessende Dokumentationsnachtrag ändert den bereitgestellten Anwendungscode nicht.
