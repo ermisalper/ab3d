@@ -62,6 +62,7 @@ export default function PreparedReview({ id }: { id: string }) {
     {error && <p className="cappatex-action-error" role="alert">{error}</p>}
     {current && <>
       <PreparedReceipt receipt={current} />
+      <p><Link className="button secondary" href={`/cappatex?preparationId=${current.id}&resume=1#studio`}>Als Kopie weitergestalten</Link></p>
       <section className="cappatex-preparation-receipt" aria-labelledby="prepared-checkout-heading" aria-busy={Boolean(busy)}>
         <h2 id="prepared-checkout-heading">{checkoutReady ? "Bestellung vorbereiten" : "Preise und Versand werden noch geprüft"}</h2>
         {checkoutReady && typeof cents === "number" ? <>

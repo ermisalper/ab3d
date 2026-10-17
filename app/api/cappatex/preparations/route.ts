@@ -9,9 +9,37 @@ import { sha256 } from "../../../cappatex-artwork";
 import { renderPrintFile, PRINT_RENDERER_VERSION } from "../../../cappatex-print-file";
 import { preparationInput, preparationSummary, type PreparedDesign } from "../../../cappatex-preparation";
 import { readPreparation, preparationDownloadAllowed } from "../../../cappatex-preparation-storage";
+import { PREPARATION_LIST_SIZE, parsePreparationListCursor, preparationListCursor, preparationListItem,
+  type PreparationListRow, type PreparationListCursor, type PreparationListResponse } from "../../../cappatex-preparation-list";
 
-const headers = { "Cache-Control": "private, no-store" };
+const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 const fail = (status: number, code: string, error: string) => Response.json({ code, error }, { status, headers });
+
+export async function GET(request: Request) {
+  const user = await getChatGPTUser();
+  if (!user) return fail(401, "sign_in_required", "Bitte melde dich an, um deine gespeicherten Gestaltungen anzusehen.");
+  let cursor: PreparationListCursor | null;
+  try {
+    const query = new URL(request.url).searchParams;
+    if ([...query.keys()].some(key => key !== "cursor") || query.getAll("cursor").length > 1) throw new Error("invalid_preparation_cursor");
+    cursor = parsePreparationListCursor(query.get("cursor"));
+  } catch { return fail(400, "invalid_list_request", "Die gespeicherte Listenseite ist ungültig. Bitte öffne deine Gestaltungen erneut."); }
+  try {
+    const rows = await env.DB.prepare(`SELECT id,created_at,payload_json,payload_sha256 FROM cappatex_preparations
+      WHERE email = ? AND state = 'ready'
+        AND length(id) = 36 AND substr(id,1,4) = 'CPP-' AND substr(id,5) NOT GLOB '*[^a-f0-9]*'
+        AND typeof(created_at) = 'integer' AND created_at >= 0 AND created_at <= 8640000000000000
+        ${cursor ? "AND (created_at < ? OR (created_at = ? AND id < ?))" : ""}
+      ORDER BY created_at DESC,id DESC LIMIT ?`)
+      .bind(user.email, ...(cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : []), PREPARATION_LIST_SIZE + 1).all<PreparationListRow>();
+    const page = rows.results.slice(0, PREPARATION_LIST_SIZE);
+    const items = await Promise.all(page.map(preparationListItem));
+    const last = page.at(-1);
+    const result: PreparationListResponse = { items, nextCursor: rows.results.length > PREPARATION_LIST_SIZE && last
+      ? preparationListCursor({ createdAt: last.created_at, id: last.id }) : null };
+    return Response.json(result, { headers });
+  } catch { return fail(503, "preparation_list_unavailable", "Deine gespeicherten Gestaltungen konnten gerade nicht geladen werden. Bitte versuche es erneut."); }
+}
 
 export async function POST(request: Request) {
   if (request.headers.get("origin") !== new URL(request.url).origin) return fail(403, "invalid_origin", "Unzulässige Anfrage.");

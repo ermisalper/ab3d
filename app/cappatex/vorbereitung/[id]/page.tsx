@@ -6,6 +6,7 @@ export default async function PreparationPage({ params }: { params: Promise<{ id
   const { id } = await params;
   return <main id="main-content" className="cappatex-preparation cappatex-preparation-review" style={{ maxWidth: 980, margin: "32px auto" }}>
     <Link className="text-link" href="/cappatex#studio">← Zurück zum CAPPATEX Studio</Link>
+    <nav className="gallery-shortcuts" aria-label="Gespeicherte Gestaltungen"><Link href="/cappatex/gestaltungen">Alle meine Gestaltungen</Link></nav>
     <p className="eyebrow">CAPPATEX · Druckvorbereitung</p><h1>Deine gespeicherten Druckseiten</h1>
     <p>Motiv, Platzierung und Druckdatei bleiben für jede Seite zusammen gespeichert.</p>
     <PreparedReview id={id} />

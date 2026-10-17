@@ -1,12 +1,16 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import CappatexPreparationPanel from "./cappatex-preparation-panel";
 import GalleryConsent from "../gallery-consent";
 import { galleryChoiceValid, newGalleryDraft } from "../gallery-policy";
 import { initialPlacement, placementGeometry, type ArtworkSize, type Placement } from "../cappatex-print-profile";
 import { maximumPrintSizeCm, printSizeHelp } from "../cappatex-print-size";
+import { compositionKey, emptyCompositionDraft, ownedMotif, preparationDesignIds, resumePreparation,
+  type CompositionDraft, type OwnedMotif, type WorkingSide } from "../cappatex-resume";
+import type { PreparationSummary } from "../cappatex-preparation";
+import { hydrateSessionDraft, parseSessionDraft, serializeSessionDraft, sessionDraftDesignIds } from "../cappatex-session-draft";
 import type { CappatexDesignProduct } from "../cappatex-design-catalog";
 import { prepareCustomerImage } from "../cappatex-upload-client";
 import { designStateUrl, readDesignState, retainedPlacement, verifiedDesignSelection, rememberConfiguration, rememberedConfiguration, reconcileConfigurations,
@@ -16,6 +20,12 @@ const styles = ["Minimal", "Illustrativ", "Retro", "Streetwear"];
 const money = (amount: number, currency: string) => new Intl.NumberFormat("de-CH", { style: "currency", currency }).format(amount);
 const centimetres = (value: number) => value < .1 ? "<0.1" : new Intl.NumberFormat("de-CH", { maximumFractionDigits: 1 }).format(Math.floor(value * 10 + 1e-9) / 10);
 type DesignVariant = CappatexDesignProduct["variants"][number];
+
+async function readOwnMotif(id: string) {
+  const response = await fetch(`/api/cappatex/designs/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error("Ein gespeichertes Motiv ist für dein Konto nicht verfügbar. Es wurde nichts neu erstellt.");
+  return ownedMotif(await response.json(), id);
+}
 
 function photoPrintArea(variant: DesignVariant): CSSProperties {
   const photo = variant.mockup;
@@ -82,6 +92,7 @@ export default function CappatexDesigner() {
   const [uploadedArtwork, setUploadedArtwork] = useState(false);
   const [previewSize, setPreviewSize] = useState<ArtworkSize>({ width: 512, height: 768 });
   const [canDownloadHd, setCanDownloadHd] = useState(false);
+  const [accountCanDownloadHd, setAccountCanDownloadHd] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("Minimal");
   const [canvas, setCanvas] = useState("portrait");
@@ -106,6 +117,10 @@ export default function CappatexDesigner() {
   const [loadedBlank, setLoadedBlank] = useState("");
   const [restorationComplete, setRestorationComplete] = useState(false);
   const [selectionNeedsReview, setSelectionNeedsReview] = useState(false);
+  const [motifs, setMotifs] = useState<Record<string, OwnedMotif>>({});
+  const [drafts, setDrafts] = useState<Record<string, CompositionDraft>>({});
+  const [sessionKey, setSessionKey] = useState("");
+  const [sessionNotice, setSessionNotice] = useState("");
 
   const product = products.find(p => p.id === productId) || (selectionNeedsReview ? undefined : products[0]);
   const baseVariant = product?.variants.find(v => v.shopifyVariantId === variantId) || (selectionNeedsReview ? undefined : product?.variants[0]);
@@ -120,6 +135,10 @@ export default function CappatexDesigner() {
   const uploadExample = maximumPrintSizeCm({ width: 2048, height: 3072 }, uploadExampleDpi)!;
   const blankIdentity = variant ? `${product?.id}:${product?.profileVersion}:${variant.shopifyVariantId}:${variant.mockup.url}` : "";
   const previewReady = Boolean(image && loadedArtwork === image && variant && loadedBlank === blankIdentity);
+  const draftKey = product && baseVariant ? compositionKey(product.id, product.profileVersion, baseVariant.shopifyVariantId) : "";
+  const storedDraft = useMemo(() => drafts[draftKey] || emptyCompositionDraft(), [drafts, draftKey]);
+  const currentDraft: CompositionDraft = useMemo(() => designId ? { ...storedDraft,
+    working: { ...storedDraft.working, [side]: { designId, placement: { ...placement } } } } : storedDraft, [storedDraft, designId, side, placement]);
   const galleryHint = !galleryChoice.visibility ? "Bitte wähle, ob dein Motiv privat bleibt oder für die Galerie vorgeschlagen wird."
     : galleryChoice.visibility === "public" && !galleryChoice.rightsConfirmed ? "Bitte bestätige die Rechte für die Galerie."
     : !galleryChoiceValid(galleryChoice, "cappatex") ? "Bitte vervollständige die Angaben für deine Sammlung." : "";
@@ -146,58 +165,129 @@ export default function CappatexDesigner() {
     });
   }
 
+  const showMotif = useCallback((motif: OwnedMotif, nextPlacement: Placement | null) => {
+    setImage(motif.previewUrl); setDesignId(motif.designId); setArtwork({ width: motif.width, height: motif.height });
+    setPreviewSize({ width: motif.previewWidth, height: motif.previewHeight }); setUploadedArtwork(motif.source === "upload");
+    setCanDownloadHd(motif.canDownloadOriginal); setLoadedArtwork(current => current === motif.previewUrl ? current : "");
+    setPlacement(nextPlacement); setPhotoUrl("");
+  }, []);
+
   useEffect(() => {
     let active = true;
-    const restored = readDesignState(window.location.search);
-    const metadata = restored.designId
-      ? fetch(`/api/cappatex/designs/${restored.designId}`, { cache: "no-store" }).then(async response => {
-        if (!response.ok) throw new Error("Das gespeicherte Motiv konnte für dein Konto nicht geladen werden.");
-        return response.json();
-      }).then(data => {
-        if (data.designId !== restored.designId || data.previewUrl !== `/api/cappatex/artwork/${restored.designId}`
-          || ![data.width, data.height, data.previewWidth, data.previewHeight].every(value => Number.isInteger(value) && value > 0)
-          || data.previewWidth !== Math.ceil(data.width / 4) || data.previewHeight !== Math.ceil(data.height / 4)) {
-          throw new Error("Die gespeicherten Motivdaten sind unvollständig.");
-        }
-        return data;
-      }) : Promise.resolve(null);
-    const catalog = fetch("/api/cappatex/catalog", { cache: "no-store" }).then(response => response.json());
-    Promise.allSettled([catalog, metadata]).then(([catalogResult, designResult]) => {
+    async function restore() {
+      const query = new URLSearchParams(window.location.search), restored = readDesignState(window.location.search);
+      const [catalogResponse, account] = await Promise.all([
+        fetch("/api/cappatex/catalog", { cache: "no-store", signal: AbortSignal.timeout(30_000) }),
+        fetch("/api/account", { cache: "no-store", signal: AbortSignal.timeout(30_000) }).then(r => r.ok ? r.json() : null).catch(() => null),
+      ]);
+      if (!catalogResponse.ok) throw new Error("Die Blanko-Produkte konnten gerade nicht bestätigt werden. Bitte lade die Seite erneut.");
+      const data = await catalogResponse.json(), catalogProducts: CappatexDesignProduct[] = Array.isArray(data.products) ? data.products : [];
       if (!active) return;
-      setQuantity(restored.quantity); setCountry(restored.country);
-      if (catalogResult.status === "fulfilled") {
-        const data = catalogResult.value;
-        const catalogProducts = Array.isArray(data.products) ? data.products : [];
-        const selection = verifiedDesignSelection(restored, catalogProducts);
-        const restoredConfigurations = reconcileConfigurations(catalogProducts, restored.configurations || {});
-        setConfigurations(restoredConfigurations);
-        setProducts(catalogProducts); setProductId(selection.profileId); setVariantId(selection.variantId);
-        setPlacement(selection.placement || null); setSide(selection.side);
-        setSelectionNeedsReview(selection.requiresSelection);
-        if (selection.requiresSelection) setError("Die gespeicherte Produktvariante ist nicht mehr verfügbar oder das Druckprofil wurde geändert. Bitte wähle Produkt und Variante erneut.");
-        setMessage(data.message || "Die Blanko-Produkte sind derzeit nicht verfügbar.");
+      setProducts(catalogProducts); setMessage(data.message || "Die Blanko-Produkte sind derzeit nicht verfügbar.");
+      setGenerationEnabled(account?.account?.cappatexGeneration?.enabled === true); setPilotOwner(account?.account?.cappatexGeneration?.pilotOwner === true);
+      setUploadEnabled(account?.account?.cappatexUpload?.enabled === true); setCanDownloadHd(account?.account?.capabilities?.canDownloadHd === true);
+      setAccountCanDownloadHd(account?.account?.capabilities?.canDownloadHd === true);
+      let storageKey = "", reference = null;
+      if (typeof account?.account?.email === "string" && account.account.email) {
+        const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(account.account.email.trim().toLowerCase()));
+        storageKey = `cappatex-draft-v1:${[...new Uint8Array(hash)].map(n => n.toString(16).padStart(2, "0")).join("")}`;
+        try { reference = parseSessionDraft(window.sessionStorage.getItem(storageKey)); }
+        catch { setSessionNotice("Dein Browser erlaubt keine Sitzungssicherung. Speichere die Druckseiten vor dem Verlassen dieser Seite."); }
+        if (!active) return;
+        setSessionKey(storageKey);
+      }
+      if (query.get("resume") === "1") {
+        const id = query.get("preparationId") || "";
+        if (!/^CPP-[a-f0-9]{32}$/.test(id)) throw new Error("Der Verweis auf die gespeicherten Druckseiten ist ungültig.");
+        const response = await fetch(`/api/cappatex/preparations/${id}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+        if (!response.ok) throw new Error("Dieser gespeicherte Stand ist für dein Konto nicht verfügbar.");
+        const preparation = await response.json() as PreparationSummary;
+        if (preparation.id !== id) throw new Error("Der gespeicherte Stand konnte nicht eindeutig bestätigt werden.");
+        const own = await Promise.all(preparationDesignIds(preparation).map(readOwnMotif));
+        const verified = Object.fromEntries(own.map(motif => [motif.designId, motif]));
+        const copy = resumePreparation(preparation, catalogProducts, verified, crypto.randomUUID());
+        if (!active) return;
+        setMotifs(verified); setProductId(copy.profileId); setVariantId(copy.variantId); setQuantity(copy.quantity); setCountry(copy.country); setSide(copy.side);
+        setDrafts({ [compositionKey(copy.profileId, copy.profileVersion, copy.variantId)]: copy.draft });
+        const working = copy.draft.working[copy.side]!; showMotif(verified[working.designId], working.placement);
+        setSelectionNeedsReview(false); setMessage("Deine gespeicherten Druckseiten sind als neue Kopie geladen. Das Original bleibt unverändert.");
+        const product = catalogProducts.find(p => p.id === copy.profileId)!, variant = product.variants.find(v => v.shopifyVariantId === copy.variantId)!;
+        if (storageKey) try { window.sessionStorage.setItem(storageKey, serializeSessionDraft(product, variant, copy.draft, verified, copy.quantity, copy.country, copy.side)); }
+        catch { setSessionNotice("Die Kopie ist im offenen Tab geladen. Die Sitzungssicherung ist nicht verfügbar; speichere vor dem Verlassen."); }
+        const consumed = new URL(window.location.href); consumed.searchParams.delete("resume"); window.history.replaceState(window.history.state, "", consumed);
+      } else if (reference && (!query.has("preparationId") || query.get("preparationId") === reference.receiptId || query.get("preparationId") === reference.copyOf)
+        && (!restored.profileId || restored.profileId === reference.profileId)
+        && (!restored.variantId || restored.variantId === reference.variantId)) {
+        const ids = [...new Set([...sessionDraftDesignIds(reference), ...(restored.designId ? [restored.designId] : [])])];
+        const own = await Promise.all(ids.map(readOwnMotif)), verified = Object.fromEntries(own.map(motif => [motif.designId, motif]));
+        const loaded = hydrateSessionDraft(reference, catalogProducts, verified);
+        const activeSide = restored.profileId ? restored.side || "front" : reference.side;
+        if (activeSide === "back" && !loaded.variant.back) throw new Error("Die Rückseite dieses Entwurfs ist nicht mehr verfügbar.");
+        const working = loaded.draft.working[activeSide];
+        if (!working) throw new Error("Die aktive Druckseite des Entwurfs ist unvollständig.");
+        if (restored.designId) {
+          const motif = verified[restored.designId], area = activeSide === "back" && loaded.variant.back ? loaded.variant.back.area : loaded.variant.area;
+          loaded.draft.working[activeSide] = { designId: motif.designId, placement: restored.placement || (motif.designId === working.designId
+            ? working.placement : initialPlacement(area, motif)) };
+        }
+        if (reference.receiptId) {
+          const response = await fetch(`/api/cappatex/preparations/${reference.receiptId}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+          if (response.ok) {
+            const receipt = await response.json() as PreparationSummary;
+            if (receipt.id === reference.receiptId && receipt.profileId === loaded.product.id && receipt.profileVersion === loaded.product.profileVersion
+              && receipt.variant.shopifyVariantId === loaded.variant.shopifyVariantId) {
+              loaded.draft.receipt = receipt;
+              loaded.draft.savedSignature = JSON.stringify({ profileId: receipt.profileId, profileVersion: receipt.profileVersion,
+                shopifyVariantId: receipt.variant.shopifyVariantId, quantity: receipt.quantity, country: receipt.country,
+                sides: receipt.sides.map(s => ({ position: s.position, designId: s.designId, placement: s.placement })) });
+            }
+          }
+        }
+        if (!active) return;
+        setMotifs(verified); setProductId(loaded.product.id); setVariantId(loaded.variant.shopifyVariantId);
+        setSide(activeSide); setQuantity(query.has("quantity") ? restored.quantity : reference.quantity); setCountry(query.has("country") ? restored.country : reference.country);
+        setDrafts({ [loaded.key]: loaded.draft }); const current = loaded.draft.working[activeSide]!; showMotif(verified[current.designId], current.placement);
+        setSelectionNeedsReview(false); setMessage("Dein Tab-Entwurf wurde nach erneuter Konto- und Profilprüfung wiederhergestellt. Dauerhaft gespeichert sind nur ausdrücklich gespeicherte Druckseiten.");
+      } else if (query.has("preparationId")) {
+        const id = query.get("preparationId") || "";
+        if (!/^CPP-[a-f0-9]{32}$/.test(id)) throw new Error("Der Verweis auf den gespeicherten Stand ist ungültig.");
+        const response = await fetch(`/api/cappatex/preparations/${id}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+        if (!response.ok) throw new Error("Der gespeicherte Stand ist für dein Konto nicht verfügbar.");
+        const receipt = await response.json() as PreparationSummary;
+        if (receipt.id !== id) throw new Error("Der gespeicherte Stand konnte nicht eindeutig bestätigt werden.");
+        const own = await Promise.all([...new Set([...preparationDesignIds(receipt), ...(restored.designId ? [restored.designId] : [])])].map(readOwnMotif));
+        const verified = Object.fromEntries(own.map(motif => [motif.designId, motif]));
+        const copy = resumePreparation(receipt, catalogProducts, verified, crypto.randomUUID());
+        copy.draft.receipt = receipt; copy.draft.savedSignature = JSON.stringify({ profileId: receipt.profileId, profileVersion: receipt.profileVersion,
+          shopifyVariantId: receipt.variant.shopifyVariantId, quantity: receipt.quantity, country: receipt.country,
+          sides: receipt.sides.map(s => ({ position: s.position, designId: s.designId, placement: s.placement })) });
+        delete copy.draft.copyOf;
+        if (!active) return;
+        setMotifs(verified); setProductId(copy.profileId); setVariantId(copy.variantId); setQuantity(copy.quantity); setCountry(copy.country); setSide(copy.side);
+        setDrafts({ [compositionKey(copy.profileId, copy.profileVersion, copy.variantId)]: copy.draft });
+        const current = copy.draft.working[copy.side]!; showMotif(verified[current.designId], current.placement);
+        setMessage("Der gespeicherte Stand ist geladen. Nicht gespeicherte Änderungen waren ohne Sitzungssicherung nicht wiederherstellbar.");
       } else {
-        setMessage("Die Blanko-Produkte konnten gerade nicht geladen werden. Bitte lade die Seite erneut.");
-        setSelectionNeedsReview(Boolean(restored.profileId || restored.variantId || restored.placement));
+        const selection = verifiedDesignSelection(restored, catalogProducts);
+        const motif = restored.designId ? await readOwnMotif(restored.designId) : null;
+        if (!active) return;
+        setQuantity(restored.quantity); setCountry(restored.country); setProductId(selection.profileId); setVariantId(selection.variantId);
+        setSide(selection.side); setPlacement(selection.placement || null); setSelectionNeedsReview(selection.requiresSelection);
+        setConfigurations(reconcileConfigurations(catalogProducts, restored.configurations || {}));
+        if (selection.requiresSelection) setError("Die gespeicherte Produktvariante ist nicht mehr verfügbar oder das Druckprofil wurde geändert. Bitte wähle Produkt und Variante erneut.");
+        if (motif) { setMotifs({ [motif.designId]: motif }); showMotif(motif, selection.placement || null); }
       }
-      if (designResult.status === "fulfilled" && designResult.value) {
-        const data = designResult.value;
-        setImage(data.previewUrl); setDesignId(data.designId); setArtwork({ width: data.width, height: data.height });
-        setPreviewSize({ width: data.previewWidth, height: data.previewHeight });
-        setUploadedArtwork(data.source === "upload"); setCanDownloadHd(data.canDownloadOriginal === true);
-      } else if (designResult.status === "rejected") setError(designResult.reason instanceof Error ? designResult.reason.message : "Das Motiv konnte nicht geladen werden.");
-      setBusy(""); setRestorationComplete(true);
-    });
-    fetch("/api/account", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(data => {
-      if (active) {
-        setGenerationEnabled(data?.account?.cappatexGeneration?.enabled === true);
-        setPilotOwner(data?.account?.cappatexGeneration?.pilotOwner === true);
-        setUploadEnabled(data?.account?.cappatexUpload?.enabled === true);
-        setCanDownloadHd(data?.account?.capabilities?.canDownloadHd === true);
-      }
-    }).catch(() => {});
+    }
+    restore().catch(caught => { if (active) { setSelectionNeedsReview(true); setError(caught instanceof Error ? caught.message : "Der Gestaltungsstand konnte nicht sicher geladen werden."); } })
+      .finally(() => { if (active) { setBusy(""); setRestorationComplete(true); } });
     return () => { active = false; };
-  }, []);
+  }, [showMotif]);
+
+  useEffect(() => {
+    if (!restorationComplete || !sessionKey || selectionNeedsReview || !product || !baseVariant || !designId) return;
+    try { window.sessionStorage.setItem(sessionKey, serializeSessionDraft(product, baseVariant, currentDraft, motifs, quantity, country, side)); }
+    catch { /* A blocked/full session store must never stop explicit server-side saving. */ }
+  }, [restorationComplete, sessionKey, selectionNeedsReview, product, baseVariant, designId, currentDraft, motifs, quantity, country, side]);
 
   useEffect(() => {
     if (!restorationComplete || !designId || selectionNeedsReview) return;
@@ -207,32 +297,68 @@ export default function CappatexDesigner() {
     window.history.replaceState(window.history.state, "", url);
   }, [restorationComplete, selectionNeedsReview, designId, product, productId, variant, variantId, placement, quantity, country, configurations, side]);
 
+  function rememberDraft() {
+    return draftKey && designId ? { ...drafts, [draftKey]: currentDraft } : drafts;
+  }
+
+  function selectDraftLink(draft: CompositionDraft) {
+    const url = new URL(window.location.href), id = draft.receipt?.id || draft.copyOf;
+    if (id) url.searchParams.set("preparationId", id); else url.searchParams.delete("preparationId");
+    url.searchParams.delete("resume"); window.history.replaceState(window.history.state, "", url);
+  }
+
   function selectProduct(nextProduct: CappatexDesignProduct) {
     const updated = product && variant && !selectionNeedsReview
       ? rememberConfiguration(configurations, configurationProduct!, variant.shopifyVariantId, placement) : configurations;
     const saved = rememberedConfiguration(nextProduct, updated);
     const next = nextProduct.variants.find(item => item.shopifyVariantId === saved?.variantId) || nextProduct.variants[0];
+    const remembered = rememberDraft(), key = compositionKey(nextProduct.id, nextProduct.profileVersion, next.shopifyVariantId);
+    const target = remembered[key] || emptyCompositionDraft();
+    const working = target.working.front || (designId ? { designId, placement: saved?.placement || initialPlacement(next.area, artwork) } : undefined);
+    if (working && !motifs[working.designId]) { setError("Das Motiv dieses Entwurfs muss erneut für dein Konto geladen werden."); return; }
+    setDrafts({ ...remembered, [key]: { ...target, working: { ...target.working, ...(working ? { front: working } : {}) } } });
+    selectDraftLink(target);
     setConfigurations(updated); setProductId(nextProduct.id); setVariantId(next.shopifyVariantId); setSide("front"); setPhotoUrl("");
-    setPlacement(saved?.placement || null); setSelectionNeedsReview(false); setError("");
+    if (working) showMotif(motifs[working.designId], working.placement); else setPlacement(saved?.placement || null);
+    setSelectionNeedsReview(false); setError("");
   }
 
   function selectVariant(nextProduct: CappatexDesignProduct, nextId: string) {
     const next = nextProduct.variants.find(v => v.shopifyVariantId === nextId) || nextProduct.variants[0];
+    const remembered = rememberDraft(), key = compositionKey(nextProduct.id, nextProduct.profileVersion, next.shopifyVariantId);
+    const nextSide = side === "back" && !next.back ? "front" : side;
+    const target = remembered[key] || { ...emptyCompositionDraft(), working: next.back ? { ...currentDraft.working }
+      : { ...(currentDraft.working.front ? { front: currentDraft.working.front } : {}) } };
+    const working = target.working[nextSide] || (designId ? { designId,
+      placement: retainedPlacement(product?.id, nextProduct.id, placement) || initialPlacement(nextSide === "back" && next.back ? next.back.area : next.area, artwork) } : undefined);
+    if (working && !motifs[working.designId]) { setError("Das Motiv dieses Entwurfs muss erneut für dein Konto geladen werden."); return; }
+    setDrafts({ ...remembered, [key]: { ...target, working: { ...target.working, ...(working ? { [nextSide]: working } : {}) } } });
+    selectDraftLink(target);
     setProductId(nextProduct.id); setVariantId(next.shopifyVariantId); setPhotoUrl("");
-    if (side === "back" && !next.back) { setSide("front"); setPlacement(null); setError("Für diese Variante ist nur die Vorderseite geprüft. Bitte prüfe die Platzierung neu."); return; }
-    const nextPlacement = selectionNeedsReview ? null : retainedPlacement(product?.id, nextProduct.id, placement);
+    setSide(nextSide);
+    const nextPlacement = working?.placement || null;
     setPlacement(nextPlacement);
-    setConfigurations(current => rememberConfiguration(current, { ...nextProduct, id: side === "back" ? `${nextProduct.id}:back` : nextProduct.id }, next.shopifyVariantId,
-      nextPlacement || initialPlacement(side === "back" && next.back ? next.back.area : next.area, artwork)));
-    setSelectionNeedsReview(false); setError("");
+    if (working) showMotif(motifs[working.designId], working.placement);
+    setConfigurations(current => rememberConfiguration(current, { ...nextProduct, id: nextSide === "back" ? `${nextProduct.id}:back` : nextProduct.id }, next.shopifyVariantId,
+      nextPlacement || initialPlacement(nextSide === "back" && next.back ? next.back.area : next.area, artwork)));
+    setSelectionNeedsReview(false); setError(nextSide !== side ? "Für diese Variante ist nur die Vorderseite geprüft. Der bisherige Entwurf mit Rückseite bleibt bei seiner ursprünglichen Variante erhalten."
+      : "Farbe oder Grösse gewechselt: Motive und Positionen bleiben erhalten. Prüfe die neue Druckfläche und übernimm die gewünschten Seiten erneut.");
   }
   function selectSide(nextSide: "front" | "back") {
     if (!product || !baseVariant || !variant || (nextSide === "back" && !baseVariant.back)) return;
     const updated = rememberConfiguration(configurations, configurationProduct!, variant.shopifyVariantId, placement);
     const target = { ...product, id: nextSide === "back" ? `${product.id}:back` : product.id };
     const saved = rememberedConfiguration(target, updated);
+    const remembered = rememberDraft(), targetDraft = remembered[draftKey] || emptyCompositionDraft();
+    const area = nextSide === "back" && baseVariant.back ? baseVariant.back.area : baseVariant.area;
+    const working: WorkingSide | undefined = targetDraft.working[nextSide] || (designId ? { designId,
+      placement: saved?.variantId === variant.shopifyVariantId ? saved.placement : initialPlacement(area, artwork) } : undefined);
+    if (working && !motifs[working.designId]) { setError("Das Motiv dieser Druckseite ist für dein Konto noch nicht bestätigt."); return; }
+    setDrafts({ ...remembered, [draftKey]: { ...targetDraft, working: { ...targetDraft.working, ...(working ? { [nextSide]: working } : {}) } } });
     setConfigurations(updated); setSide(nextSide); setPhotoUrl("");
-    setPlacement(saved?.variantId === variant.shopifyVariantId ? saved.placement : null); setError("");
+    if (working) showMotif(motifs[working.designId], working.placement);
+    else setPlacement(saved?.variantId === variant.shopifyVariantId ? saved.placement : null);
+    setError("");
   }
   async function generate() {
     if (!confirmed || !generationEnabled || busy || !galleryChoiceValid(galleryChoice,"cappatex")) return;
@@ -242,13 +368,16 @@ export default function CappatexDesigner() {
         body: JSON.stringify({ prompt, style, canvas, confirmGeneration: confirmed,galleryChoice }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Das Motiv konnte nicht erstellt werden.");
-      setImage(data.image); setDesignId(data.designId); setArtwork({ width: data.width, height: data.height });
+      const motif = ownedMotif({ ...data, previewUrl: data.image, source: "generated", canDownloadOriginal: accountCanDownloadHd,
+        previewWidth: data.previewWidth ?? Math.ceil(data.width / 4), previewHeight: data.previewHeight ?? Math.ceil(data.height / 4) }, data.designId);
+      setMotifs(current => ({ ...current, [motif.designId]: motif }));
+      const nextPlacement = variant ? initialPlacement(variant.area, motif) : null;
+      showMotif(motif, nextPlacement);
+      if (draftKey && nextPlacement) setDrafts({ ...rememberDraft(), [draftKey]: { ...currentDraft,
+        working: { ...currentDraft.working, [side]: { designId: motif.designId, placement: nextPlacement } } } });
       setGalleryChoice(newGalleryDraft());setConfirmed(false);
       setPreviewSize({ width: data.previewWidth ?? Math.ceil(data.width / 4), height: data.previewHeight ?? Math.ceil(data.height / 4) });
       setUploadedArtwork(false); setLoadedArtwork(""); setPhotoUrl("");
-      setConfigurations({});
-      if (variant) setPlacement(initialPlacement(variant.area, { width: data.width, height: data.height }));
-
       showProductPreview();
     } catch (caught) { setCreationError({ source: "prompt", message: caught instanceof Error ? caught.message : "Bilddienst nicht erreichbar." }); }
     finally { setBusy(""); }
@@ -261,13 +390,15 @@ export default function CappatexDesigner() {
       const response = await fetch("/api/cappatex/upload", { method: "POST", headers: { "Content-Type": "image/png", "X-Cappatex-Image-Rights": "confirmed","X-Gallery-Choice":encodeURIComponent(JSON.stringify(galleryChoice)) }, body: file });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Das Bild konnte nicht gespeichert werden.");
-      const size = { width: data.width, height: data.height };
-      setImage(data.image); setDesignId(data.designId); setArtwork(size);
+      const motif = ownedMotif({ ...data, previewUrl: data.image, source: "upload", canDownloadOriginal: true }, data.designId);
+      setMotifs(current => ({ ...current, [motif.designId]: motif }));
+      const nextPlacement = variant ? initialPlacement(variant.area, motif) : null;
+      showMotif(motif, nextPlacement);
+      if (draftKey && nextPlacement) setDrafts({ ...rememberDraft(), [draftKey]: { ...currentDraft,
+        working: { ...currentDraft.working, [side]: { designId: motif.designId, placement: nextPlacement } } } });
       setGalleryChoice(newGalleryDraft());
       setPreviewSize({ width: data.previewWidth, height: data.previewHeight });
       setUploadedArtwork(true); setLoadedArtwork(""); setPhotoUrl("");
-      setConfigurations({});
-      if (variant) setPlacement(initialPlacement(variant.area, size));
       showProductPreview();
     } catch (caught) { setCreationError({ source: "upload", message: caught instanceof Error ? caught.message : "Das Bild konnte nicht verarbeitet werden." }); }
     finally { setBusy(""); }
@@ -408,11 +539,17 @@ export default function CappatexDesigner() {
           </div>
         </>}
         {error && <p className="cappatex-error" role="alert">{error}</p>}
+        {sessionNotice && <p className="cappatex-action-hint" role="status">{sessionNotice}</p>}
         <section className="cappatex-save-step" id="cappatex-save" aria-labelledby="cappatex-save-heading">
         <div className="cappatex-step-heading"><span>3</span><div><h3 id="cappatex-save-heading">Prüfen & speichern</h3><p>Prüfe dein Motiv und die gewünschten Druckseiten.</p></div></div>
         {pilotOwner && product && variant && <CappatexPreparationPanel key={`${product.id}:${product.profileVersion}:${variant.shopifyVariantId}`}
           product={product} variant={variant} side={side} designId={designId} artwork={artwork} placement={placement}
           ready={previewReady && Boolean(geometry?.ok) && !busy} quantity={quantity} country={country}
+          draft={currentDraft} onDraftChange={update => setDrafts(current => ({ ...current,
+            [draftKey]: update({ ...(current[draftKey] || emptyCompositionDraft()), working: currentDraft.working }) }))}
+          onPersist={value => { if (sessionKey && product && baseVariant) try {
+            window.sessionStorage.setItem(sessionKey, serializeSessionDraft(product, baseVariant, value, motifs, quantity, country, side));
+          } catch { setSessionNotice("Die Sitzungssicherung ist nicht verfügbar. Bei unklarem Speicherstatus bleibe auf dieser Seite und wiederhole dieselbe Anfrage."); } }}
           onSaving={saving => setBusy(saving ? "preparation" : "")} />}
         <div className="cappatex-ready">
           {designId&&<Link className="text-link" href="/cappatex/sammlung">Deine gespeicherten CAPPATEX-Motive ansehen →</Link>}

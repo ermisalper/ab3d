@@ -15,6 +15,7 @@ export default async function AccountPage() {
         <Link href="/">← Zurück zum Shop</Link>
         <Link href="/sammlung">Meine 3D-Modelle</Link>
         <Link href="/cappatex/sammlung">Meine CAPPATEX-Motive</Link>
+        <Link href="/cappatex/gestaltungen">Meine CAPPATEX-Gestaltungen</Link>
         {generationAccess(user.email, "owner", process.env.CAPPATEX_GENERATION_ALLOWED_EMAILS).allowed
           && <Link href="/cappatex/betrieb">CAPPATEX Betriebsprüfung</Link>}
         {/* The sign-out endpoint must be a full document request. */}

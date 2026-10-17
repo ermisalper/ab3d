@@ -24,6 +24,7 @@ const cappatexLinks = [
   ["Motiv gestalten", "/cappatex#studio"],
   ["Designgalerie", "/cappatex/designs"],
   ["Meine Motive", "/cappatex/sammlung"],
+  ["Meine Gestaltungen", "/cappatex/gestaltungen"],
   ["So funktioniert es", "/cappatex#ablauf"],
   ["FAQ", "/cappatex#faq"],
 ] as const;

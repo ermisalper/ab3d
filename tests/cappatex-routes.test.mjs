@@ -1721,4 +1721,69 @@ describe("offline immutable multi-side print preparations", { concurrency: false
     const response = await callCheckout(design); assert.equal(response.status, 502); assert.equal((await response.json()).code, "checkout_failed");
     assert.equal(fixture.db.sqlite.prepare("SELECT state FROM cappatex_snapshots").get().state, "prepared");
   });
+
+  test("owned uploads survive prepare, history, detail, authenticated resume and idempotent copy without changing the original", async () => {
+    const { GET: listPreparations } = await import("../app/api/cappatex/preparations/route.ts");
+    const { ownedMotif, preparationDesignIds, resumePreparation } = await import("../app/cappatex-resume.ts");
+    prepareProfile();
+    const uploaded = [];
+    for (const red of [37, 219]) {
+      const response = await callUpload(imageBytes(red)), result = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(result)); uploaded.push(result);
+    }
+    assert.notEqual(uploaded[0].designId, uploaded[1].designId);
+    const originalRequest = input({ id: uploaded[0].designId }, { id: uploaded[1].designId });
+    const firstResponse = await post(originalRequest), first = await firstResponse.json();
+    assert.equal(firstResponse.status, 201, JSON.stringify(first));
+    const originalRow = { ...savedRow(first.id) }, originalPayload = JSON.parse(originalRow.payload_json);
+    const originalFiles = new Map(originalPayload.sides.map(side => [side.position, {
+      key: side.file.key, bytes: fixture.bucket.objects.get(side.file.key).bytes.slice(),
+    }]));
+
+    const listResponse = await listPreparations(new Request(APP_ORIGIN + "/api/cappatex/preparations")), history = await listResponse.json();
+    assert.equal(listResponse.status, 200, JSON.stringify(history)); assert.equal(history.nextCursor, null);
+    assert.deepEqual(history.items.map(item => [item.id, item.integrity]), [[first.id, "verified"]]);
+    assert.deepEqual(history.items[0].sides.map(side => [side.position, side.designId]), originalRequest.sides.map(side => [side.position, side.designId]));
+    const detailResponse = await get(first.id), detail = await detailResponse.json();
+    assert.equal(detailResponse.status, 200, JSON.stringify(detail));
+    const catalogResponse = await getDesignCatalog(), catalog = await catalogResponse.json();
+    assert.equal(catalogResponse.status, 200);
+    const motifs = {};
+    for (const designId of preparationDesignIds(detail)) {
+      const response = await callDesignMetadata(designId), metadata = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(metadata)); motifs[designId] = ownedMotif(metadata, designId);
+    }
+    const detailBeforeResume = structuredClone(detail), freshRequestId = crypto.randomUUID();
+    assert.notEqual(freshRequestId, originalRequest.requestId);
+    const resumed = resumePreparation(detail, catalog.products, motifs, freshRequestId);
+    assert.equal(resumed.draft.copyOf, first.id); assert.equal(resumed.draft.requestId, freshRequestId);
+    assert.equal(resumed.draft.receipt, undefined); assert.equal(resumed.draft.checkout, undefined);
+    assert.deepEqual(resumed.draft.selections.map(side => ({ position: side.position, designId: side.designId, placement: side.placement })), originalRequest.sides);
+    assert.deepEqual(detail, detailBeforeResume);
+    const copyRequest = { requestId: resumed.draft.requestId, profileId: resumed.profileId, profileVersion: resumed.profileVersion,
+      shopifyVariantId: resumed.variantId, quantity: resumed.quantity, country: resumed.country,
+      sides: resumed.draft.selections.map(side => ({ position: side.position, designId: side.designId, placement: { ...side.placement } })) };
+    const copyResponse = await post(copyRequest), copy = await copyResponse.json();
+    assert.equal(copyResponse.status, 201, JSON.stringify(copy)); assert.notEqual(copy.id, first.id);
+    assert.deepEqual(copy.sides.map(side => [side.position, side.designId, side.placement]), detail.sides.map(side => [side.position, side.designId, side.placement]));
+    const copyPayload = JSON.parse(savedRow(copy.id).payload_json);
+    for (const side of copyPayload.sides) {
+      const original = originalFiles.get(side.position);
+      assert.notEqual(side.file.key, original.key);
+      assert.deepEqual(fixture.bucket.objects.get(side.file.key).bytes, original.bytes);
+      assert.equal(side.file.sha256, originalPayload.sides.find(item => item.position === side.position).file.sha256);
+    }
+    const countAfterCopy = fixture.bucket.objects.size;
+    const repeatedResponse = await post(copyRequest), repeated = await repeatedResponse.json();
+    assert.equal(repeatedResponse.status, 200); assert.equal(repeated.id, copy.id);
+    assert.equal(fixture.bucket.objects.size, countAfterCopy, "Retry must not store another print-file pair");
+    assert.deepEqual({ ...savedRow(first.id) }, originalRow, "The source preparation must remain byte-for-byte unchanged in SQLite");
+    for (const original of originalFiles.values()) assert.deepEqual(fixture.bucket.objects.get(original.key).bytes, original.bytes);
+    const finalHistory = await (await listPreparations(new Request(APP_ORIGIN + "/api/cappatex/preparations"))).json();
+    assert.deepEqual(finalHistory.items.map(item => item.id).sort(), [first.id, copy.id].sort());
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_preparations WHERE state='ready'").get().n, 2);
+    assert.equal(fixture.carts.length + fixture.uploads.length + fixture.drafts.length + fixture.orders.length, 0);
+    assert.equal(fixture.requests.some(request => request.method === "POST" && /api\.(?:printify|openai|meshy)\.com/.test(request.url)), false);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n, 0);
+  });
 });
