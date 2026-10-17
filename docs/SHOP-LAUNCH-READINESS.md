@@ -57,4 +57,12 @@ Der lokale Lesetoken hat nur `shops.read`, `catalog.read`, `products.read`. Lese
 
 Produktionsbuild, Typprüfung, vollständiges ESLint und **316 von 316 Tests** bestanden, ohne übersprungene Tests. Die Regressionen umfassen echte Routen mit vollständig isolierten Datenbank-/Datei-/API-Testdaten: Front, Back, beide Seiten, mehrere Positionen, exakte PNG-Bytes, Preis-/Währungs-/Attributänderungen, veränderte Dateien, Import-/Freigabesperren, parallele Wiederholung und unklare Auftragsergebnisse. Keine Testanfrage ging an eine echte Bestell-/Produktions- oder kostenpflichtige KI-API. Lokaler Quellscan ohne Treffer vorhandener Secretwerte; `.env.local` bleibt ignoriert.
 
-Die Browsersteuerung startete in dieser Sitzung nicht (Sandbox-/Node-Initialisierungsfehler). Lokal lieferten beide Hauptseiten HTTP 200; Betreiberseite ohne Anmeldung 307 zur Anmeldung, Betreiber-API ohne Berechtigung 403. Das ersetzt keine Sichtprüfung oder echte Smartphoneprüfung. Private Bereitstellung wird separat nach erfolgreichem Toolergebnis dokumentiert.
+Die Browsersteuerung startete in dieser Sitzung nicht (Sandbox-/Node-Initialisierungsfehler). Lokal lieferten beide Hauptseiten HTTP 200; Betreiberseite ohne Anmeldung 307 zur Anmeldung, Betreiber-API ohne Berechtigung 403. Das ersetzt keine Sichtprüfung oder echte Smartphoneprüfung.
+
+## Private Bereitstellung
+
+Version **54** wurde am 17.10.2026 um 15:21 UTC erfolgreich unter `https://ab3d-swiss-design.berk-ermis.chatgpt.site` bereitgestellt. Geprüfter Anwendungscode: `e1bd049ac3fa70fb001ad8f637373c5faa09442f`, sowohl auf GitHub als auch im Site-Quellarchiv bestätigt. Deployment `appgdep_6ad3924aa36c8191b47c53ef178b3b9d`, Saved-Version `appgprj_6a69247390f08191811183b6a04bae94~appgver_70e0719adecc8191be3e4304c7f2ff25`; Status `succeeded`, Umgebungsrevision unverändert **11**. Owner-private blieb erhalten.
+
+Paket: 114 Dateien, 9.349.120 Bytes, SHA-256 `7021c012bc3d65fa1eaa6c61a46bf800fa9e2871675b1a5445e4c32d8d569dc2`. Keine neue Migration. Der offizielle Quellhelfer synchronisierte den Commit; nach seinem bekannten Windows-Paketierungsstartfehler wurde mit dem vorhandenen Windows-Verfahren aus dem sauberen, geprüften HEAD gepackt. Keine Treffer der vorhandenen lokalen Schlüssel-/Token-/Secretwerte im Paket. Die neue Betreiberansicht wurde zum Öffnen in Codex vorgemerkt; die UI meldete `queued`, nicht eine bestätigte Sichtprüfung.
+
+Dieser abschliessende Dokumentationsnachtrag ändert den bereitgestellten Anwendungscode nicht. Geschützter Betreiberbereich: `/cappatex/betrieb`, auch über das eigene Konto verlinkt. Kein kostenpflichtiger KI-Aufruf, Shopify-Upgrade, Zahlungswechsel, echter Kauf oder Printify-Produktionsauftrag wurde ausgelöst.
