@@ -958,7 +958,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             </div>{generationMode === "fast" && <div className="quality-upgrade"><div><b>Gefällt dir die Grundform?</b><span>Erstelle jetzt Material, Farben und die druckbaren STL-/3MF-Dateien.</span></div><button type="button" onClick={() => { setGenerationMode("quality"); workspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Beste Qualität vorbereiten</button></div>}</>
           )}
           {state === "complete" && <div className="file-access-note"><b>Physisch bestellen oder Datei besitzen?</b><span>Bei einer Fertigung geht die geprüfte STL automatisch intern an AB3D. Nur für einen eigenen STL-/3MF-Download brauchst du das 3D-Studio- oder Complete-Abo.</span>{orderMessage && <small role="status">✓ {orderMessage}</small>}</div>}
-          {modelTaskId&&<Link className="gallery-collection-link" href="/sammlung">Gespeicherte Modelle in „Meine Sammlung“ ansehen →</Link>}
+          {modelTaskId&&<Link className="gallery-collection-link" href="/sammlung">Deine gespeicherten 3D-Modelle ansehen →</Link>}
         </div>
       </div>
 

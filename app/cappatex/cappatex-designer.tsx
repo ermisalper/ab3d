@@ -377,7 +377,7 @@ export default function CappatexDesigner() {
           ready={previewReady && Boolean(geometry?.ok) && !busy} quantity={quantity} country={country}
           onSaving={saving => setBusy(saving ? "preparation" : "")} />}
         <div className="cappatex-ready">
-          {designId&&<Link className="text-link" href="/sammlung">Deine Motive in „Meine Sammlung“ ansehen →</Link>}
+          {designId&&<Link className="text-link" href="/cappatex/sammlung">Deine gespeicherten CAPPATEX-Motive ansehen →</Link>}
           <label className="legal-consent cappatex-consent"><input type="checkbox" checked={terms} disabled={side !== "front" || !product?.purchaseReady || !previewReady || !geometry?.ok} onChange={e => setTerms(e.target.checked)} />
             <span>Motiv und Platzierung sind geprüft. Ich akzeptiere die <Link href="/recht/agb" target="_blank">AGB</Link> und habe die <Link href="/recht/datenschutz" target="_blank">Datenschutzerklärung</Link> gelesen.</span></label>
           <button className="button primary" onClick={checkout} disabled={side !== "front" || !product?.purchaseReady || !variant?.price || !checkoutEnabled || !previewReady || !terms || !designId || !geometry?.ok || Boolean(busy)}>

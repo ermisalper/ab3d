@@ -12,7 +12,8 @@ export default async function AccountPage() {
       <header className="account-nav">
         <Link className="brand" href="/"><span>AB</span><b>3D</b></Link>
         <Link href="/">← Zurück zum Shop</Link>
-        <Link href="/sammlung">Meine Sammlung</Link>
+        <Link href="/sammlung">Meine 3D-Modelle</Link>
+        <Link href="/cappatex/sammlung">Meine CAPPATEX-Motive</Link>
         {/* The sign-out endpoint must be a full document request. */}
         <a href={chatGPTSignOutPath("/")}>Abmelden</a>
       </header>

@@ -14,7 +14,7 @@ const objectLinks = [
   ["Kollektion", "/#kollektion"],
   ["3D AI Studio", "/#studio"],
   ["Modellgalerie", "/modelle"],
-  ["Meine Sammlung", "/sammlung"],
+  ["Meine 3D-Modelle", "/sammlung"],
   ["Creator Plans", "/#preise"],
   ["FAQ", "/#faq"],
 ] as const;
@@ -22,7 +22,7 @@ const objectLinks = [
 const cappatexLinks = [
   ["Design Studio", "/cappatex#studio"],
   ["Designgalerie", "/cappatex/designs"],
-  ["Meine Sammlung", "/sammlung"],
+  ["Meine Motive", "/cappatex/sammlung"],
   ["So funktioniert es", "/cappatex#ablauf"],
   ["FAQ", "/cappatex#faq"],
 ] as const;
