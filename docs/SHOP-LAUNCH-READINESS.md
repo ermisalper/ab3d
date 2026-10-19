@@ -18,6 +18,16 @@ Das WhatsApp-Ziel wurde im Browser geöffnet und zeigte exakt die angegebene Num
 
 510/510 vorhandene Tests, Typprüfung und vollständiges ESLint erfolgreich. Der bestehende isolierte Assistant-Test lädt die neuen Kontaktdaten aus dem tatsächlichen reinen Modul; seine Kosten-/Anmeldegates bleiben unverändert geprüft. Keine neuen Tests für reine Link-/Textdarstellung. Die abschliessende private Bereitstellung und Live-Abnahme werden nachfolgend dokumentiert.
 
+### Private Bereitstellung und Live-Abnahme · Version 61
+
+Version **61** ist seit 19.10.2026, 17:09 UTC erfolgreich privat bereitgestellt. Anwendungscode `6301adf841bb7b9d43f074f9cc6da34421f655f6` stimmt auf GitHub und in der gespeicherten Site-Version überein. Deployment `appgdep_6ad64e997c7081919b6542f97190d62c`, Saved-Version `appgprj_6a69247390f08191811183b6a04bae94~appgver_c458f3ba62f08191a75a4cbae7d378f9`, Status `succeeded`, Umgebungsrevision unverändert **11**. Keine Änderung des Betreiberzugriffs oder der Verkaufsfreigaben. Die zuvor ebenfalls privat bereitgestellte Version60 wurde durch diese Kontakt-Navigationskorrektur ersetzt.
+
+Kontakt-Einstiegspunkte verwenden normale HTML-Navigation; der Designer-Hilfelink öffnet einen neuen Tab. Die automatisierte Aktivierung interner Kontaktlinks liess sich im eingebauten Browser nicht zuverlässig bestätigen, auch nach frischer Tab-Bindung und Tastaturprüfung. Direkte Navigation zu beiden tatsächlichen URLs funktionierte. Es wurden keine entsprechenden Hosting-Fehler gemeldet. Das ist eine dokumentierte Grenze der interaktiven Abnahme, keine bestätigte Zustell- oder Ende-zu-Ende-Kommunikationsprüfung.
+
+Live nachgewiesen: beide Kontaktseiten laden mit korrekter Bereichszuordnung, Telefonnummer, statischem WhatsApp-Entwurf, E-Mail-Adresse und Bereichsbetreff. Bei 320px liegen Kopfzeilenkontakt und beide 48px-Buttons innerhalb der Ansicht; kein horizontaler Überlauf. WhatsApp selbst zeigte die richtige Nummer und den AB3D-Entwurf. Kein Login in WhatsApp, App-Start, Nachrichten- oder E-Mail-Versand. Temporäre WhatsApp-/Prüftabs wurden geschlossen, der lokale Devserver beendet, Browserbreite zurückgesetzt. Screenshot: `outputs/contact-cappatex-v61-20261019.jpg`.
+
+Hosting-Paket: 142 Dateien, 13.219.840 Bytes im erfassten Tar-Archiv, SHA-256 `d86f638243fa99237c04081ccb9e551623e6f5246152336239a1beac434ae699`. Quellscan über342 Dateien und Paket-Scan ohne Treffer vorhandener lokaler Secretwerte. Produktionsbuild erfolgreich. Die offizielle Paketierung scheiterte am bekannten Windows-Startfehler; das bestehende Windows-Verfahren paketierte den sauberen geprüften Commit. Erforderliche Git-/Netzwerkaktionen wurden regulär freigegeben; keine Ablehnung wurde umgangen. Dieser abschliessende Dokumentationsnachtrag ändert den bereitgestellten Anwendungscode nicht.
+
 Fortsetzung nach Version 54: [Preis-, Versand- und Etikettenabnahme](CAPPATEX-SALES-AND-SHIPPING-ACCEPTANCE.md). Dort stehen die neue Bindung bezahlter Versandtarife, der aktuelle Pflichtlayer-Nachweis und die sichtbaren Druckgrössengrenzen. Das nachfolgende Protokoll beschreibt den Stand der Version 54.
 
 ## Bestellkonzept
