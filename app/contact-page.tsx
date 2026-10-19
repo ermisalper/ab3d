@@ -1,4 +1,3 @@
-import Link from "next/link";
 import SiteHeader from "./site-header";
 import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, contactEmailUrl, contactPageHref, contactWhatsAppUrl } from "./contact-details";
 
@@ -34,7 +33,7 @@ export default function ContactPage({ area, userName }: { area: ContactArea; use
   return <div className={`contact-page${cappatex ? " cappatex-page" : ""}`}>
     <SiteHeader area={area} userName={userName} />
     <main id="main-content" className="contact-main">
-      <Link className="contact-back" href={home}><span aria-hidden="true">←</span> Zurück zu {division}</Link>
+      <a className="contact-back" href={home}><span aria-hidden="true">←</span> Zurück zu {division}</a>
       <div className="contact-layout">
         <section className="contact-intro" aria-labelledby="contact-heading">
           <p className="contact-eyebrow">{cappatex ? "CAPPATEX by AB3D" : "AB3D Swiss Design"} · Kontakt</p>
@@ -72,9 +71,9 @@ export default function ContactPage({ area, userName }: { area: ContactArea; use
     <footer className="contact-footer">
       <p className="contact-footer-brand">AB3D Swiss Design <span>· Kontakt mit Berk</span></p>
       <nav className="contact-footer-links" aria-label="Kontakt und rechtliche Informationen">
-        <Link href={contactPageHref(cappatex ? "objects" : "cappatex")}>Kontakt: {cappatex ? "3D-Objekte" : "CAPPATEX"}</Link>
-        <Link href="/recht/impressum">Impressum</Link>
-        <Link href="/recht/datenschutz">Datenschutz</Link>
+        <a href={contactPageHref(cappatex ? "objects" : "cappatex")}>Kontakt: {cappatex ? "3D-Objekte" : "CAPPATEX"}</a>
+        <a href="/recht/impressum">Impressum</a>
+        <a href="/recht/datenschutz">Datenschutz</a>
       </nav>
     </footer>
   </div>;

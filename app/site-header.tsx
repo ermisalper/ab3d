@@ -65,10 +65,10 @@ export default function SiteHeader({ area, userName, cartCount = 0, onCartOpen }
           <span className="mobile-area-label">{isObjects ? "3D Objekte" : "CAPPATEX"}</span>
 
           <div className="nav-actions">
-            <Link className="header-contact-link" href={contactPageHref(area)} aria-current={current(contactPageHref(area))} onClick={() => setMenuOpen(false)}>
+            <a className="header-contact-link" href={contactPageHref(area)} aria-current={current(contactPageHref(area))} onClick={() => setMenuOpen(false)}>
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-7a8 8 0 1 1 18-3Z" /><path d="M7 10h8m-8 4h5" /></svg>
               <span>Kontakt</span>
-            </Link>
+            </a>
             <Link className="account-button" href={accountHref}>
               <i aria-hidden="true" /> <span>{userName ? userName.split(" ")[0] : "Anmelden"}</span>
             </Link>

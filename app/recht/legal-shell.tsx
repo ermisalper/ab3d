@@ -44,7 +44,7 @@ export default function LegalShell({
       <footer className="legal-footer">
         <div className="footer-brand"><Link className="brand" href="/#top"><span>AB</span><b>3D</b></Link><p>Schweizer 3D-Design und personalisierte Produkte.</p></div>
         <div><b>Rechtliches</b>{legalLinks.slice(1, 4).map(([label, href]) => <Link key={href} href={href}>{label}</Link>)}</div>
-        <div><b>Service</b><Link href="/kontakt">Kontakt</Link>{legalLinks.slice(4).map(([label, href]) => <Link key={href} href={href}>{label}</Link>)}<a href="mailto:berk_ermis@icloud.com">berk_ermis@icloud.com</a></div>
+        <div><b>Service</b><a href="/kontakt">Kontakt</a>{legalLinks.slice(4).map(([label, href]) => <Link key={href} href={href}>{label}</Link>)}<a href="mailto:berk_ermis@icloud.com">berk_ermis@icloud.com</a></div>
         <small>© 2026 AB3D · Stand 15. August 2026 · Rechtsentwurf, noch nicht öffentlich freigegeben</small>
       </footer>
     </main>

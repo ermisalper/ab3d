@@ -62,7 +62,7 @@ const faqItems = [
 export function FaqSection() {
   return (
     <section className="faq-section section" id="faq">
-      <div data-reveal><p className="eyebrow">Gut zu wissen</p><h2>Fragen vor<br />der Bestellung.</h2><p>Der Design-Guide unten rechts hilft dir weiter. Für eigene Wünsche oder persönliche Hilfe kannst du <Link className="text-link" href="/kontakt">Berk direkt kontaktieren</Link>.</p></div>
+      <div data-reveal><p className="eyebrow">Gut zu wissen</p><h2>Fragen vor<br />der Bestellung.</h2><p>Der Design-Guide unten rechts hilft dir weiter. Für eigene Wünsche oder persönliche Hilfe kannst du <a className="text-link" href="/kontakt">Berk direkt kontaktieren</a>.</p></div>
       <div className="faq-list">{faqItems.map(([question, answer]) => <details data-reveal key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div>
     </section>
   );
@@ -78,7 +78,7 @@ export function ShopFooter() {
   return (
     <footer>
       <div className="footer-brand"><a className="brand" href="#top"><span>AB</span><b>3D</b></a><p>Schweizer 3D-Design für Räume mit Persönlichkeit.</p><ReplayBrandIntro studio="ab3d"/></div>
-      {footerGroups.map((group) => <div key={group.title}><b>{group.title}</b>{group.links.map(([label, href]) => href.startsWith("mailto:") ? <a href={href} key={href}>{label}</a> : <Link href={href} key={href}>{label}</Link>)}</div>)}
+      {footerGroups.map((group) => <div key={group.title}><b>{group.title}</b>{group.links.map(([label, href]) => href.startsWith("mailto:") || href === "/kontakt" ? <a href={href} key={href}>{label}</a> : <Link href={href} key={href}>{label}</Link>)}</div>)}
       <small>© 2026 AB3D · Designed & made in Switzerland</small>
     </footer>
   );

@@ -648,7 +648,7 @@ export default function CappatexDesigner() {
         </>}
         {error && <p className="cappatex-error" role="alert">{error}</p>}
         {sessionNotice && <p className="cappatex-action-hint" role="status">{sessionNotice}</p>}
-        <p className="cappatex-action-hint">Dein Motiv sieht noch nicht so aus wie gewünscht? <Link className="text-link" href="/cappatex/kontakt" target="_blank" rel="noopener noreferrer">Persönliche Designhilfe ↗</Link></p>
+        <p className="cappatex-action-hint">Dein Motiv sieht noch nicht so aus wie gewünscht? <a className="text-link" href="/cappatex/kontakt" target="_blank" rel="noopener noreferrer">Persönliche Designhilfe ↗</a></p>
         <section className="cappatex-save-step" id="cappatex-save" aria-labelledby="cappatex-save-heading">
         <div className="cappatex-step-heading"><span>3</span><div><h3 id="cappatex-save-heading">Prüfen & speichern</h3><p>Prüfe dein Motiv und die gewünschten Druckseiten.</p></div></div>
         {pilotOwner && product && variant && !localRecoveryBlocked && <CappatexPreparationPanel key={`${product.id}:${product.profileVersion}:${variant.shopifyVariantId}`}
