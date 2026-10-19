@@ -18,6 +18,14 @@ Gezielte Offline-Fixture mit synthetischem Konto, Produkt und Vorder-/Rückseite
 
 Abschliessend: 510/510 Tests, Typprüfung, vollständiges ESLint und Produktionsbuild erfolgreich. Quellscan über 343 Dateien ohne Treffer vorhandener lokaler Secretwerte. Keine neue Abhängigkeit, Datenbankmigration oder Änderung an Produktions-Servervariablen und Verkaufsfreigaben.
 
+### Private Bereitstellung · Version 62
+
+Version **62** wurde am 19.10.2026 um 19:15 UTC erfolgreich privat bereitgestellt. Anwendungscode `8ce9569b6251db61163e48e03d4fd79534b45419` stimmt auf GitHub und in der Site-Version überein. Deployment `appgdep_6ad66c45deb481919047322224abadd8`, Saved-Version `appgprj_6a69247390f08191811183b6a04bae94~appgver_cd2e73d5a4d081918075be14246d0ab8`, Status `succeeded`, Umgebungsrevision unverändert **11**. Weiterhin ein erlaubter Betreiber und null externe Besucher; Checkout, Fulfillment und automatische Produktion bleiben gesperrt.
+
+Live bestätigt: aktualisierte Kontaktseite mit beiden Kopierbuttons; der Nummernbutton meldet erfolgreichen Clipboard-Aufruf. Der interne Link wechselte tatsächlich von CAPPATEX-Kontakt zu AB3D-Kontakt. Damit ist die in Version61 noch offene interne Kontakt-Navigation auch live bestätigt. Kein Nachrichtenversand und kein Test einer echten Zustellung. Screenshot `outputs/support-contact-v62-20261019.jpg`. Lokale Prüftabs und beide Testserver sind beendet, temporäre Browserbreite zurückgesetzt.
+
+Das gespeicherte Hosting-Paket umfasst 144 Dateien und 13.230.080 Bytes; serverseitiger Archivhash `sha256:34cf5b5b2a39a9a90dfb9dd89c10c8b32a689cb480321add488b00a5c60c0007`. Die lokale komprimierte Transportdatei hat 7.329.442 Bytes und SHA-256 `6ad08c17fb352a0a6cb9504ed979b986d23839585b915b5b07ec98f404157f8b`. Paket-Scan ohne Treffer vorhandener lokaler Secretwerte. Nach dem bekannten technischen Windows-Startfehler des offiziellen Paketierungsschritts wurde das vorhandene lokale Windows-Verfahren aus dem sauberen, geprüften Commit verwendet. Keine Genehmigungsablehnung wurde umgangen. Dieser Dokumentationsnachtrag ändert den bereitgestellten Anwendungscode nicht.
+
 ## Persönlicher Kontakt · 19.10.2026
 
 Auf ausdrücklichen Wunsch des Betreibers sind `/kontakt` für AB3D und `/cappatex/kontakt` für CAPPATEX ergänzt. Beide Bereiche haben einen ständig sichtbaren Kontaktlink in der Kopfzeile und einen passenden Footerlink. Die Kontaktseiten benötigen keine zusätzliche Anmeldung. CAPPATEX bietet ausserdem einen Link zur persönlichen Designhilfe in einem neuen Tab, damit der aktuelle Entwurf offen bleibt.
