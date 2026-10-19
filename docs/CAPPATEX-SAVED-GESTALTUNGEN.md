@@ -2,6 +2,8 @@
 
 Stand 17.10.2026. Repository `ermisalper/ab3d`, Branch `codex/cappatex-production`. Ergänzung zur [Verkaufsvorbereitung](SHOP-LAUNCH-READINESS.md) und [Versandabnahme](CAPPATEX-SALES-AND-SHIPPING-ACCEPTANCE.md). Keine Verkaufs- oder Produktionsfreigabe.
 
+Aktuelle Fortsetzung vom 19.10.2026: siehe „Stabile Produktansichten und sichere Auswahl“ am Ende. Das ursprüngliche Protokoll zur Version 56 bleibt nachfolgend erhalten.
+
 ## Konzept
 
 Motive und gestaltete Produkte haben unterschiedliche Aufgaben: `/cappatex/sammlung` enthält eigene Motive. `/cappatex/gestaltungen` enthält unveränderlich gespeicherte Produktstände mit Farbe, Grösse, Menge, Lieferland und den ausgewählten Druckseiten. Beide bleiben im CAPPATEX-Bereich. Die 3D-Sammlung wird nicht geändert.
@@ -51,3 +53,25 @@ Version **56** wurde am 17.10.2026 um 18:15 UTC erfolgreich auf `https://ab3d-sw
 Das gespeicherte Paket enthält 116 Dateien, 9.441.280 Bytes im vom Hosting erfassten Tar-Archiv, SHA-256 `ae14a3eeee6d0b561c0b62dd5960f26347d3fa4f986fdd13cf9855d773ab9931`. Keine Migration, Secretänderung oder Verkaufsfreigabe. Nach dem bekannten Windows-Startfehler der offiziellen Paketierung wurde das bestehende Windows-Verfahren aus dem sauberen, geprüften Commit verwendet; der Paket-Scan fand keine vorhandenen lokalen Secretwerte.
 
 Die neue Übersicht `/cappatex/gestaltungen` wurde zum Öffnen in Codex vorgemerkt (`queued`). Das bestätigt keine Browser-Sichtprüfung. Der lokale Prüfserver wurde nach den HTTP-Prüfungen beendet. Dieser abschliessende Dokumentationsnachtrag ändert den bereitgestellten Anwendungscode nicht.
+
+## Stabile Produktansichten und sichere Auswahl · 19.10.2026
+
+26 zuvor kalibrierte Original-JPEGs sind unverändert unter `public/cappatex/mockups/<sha256>.jpg` abgelegt. Der Resolver prüft die exakte ursprüngliche URL und die 1200×1200-Pixelabmessungen und liefert nur den passenden lokalen Inhalt. [Die maschinenlesbare Evidenz](evidence/cappatex-mockup-assets.json) nennt Herkunft, SHA-256 und verbleibende Ausnahmen. Profil-URLs, Profilversionen, bestehende CPP-Payloads und die Druckgeometrie werden nicht umgeschrieben. Das Pinning hält das kalibrierte Referenzfoto stabil; es überwacht nicht, ob der Anbieter sein heutiges CDN-Bild geändert hat.
+
+Bei zwei T-Shirt-Rückseiten sind die historischen Blanko-Originalbytes nicht mehr vorhanden. Ihre genaue URL-/Abmessungszuordnung bleibt als Legacy-Ausnahme erhalten. Die bisherige Live-Ansicht wird ausdrücklich gewarnt angezeigt und kann weitergestaltet werden; sie zählt nicht als bestätigte Bildansicht für den späteren Bestellschritt. Keine neuen Inhalts-Hashes oder Nachweise wurden erfunden. Unbekannte Fotos und abweichende Abmessungen erlauben keine Seitenübernahme.
+
+Vorbereitung und Prüfansicht kontrollieren das Laden und die Originalabmessungen jedes Fotos und jeder privaten Motivvorschau. Motive werden erst auf korrekt geladenen Fotos eingeblendet. Fehlende Bilder, falsche Masse und 20-Sekunden-Ladeüberschreitungen erhalten eine sichtbare Meldung und eine Wiederholungsmöglichkeit. Eine spätere Bildbestätigung wird erst nach vollständiger Anzeige aller gepinnten Druckseiten ermöglicht; ein Neuladen setzt diese Bestätigung zurück. Preis-, Produkt- und Versandfreigaben bleiben zusätzliche Voraussetzungen.
+
+Diese Ansicht setzt weiterhin die gespeicherten Geometrie-/Platzierungsdaten mit der privaten Viertelauflösungs-Motivvorschau zusammen. Sie ist kein direktes Thumbnail der fertigen Druck-PNG. Die unveränderlichen finalen PNGs samt serverseitiger SHA-/Dimensionsprüfung vor Checkout und Fulfillment bleiben bestehen. Es wurde weder ein HD-Download freigeschaltet noch ein grosser Bilddecoder in den Worker eingeführt.
+
+Farbwechsel ersetzen eine nicht verfügbare Wunschgrösse nicht mehr still durch die erste angebotene Variante. Die bisherige Auswahl bleibt erhalten, passende Grössen werden ausdrücklich zur Auswahl angeboten. Reale Regressionen betreffen Tanktop White/L → Black, Hoodie Navy/4XL → White und Langarmshirt Black/5XL → White. Vergleichskarten und anschliessendes Öffnen verwenden dieselbe eigene Vorderseiten-Motivzuordnung. Ein Katalogausfall blockiert Produkte, lässt bereits bestätigte Konto-Freigaben für Motivwerkzeuge aber erhalten; Einwilligungen und Kostenbestätigungen werden nicht umgangen.
+
+Abgebrochene Speichervorgänge blockieren das Konto nicht mehr dauerhaft. Ausschliesslich eigene `preparing`-Reservierungen ohne Payload oder Payload-Hash werden nach 15 Minuten beim nächsten gültigen Speicher-POST als fehlgeschlagen markiert. Die alte Anfrage-ID bleibt verbraucht, ein neuer ausdrücklicher Speicherversuch verwendet eine neue ID. Ein verspäteter alter Worker kann durch das bestehende `WHERE state='preparing'` keine abgeschlossene oder neue Vorbereitung überschreiben. Er kann private, nicht referenzierte Dateien im alten Namensraum hinterlassen; fertige Originale werden nicht verändert oder gelöscht. GET bleibt schreibfrei, die Tagesgrenze zählt fehlgeschlagene Versuche weiterhin mit.
+
+Gesamtprüfung: **453/453 Offline-Tests**, Typprüfung, vollständiges ESLint und Produktionsbuild erfolgreich. Neue Tests umfassen acht Lease-/Race-Fälle, acht Asset-/Evidenzfälle und sieben Auswahl-/Motivzuordnungsfälle. Quellscan: 329 Dateien, keine Treffer vorhandener lokaler Secretwerte. Keine neue Migration, Kosten, echte Bestellung, Produktion, Kontoänderung oder öffentliche Freigabe.
+
+Die Browsersteuerung funktioniert am 19.10. wieder. Die bestehende Anmeldung war ohne Benutzeraktion möglich. Auf der bisherigen privaten Live-Version wurden die Liste, die vollständige Vorder-/Rückseitenansicht und die Wiederaufnahme als Kopie des vorhandenen eigenen CPP-Stands geprüft, ohne eine neue Speicherung oder Generierung auszulösen.
+
+Zusätzlich wurden die tatsächlichen React-Prüfkomponenten über CUA in einem isolierten lokalen Fixture bedient: gesunde Vorderseite, fehlendes Foto, fehlendes Motiv, falsche Foto-/Motivmasse, 20-Sekunden-Timeout, gewarnte Legacy-Rückseite, unbekanntes Foto, zwei gesunde Seiten und eine fehlende zweite Motivseite. Bei Fehlern blieben Bestätigung und Weiterleitung gesperrt. Nach Reparatur und Retry wurde die Ansicht geladen, eine neue Bestätigung blieb erforderlich. Beide gesunden Seiten ermöglichten den Button erst nach ausdrücklicher synthetischer Testbestätigung. Kein Checkout-POST, keine Kontodaten und kein externer Anbieteraufruf. Bei 390px gab es keinen horizontalen Überlauf; die Wiederholungsbuttons passten in die Ansicht. Der lokale Fixture-Server wurde danach beendet.
+
+Alle 26 gepinnten Bilder wurden auch über den lokalen HTTP-Server gelesen: jeweils HTTP200 und exakt die dokumentierte SHA-256. Die CAPPATEX-Seite lieferte HTTP200. Dies ist weiterhin kein echter Kauf-/Versand-/Produktions- oder physischer Drucktest. Die bisher gesperrten Verkaufs-, Versand- und Produktionsschritte bleiben unverändert.

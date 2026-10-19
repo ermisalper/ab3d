@@ -14,6 +14,9 @@ import { PREPARATION_LIST_SIZE, parsePreparationListCursor, preparationListCurso
 
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 const fail = (status: number, code: string, error: string) => Response.json({ code, error }, { status, headers });
+// Expire only unfinished reservations. A later completion is fenced by the
+// existing preparing-only commit; an expired request ID is never reused.
+const PREPARATION_LEASE_MS = 15 * 60 * 1000;
 
 export async function GET(request: Request) {
   const user = await getChatGPTUser();
@@ -67,6 +70,10 @@ export async function POST(request: Request) {
   let reservedId: string | null = null;
   let phase = "idempotency";
   try {
+    await env.DB.prepare(`UPDATE cappatex_preparations SET state = 'failed'
+      WHERE email = ? AND state = 'preparing' AND typeof(created_at) = 'integer'
+        AND created_at <= ? AND payload_json IS NULL AND payload_sha256 IS NULL`)
+      .bind(user.email, Date.now() - PREPARATION_LEASE_MS).run();
     const duplicate = await repeated(); if (duplicate) return duplicate;
     phase = "catalog";
     const products = await designCatalog(user.email);

@@ -1,34 +1,25 @@
 "use client";
-/* eslint-disable @next/next/no-img-element */
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { CappatexDesignProduct } from "../cappatex-design-catalog";
 import type { ArtworkSize, Placement } from "../cappatex-print-profile";
 import type { PreparationInput, PreparationSummary, PrintSide } from "../cappatex-preparation";
-import { preparationRequestId, type CompositionDraft, type DraftSelection } from "../cappatex-resume";
+import { preparationRequestId, type CompositionDraft } from "../cappatex-resume";
+import PreparationPreview, { preparationPreviewIdentity } from "../cappatex-preparation-preview";
 
-type Selection = DraftSelection;
 const sideName = (side: PrintSide) => side === "front" ? "Vorderseite" : "Rückseite";
 
-function SidePreview({ selection }: { selection: Selection }) {
-  const { mockup: m, area, placement: p, artwork } = selection;
-  return <div className="cappatex-preparation-photo" style={{ aspectRatio: `${m.width}/${m.height}` }}>
-    <img src={m.url} alt={`${sideName(selection.position)} – übernommene Gestaltung`} />
-    <span style={{ position: "absolute", left: `${m.left / m.width * 100}%`, top: `${m.top / m.height * 100}%`, width: `${m.printWidth / m.width * 100}%`, height: `${m.printHeight / m.height * 100}%` }}>
-      <img src={`/api/cappatex/artwork/${selection.designId}`} alt="Übernommenes Motiv" style={{ position: "absolute", maxWidth: "none",
-        left: `${p.x * 100}%`, top: `${p.y * 100}%`, width: `${p.scale * 100}%`,
-        height: `${p.scale * area.widthPx / area.heightPx * artwork.height / artwork.width * 100}%`, transform: "translate(-50%, -50%)" }} />
-    </span>
-    {m.foreground?.map((polygon, i) => <img key={i} src={m.url} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0,
-      clipPath: `polygon(${polygon.map(([x,y]) => `${100*x/m.width}% ${100*y/m.height}%`).join(",")})` }} />)}
-  </div>;
-}
-
-export function PreparedReceipt({ receipt }: { receipt: PreparationSummary }) {
+export function PreparedReceipt({ receipt, onPreviewReady }: { receipt: PreparationSummary; onPreviewReady?: (ready: boolean) => void }) {
+  const [loaded, setLoaded] = useState<Record<string, boolean>>({});
+  const report = useCallback((identity: string, ready: boolean) => {
+    setLoaded(current => current[identity] === ready ? current : { ...current, [identity]: ready });
+  }, []);
+  const ready = receipt.sides.length > 0 && receipt.sides.every(side => loaded[preparationPreviewIdentity(side)] === true);
+  useEffect(() => { onPreviewReady?.(ready); }, [ready, onPreviewReady]);
   return <div className="cappatex-preparation-receipt"><h4>Gespeicherter Stand</h4>
     <p>{receipt.name} · {receipt.variant.color} / {receipt.variant.size} · {receipt.quantity} Stück · {receipt.country}</p>
     <p>Dieser Stand bleibt unverändert, auch wenn du im Designer weiterarbeitest.</p>
     <div className="cappatex-preparation-sides">{receipt.sides.map(s => <article key={s.position}><h4>{sideName(s.position)}</h4>
-      <SidePreview selection={s} /><p>{s.file.width} × {s.file.height} px · Motiv: {Math.floor(s.dpi)} dpi</p>
+      <PreparationPreview key={preparationPreviewIdentity(s)} selection={s} onReadyChange={report} /><p>{s.file.width} × {s.file.height} px · Motiv: {Math.floor(s.dpi)} dpi</p>
       {s.downloadUrl ? <a className="text-link" href={s.downloadUrl}>{sideName(s.position)} als Druck-PNG herunterladen</a> : <p>Original-Download für dein Konto noch nicht freigegeben.</p>}
     </article>)}</div>
     <a className="text-link" href={`/cappatex/vorbereitung/${receipt.id}`}>Gespeicherten Stand öffnen →</a>
@@ -105,7 +96,7 @@ export default function CappatexPreparationPanel({ product, variant, side, desig
     {!ready && !saving && <p className="cappatex-action-hint">{!designId ? "Erstelle oder lade zuerst dein Motiv und prüfe es auf dem Produkt." : "Prüfe die Produktvorschau, Druckfläche und Auflösung, bevor du diese Seite übernimmst."}</p>}
     <button type="button" className="button secondary" disabled={!ready || saving} onClick={capture}>Aktuelle {sideName(side)} {activeSelection ? "erneut übernehmen" : "übernehmen"}</button>
     <div className="cappatex-preparation-sides">{selections.map(s => <article key={s.position}>
-      <h4>{sideName(s.position)}</h4><SidePreview selection={s} /><p>{s.designId} · {Math.round(s.placement.scale * 100)} % Breite</p>
+      <h4>{sideName(s.position)}</h4><PreparationPreview key={preparationPreviewIdentity(s)} selection={s} /><p>{s.designId} · {Math.round(s.placement.scale * 100)} % Breite</p>
       <button type="button" disabled={saving} onClick={() => onDraftChange(current => ({ ...current,
         selections: current.selections.filter(item => item.position !== s.position) }))}>{sideName(s.position)} entfernen</button>
     </article>)}</div>

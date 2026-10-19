@@ -1426,6 +1426,110 @@ describe("offline immutable multi-side print preparations", { concurrency: false
     assert.equal(savedRow(result.id).state, "ready");
   });
 
+  async function pendingReservation(body, createdAt = NOW, email = EMAIL) {
+    const { preparationInput } = await import("../app/cappatex-preparation.ts");
+    const id = `CPP-${crypto.randomUUID().replaceAll("-", "")}`;
+    fixture.db.sqlite.prepare("INSERT INTO cappatex_preparations (id,email,request_id,request_sha256,state,created_at) VALUES(?,?,?,?,'preparing',?)")
+      .run(id, email, body.requestId, await sha256(JSON.stringify(preparationInput(body))), createdAt);
+    return id;
+  }
+
+  test("an abandoned reservation expires without rendering and permits a fresh explicit save", async () => {
+    prepareProfile(); const design = await seedDesign(), body = input(design, design);
+    const id = await pendingReservation(body, NOW - 2 * 86_400_000), count = fixture.bucket.objects.size;
+    const expired = await post(body);
+    assert.equal(expired.status, 409); assert.equal((await expired.json()).code, "failed");
+    assert.equal(savedRow(id).state, "failed"); assert.equal(savedRow(id).payload_json, null);
+    assert.equal(fixture.bucket.objects.size, count); assert.equal(fixture.requests.length, 0);
+    const again = await post(body); assert.equal((await again.json()).code, "failed");
+    const fresh = await post({ ...body, requestId: crypto.randomUUID() }), result = await fresh.json();
+    assert.equal(fresh.status, 201); assert.notEqual(result.id, id);
+    assert.equal(savedRow(id).state, "failed"); assert.equal(savedRow(result.id).state, "ready");
+    assert.equal(fixture.carts.length + fixture.uploads.length + fixture.orders.length, 0);
+  });
+
+  for (const [age, status, state] of [[15 * 60_000 - 1, 202, "preparing"], [15 * 60_000, 409, "failed"]]) {
+    test(`reservation lease boundary ${age}ms preserves active work and only expires overdue work`, async () => {
+      prepareProfile(); const design = await seedDesign(), body = input(design);
+      const id = await pendingReservation(body, NOW - age), count = fixture.bucket.objects.size;
+      assert.equal((await post(body)).status, status); assert.equal(savedRow(id).state, state);
+      assert.equal(fixture.bucket.objects.size, count); assert.equal(fixture.requests.length, 0);
+    });
+  }
+
+  test("a recent reservation still blocks another request instead of duplicating the active render", async () => {
+    prepareProfile(); const design = await seedDesign(), body = input(design);
+    const id = await pendingReservation(body, NOW - 60_000);
+    const response = await post({ ...body, requestId: crypto.randomUUID() });
+    assert.equal(response.status, 409); assert.equal((await response.json()).code, "preparation_busy");
+    assert.equal(savedRow(id).state, "preparing");
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_preparations").get().n, 1);
+    assert.equal([...fixture.bucket.objects.keys()].some(key => key.includes("/preparations/")), false);
+  });
+
+  test("authentication, origin and input validation cannot expire somebody else's reservation", async () => {
+    prepareProfile(); const design = await seedDesign(), body = input(design);
+    const id = await pendingReservation(body, NOW - 86_400_000);
+    assert.equal((await post(body, "https://evil.example.test")).status, 403);
+    runtime.actor = null; assert.equal((await post(body)).status, 401);
+    runtime.actor = "other@example.test"; assert.equal((await post(body)).status, 403);
+    runtime.actor = EMAIL; assert.equal((await post({ ...body, sides: [] })).status, 400);
+    assert.equal(savedRow(id).state, "preparing");
+  });
+
+  test("expiry is owner scoped and preserves another account's pending work", async () => {
+    prepareProfile(); const design = await seedDesign(), body = input(design);
+    fixture.db.sqlite.prepare("INSERT INTO accounts(email,token_balance,created_at,updated_at) VALUES(?,4,?,?)")
+      .run("other@example.test", NOW, NOW);
+    const own = await pendingReservation(body, NOW - 86_400_000);
+    const other = await pendingReservation({ ...body, requestId: crypto.randomUUID() }, NOW - 86_400_000, "other@example.test");
+    assert.equal((await post(body)).status, 409); assert.equal(savedRow(own).state, "failed");
+    assert.equal(savedRow(other).state, "preparing");
+  });
+
+  test("a late expired worker cannot overwrite or complete a fresh preparation", async () => {
+    prepareProfile(); const design = await seedDesign(), body = input(design, design);
+    const originalPut = fixture.bucket.put.bind(fixture.bucket);
+    let release, entered, paused = false;
+    const gate = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { entered = resolve; });
+    fixture.bucket.put = async (...args) => {
+      if (!paused && args[0].includes("/preparations/")) { paused = true; entered(); await gate; }
+      return originalPut(...args);
+    };
+    const abandoned = post(body);
+    await started;
+    const oldId = fixture.db.sqlite.prepare("SELECT id FROM cappatex_preparations").get().id;
+    Date.now = () => NOW + 16 * 60_000;
+    const freshBody = { ...body, requestId: crypto.randomUUID() };
+    let response, ready;
+    try { response = await post(freshBody); ready = await response.json(); }
+    finally { release(); }
+    const late = await abandoned;
+    assert.equal(response.status, 201); assert.equal(late.status, 503);
+    assert.equal(savedRow(oldId).state, "failed"); assert.equal(savedRow(oldId).payload_json, null);
+    assert.equal(savedRow(ready.id).state, "ready"); assert.equal((await get(oldId)).status, 404);
+    const { GET: list } = await import("../app/api/cappatex/preparations/route.ts");
+    const listed = await (await list(new Request(APP_ORIGIN + "/api/cappatex/preparations"))).json();
+    assert.deepEqual(listed.items.map(item => item.id), [ready.id]);
+    const retried = await post(freshBody); assert.equal(retried.status, 200); assert.equal((await retried.json()).id, ready.id);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_preparations WHERE state='ready'").get().n, 1);
+    assert.equal(fixture.carts.length + fixture.uploads.length + fixture.orders.length, 0);
+  });
+
+  test("expiry does not alter a finished preparation or let failed attempts bypass the daily cap", async () => {
+    prepareProfile(); const design = await seedDesign(), body = input(design);
+    const response = await post(body), ready = await response.json(), before = { ...savedRow(ready.id) };
+    Date.now = () => NOW + 16 * 60_000;
+    assert.equal((await post(body)).status, 200); assert.deepEqual({ ...savedRow(ready.id) }, before);
+    for (let i = 0; i < 18; i++) fixture.db.sqlite.prepare("INSERT INTO cappatex_preparations (id,email,request_id,request_sha256,state,created_at) VALUES(?,?,?,'hash','failed',?)")
+      .run(`lease-cap-${i}`, EMAIL, `lease-cap-${i}`, NOW);
+    const pendingBody = { ...body, requestId: crypto.randomUUID() }, id = await pendingReservation(pendingBody, NOW);
+    const capped = await post({ ...body, requestId: crypto.randomUUID() });
+    assert.equal(capped.status, 429); assert.equal(savedRow(id).state, "failed");
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_preparations").get().n, 20);
+  });
+
   for (const issue of ["duplicate side", "unapproved side", "wrong variant", "old profile", "low dpi", "out of bounds", "numeric string", "foreign artwork", "changed original", "changed dimensions"]) test(`${issue} cannot release partial print files`, async () => {
     prepareProfile(); const design = await seedDesign(); const body = input(design, design);
     if (issue === "duplicate side") body.sides[1].position = "front";

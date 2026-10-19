@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PreparedReceipt } from "../../cappatex-preparation-panel";
 import type { PreparationSummary } from "../../../cappatex-preparation";
 
@@ -15,6 +15,12 @@ export default function PreparedReview({ id }: { id: string }) {
   const [busy, setBusy] = useState<"loading" | "checkout" | "">("loading");
   const [error, setError] = useState("");
   const [terms, setTerms] = useState(false);
+  const [preview, setPreview] = useState({ id: "", ready: false });
+  const previewReady = preview.id === id && preview.ready;
+  const reportPreview = useCallback((ready: boolean) => {
+    setPreview(current => current.id === id && current.ready === ready ? current : { id, ready });
+    if (!ready) setTerms(false);
+  }, [id]);
   useEffect(() => {
     let active = true;
     fetch(`/api/cappatex/preparations/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) }).then(async response => {
@@ -38,10 +44,10 @@ export default function PreparedReview({ id }: { id: string }) {
       ? current.checkout.reason : "Checkout und Produktion warten auf die Produkt-, Preis- und Versandfreigabe.";
   function reload() {
     if (busy) return;
-    setReceipt(null); setTerms(false); setError(""); setBusy("loading"); setRefresh(value => value + 1);
+    setReceipt(null); setTerms(false); setPreview({ id: "", ready: false }); setError(""); setBusy("loading"); setRefresh(value => value + 1);
   }
   async function checkout() {
-    if (!checkoutReady || !terms || busy) return;
+    if (!checkoutReady || !previewReady || !terms || busy) return;
     setBusy("checkout"); setError("");
     try {
       const response = await fetch("/api/cappatex/checkout", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -61,7 +67,7 @@ export default function PreparedReview({ id }: { id: string }) {
       : busy === "checkout" ? "Dein gespeicherter Stand wird für Shopify geprüft …" : ""}</p>
     {error && <p className="cappatex-action-error" role="alert">{error}</p>}
     {current && <>
-      <PreparedReceipt receipt={current} />
+      <PreparedReceipt receipt={current} onPreviewReady={reportPreview} />
       <p><Link className="button secondary" href={`/cappatex?preparationId=${current.id}&resume=1#studio`}>Als Kopie weitergestalten</Link></p>
       <section className="cappatex-preparation-receipt" aria-labelledby="prepared-checkout-heading" aria-busy={Boolean(busy)}>
         <h2 id="prepared-checkout-heading">{checkoutReady ? "Bestellung vorbereiten" : "Preise und Versand werden noch geprüft"}</h2>
@@ -69,10 +75,11 @@ export default function PreparedReview({ id }: { id: string }) {
           <p>{current.quantity} Stück · Lieferland: {current.country === "LI" ? "Liechtenstein" : "Schweiz"}</p>
           <p>Stückpreis: <strong>{money(cents)}</strong> · Artikel gesamt: <strong>{money(cents * current.quantity)}</strong></p>
           <p>Versand und endgültigen Gesamtpreis prüfst du im Shopify-Checkout. Deine gespeicherten Motive und Positionen werden gemeinsam übernommen.</p>
-          <label className="legal-consent cappatex-consent"><input type="checkbox" checked={terms} disabled={Boolean(busy)} onChange={event => setTerms(event.target.checked)} />
+          {!previewReady && <p className="cappatex-preparation-warning" role="status">Bitte lade und prüfe zuerst alle gespeicherten Produktansichten. Eine unvollständige oder nicht bestätigte Bildansicht kann noch nicht für die Bestellung bestätigt werden.</p>}
+          <label className="legal-consent cappatex-consent"><input type="checkbox" checked={terms} disabled={Boolean(busy) || !previewReady} onChange={event => setTerms(event.target.checked)} />
             <span>Ich habe die gespeicherten Druckseiten geprüft und akzeptiere die <Link href="/recht/agb" target="_blank" rel="noopener noreferrer">AGB</Link>.
               Die <Link href="/recht/datenschutz" target="_blank" rel="noopener noreferrer">Datenschutzerklärung</Link> habe ich gelesen.</span></label>
-          <button type="button" className="button primary" disabled={!terms || Boolean(busy)} onClick={checkout}>Weiter zu Shopify</button>
+          <button type="button" className="button primary" disabled={!terms || !previewReady || Boolean(busy)} onClick={checkout}>Weiter zu Shopify</button>
         </> : <p>{blockedReason}</p>}
       </section>
     </>}

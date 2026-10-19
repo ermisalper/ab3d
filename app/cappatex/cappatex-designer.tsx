@@ -11,6 +11,8 @@ import { compositionKey, emptyCompositionDraft, ownedMotif, preparationDesignIds
   type CompositionDraft, type OwnedMotif, type WorkingSide } from "../cappatex-resume";
 import type { PreparationSummary } from "../cappatex-preparation";
 import { hydrateSessionDraft, parseSessionDraft, serializeSessionDraft, sessionDraftDesignIds } from "../cappatex-session-draft";
+import { chooseColor, productFrontChoice, type MissingColorChoice } from "../cappatex-designer-choice";
+import { knownLegacyMockup, resolveMockupAsset } from "../cappatex-mockup-assets";
 import type { CappatexDesignProduct } from "../cappatex-design-catalog";
 import { prepareCustomerImage } from "../cappatex-upload-client";
 import { designStateUrl, readDesignState, retainedPlacement, verifiedDesignSelection, rememberConfiguration, rememberedConfiguration, reconcileConfigurations,
@@ -39,9 +41,9 @@ function placedArtwork(variant: DesignVariant, artwork: ArtworkSize, placement: 
     left: `${placement.x * 100}%`, top: `${placement.y * 100}%`, transform: "translate(-50%, -50%)" };
 }
 
-function MockupForeground({ variant }: { variant: DesignVariant }) {
+function MockupForeground({ variant, src }: { variant: DesignVariant; src: string }) {
   const photo = variant.mockup;
-  return <>{photo.foreground?.map((polygon, index) => <img key={index} src={photo.url} alt="" aria-hidden="true"
+  return <>{photo.foreground?.map((polygon, index) => <img key={index} src={src} alt="" aria-hidden="true"
     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "fill", pointerEvents: "none",
       clipPath: `polygon(${polygon.map(([x, y]) => `${100 * x / photo.width}% ${100 * y / photo.height}%`).join(",")})` }} />)}</>;
 }
@@ -54,26 +56,29 @@ function ProductComparisonCard({ product, variant, placement, image, artwork, pr
   const [loadedMotif, setLoadedMotif] = useState("");
   const [failedPhoto, setFailedPhoto] = useState("");
   const identity = `${product.profileVersion}:${variant.shopifyVariantId}:${variant.mockup.url}`;
+  const asset = resolveMockupAsset(variant.mockup);
+  const legacy = knownLegacyMockup(variant.mockup);
+  const photoSrc = asset.verified ? asset.src : legacy ? variant.mockup.url : null;
   const geometry = placementGeometry(variant.area, artwork, placement);
   return <button type="button" className={`cappatex-product-card${active ? " active" : ""}`} aria-pressed={active}
     disabled={disabled} onClick={onSelect}>
     <span className="cappatex-product-card-photo" style={{ aspectRatio: `${variant.mockup.width}/${variant.mockup.height}` }}>
-      <img key={identity} className="cappatex-card-blank" src={variant.mockup.url} alt="" loading="lazy"
+      {photoSrc && <img key={identity} className="cappatex-card-blank" src={photoSrc} alt="" loading="lazy"
         onLoad={event => { if (event.currentTarget.naturalWidth === variant.mockup.width && event.currentTarget.naturalHeight === variant.mockup.height) {
           setLoadedPhoto(identity); setFailedPhoto("");
         } else { setLoadedPhoto(""); setFailedPhoto(identity); } }}
-        onError={() => { setLoadedPhoto(""); setFailedPhoto(identity); }} />
-      {image && loadedPhoto === identity && <span className="cappatex-card-print-area" style={photoPrintArea(variant)}>
+        onError={() => { setLoadedPhoto(""); setFailedPhoto(identity); }} />}
+      {photoSrc && image && loadedPhoto === identity && <span className="cappatex-card-print-area" style={photoPrintArea(variant)}>
         <img key={image} src={image} alt="" style={{ ...placedArtwork(variant, artwork, placement), opacity: loadedMotif === image ? 1 : 0 }}
           onLoad={event => setLoadedMotif(event.currentTarget.naturalWidth === previewSize.width && event.currentTarget.naturalHeight === previewSize.height ? image : "")}
           onError={() => setLoadedMotif("")} />
       </span>}
-      <MockupForeground variant={variant} />
+      {photoSrc && loadedPhoto === identity && <MockupForeground variant={variant} src={photoSrc} />}
     </span>
     <span className="cappatex-product-card-name">{product.name}</span>
-    <span className="cappatex-product-card-variant">{variant.color} · {variant.size}</span>
+    <span className="cappatex-product-card-variant">Vorderseite · {variant.color} · {variant.size}</span>
     <small className={image && !geometry.ok ? "cappatex-card-warning" : "cappatex-card-status"}>
-      {failedPhoto === identity ? "Produktfoto nicht verfügbar" : image && !geometry.ok ? "Platzierung prüfen"
+      {!photoSrc ? "Produktfoto noch nicht bestätigt" : failedPhoto === identity ? "Produktfoto nicht verfügbar" : legacy ? "Ältere Anbieteransicht · noch nicht fest bestätigt" : image && !geometry.ok ? "Platzierung prüfen"
         : active ? "Wird angepasst" : "Ansehen & anpassen"}
       {image && geometry.dpi !== undefined && <> · {Math.floor(geometry.dpi)} dpi</>}
     </small>
@@ -121,6 +126,7 @@ export default function CappatexDesigner() {
   const [drafts, setDrafts] = useState<Record<string, CompositionDraft>>({});
   const [sessionKey, setSessionKey] = useState("");
   const [sessionNotice, setSessionNotice] = useState("");
+  const [missingColor, setMissingColor] = useState<(MissingColorChoice & { profileId: string; profileVersion: string }) | null>(null);
 
   const product = products.find(p => p.id === productId) || (selectionNeedsReview ? undefined : products[0]);
   const baseVariant = product?.variants.find(v => v.shopifyVariantId === variantId) || (selectionNeedsReview ? undefined : product?.variants[0]);
@@ -134,7 +140,10 @@ export default function CappatexDesigner() {
   const uploadExampleDpi = variant?.area.minDpi || 300;
   const uploadExample = maximumPrintSizeCm({ width: 2048, height: 3072 }, uploadExampleDpi)!;
   const blankIdentity = variant ? `${product?.id}:${product?.profileVersion}:${variant.shopifyVariantId}:${variant.mockup.url}` : "";
-  const previewReady = Boolean(image && loadedArtwork === image && variant && loadedBlank === blankIdentity);
+  const blankAsset = variant ? resolveMockupAsset(variant.mockup) : null;
+  const legacyBlank = Boolean(variant && knownLegacyMockup(variant.mockup));
+  const blankSrc = blankAsset?.verified ? blankAsset.src : legacyBlank ? variant!.mockup.url : null;
+  const previewReady = Boolean(image && loadedArtwork === image && variant && blankSrc && loadedBlank === blankIdentity);
   const draftKey = product && baseVariant ? compositionKey(product.id, product.profileVersion, baseVariant.shopifyVariantId) : "";
   const storedDraft = useMemo(() => drafts[draftKey] || emptyCompositionDraft(), [drafts, draftKey]);
   const currentDraft: CompositionDraft = useMemo(() => designId ? { ...storedDraft,
@@ -177,16 +186,20 @@ export default function CappatexDesigner() {
     async function restore() {
       const query = new URLSearchParams(window.location.search), restored = readDesignState(window.location.search);
       const [catalogResponse, account] = await Promise.all([
-        fetch("/api/cappatex/catalog", { cache: "no-store", signal: AbortSignal.timeout(30_000) }),
+        fetch("/api/cappatex/catalog", { cache: "no-store", signal: AbortSignal.timeout(30_000) }).catch(() => null),
         fetch("/api/account", { cache: "no-store", signal: AbortSignal.timeout(30_000) }).then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
-      if (!catalogResponse.ok) throw new Error("Die Blanko-Produkte konnten gerade nicht bestätigt werden. Bitte lade die Seite erneut.");
-      const data = await catalogResponse.json(), catalogProducts: CappatexDesignProduct[] = Array.isArray(data.products) ? data.products : [];
       if (!active) return;
-      setProducts(catalogProducts); setMessage(data.message || "Die Blanko-Produkte sind derzeit nicht verfügbar.");
       setGenerationEnabled(account?.account?.cappatexGeneration?.enabled === true); setPilotOwner(account?.account?.cappatexGeneration?.pilotOwner === true);
       setUploadEnabled(account?.account?.cappatexUpload?.enabled === true); setCanDownloadHd(account?.account?.capabilities?.canDownloadHd === true);
       setAccountCanDownloadHd(account?.account?.capabilities?.canDownloadHd === true);
+      if (!catalogResponse?.ok) {
+        setMessage("Die Blanko-Produkte sind vorübergehend nicht erreichbar. Produktwahl und Druckvorbereitung bleiben gesperrt.");
+        throw new Error("Der Produktkatalog konnte nicht bestätigt werden. Bereits freigegebene Motiv-Erstellung und Bildupload bleiben verfügbar; es wird nichts automatisch erstellt.");
+      }
+      const data = await catalogResponse.json(), catalogProducts: CappatexDesignProduct[] = Array.isArray(data.products) ? data.products : [];
+      if (!active) return;
+      setProducts(catalogProducts); setMessage(data.message || "Die Blanko-Produkte sind derzeit nicht verfügbar.");
       let storageKey = "", reference = null;
       if (typeof account?.account?.email === "string" && account.account.email) {
         const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(account.account.email.trim().toLowerCase()));
@@ -311,20 +324,24 @@ export default function CappatexDesigner() {
     const updated = product && variant && !selectionNeedsReview
       ? rememberConfiguration(configurations, configurationProduct!, variant.shopifyVariantId, placement) : configurations;
     const saved = rememberedConfiguration(nextProduct, updated);
-    const next = nextProduct.variants.find(item => item.shopifyVariantId === saved?.variantId) || nextProduct.variants[0];
-    const remembered = rememberDraft(), key = compositionKey(nextProduct.id, nextProduct.profileVersion, next.shopifyVariantId);
+    const remembered = rememberDraft();
+    const choice = productFrontChoice(nextProduct, nextProduct.id === product?.id ? baseVariant?.shopifyVariantId : saved?.variantId,
+      remembered, motifs, { motif: motifs[designId] || null, artwork, placement: saved?.placement });
+    if (!choice.ok) { setError(choice.reason); return; }
+    const next = choice.variant, key = compositionKey(nextProduct.id, nextProduct.profileVersion, next.shopifyVariantId);
     const target = remembered[key] || emptyCompositionDraft();
-    const working = target.working.front || (designId ? { designId, placement: saved?.placement || initialPlacement(next.area, artwork) } : undefined);
-    if (working && !motifs[working.designId]) { setError("Das Motiv dieses Entwurfs muss erneut für dein Konto geladen werden."); return; }
+    const working = choice.motif ? { designId: choice.motif.designId, placement: choice.placement } : undefined;
     setDrafts({ ...remembered, [key]: { ...target, working: { ...target.working, ...(working ? { front: working } : {}) } } });
     selectDraftLink(target);
     setConfigurations(updated); setProductId(nextProduct.id); setVariantId(next.shopifyVariantId); setSide("front"); setPhotoUrl("");
     if (working) showMotif(motifs[working.designId], working.placement); else setPlacement(saved?.placement || null);
-    setSelectionNeedsReview(false); setError("");
+    setSelectionNeedsReview(false); setMissingColor(null); setError("");
   }
 
   function selectVariant(nextProduct: CappatexDesignProduct, nextId: string) {
-    const next = nextProduct.variants.find(v => v.shopifyVariantId === nextId) || nextProduct.variants[0];
+    const matches = nextProduct.variants.filter(v => v.shopifyVariantId === nextId), next = matches[0];
+    if (matches.length !== 1 || !next || next.available !== true) { setError("Die gewählte Variante ist nicht eindeutig verfügbar. Deine bisherige Auswahl bleibt erhalten."); return; }
+    setMissingColor(null);
     const remembered = rememberDraft(), key = compositionKey(nextProduct.id, nextProduct.profileVersion, next.shopifyVariantId);
     const nextSide = side === "back" && !next.back ? "front" : side;
     const target = remembered[key] || { ...emptyCompositionDraft(), working: next.back ? { ...currentDraft.working }
@@ -413,16 +430,21 @@ export default function CappatexDesigner() {
     </ol>
     <section className="cappatex-comparison" aria-labelledby="cappatex-compare-heading">
       <div className="cappatex-comparison-heading"><h3 id="cappatex-compare-heading">Produkte vergleichen</h3>
-        <p>{image ? "Dein Motiv auf jedem verfügbaren Blanko. Jede Auswahl behält ihre eigene Platzierung."
+        <p>{image ? "Jede Karte zeigt den Vorderseiten-Entwurf, der bei der Auswahl geöffnet wird. Produkte behalten ihre eigenen Motive und Platzierungen."
           : "Wähle ein Blanko. Sobald dein Motiv bereit ist, erscheint es hier auf jedem verfügbaren Produkt."}</p></div>
       <p className="cappatex-catalog-state" role="status">{message}</p>
       <div className="cappatex-products">{products.map(item => {
         const saved = rememberedConfiguration(item, configurations);
-        const isActive = product?.id === item.id && Boolean(variant);
-        const cardVariant = isActive ? variant! : item.variants.find(value => value.shopifyVariantId === saved?.variantId) || item.variants[0];
-        const cardPlacement = isActive ? placement : saved?.placement || initialPlacement(cardVariant.area, artwork);
-        return <ProductComparisonCard key={item.id} product={item} variant={cardVariant} placement={cardPlacement}
-          image={image} artwork={artwork} previewSize={previewSize} active={isActive} disabled={Boolean(busy)} onSelect={() => selectProduct(item)} />;
+        const choice = productFrontChoice(item, item.id === product?.id ? baseVariant?.shopifyVariantId : saved?.variantId,
+          draftKey && designId ? { ...drafts, [draftKey]: currentDraft } : drafts, motifs,
+          { motif: motifs[designId] || null, artwork, placement: saved?.placement });
+        if (!choice.ok) return <p className="cappatex-action-hint" key={item.id}>{item.name}: {choice.reason}</p>;
+        const cardMotif = choice.motif;
+        const isActive = product?.id === item.id && side === "front" && baseVariant?.shopifyVariantId === choice.variant.shopifyVariantId;
+        return <ProductComparisonCard key={item.id} product={item} variant={choice.variant} placement={choice.placement}
+          image={cardMotif?.previewUrl || null} artwork={cardMotif ? { width: cardMotif.width, height: cardMotif.height } : artwork}
+          previewSize={cardMotif ? { width: cardMotif.previewWidth, height: cardMotif.previewHeight } : previewSize}
+          active={isActive} disabled={Boolean(busy)} onSelect={() => selectProduct(item)} />;
       })}</div>
       {!products.length && <a className="text-link" href="#kollektion">Fertige Motive im Katalog ansehen →</a>}
     </section>
@@ -473,13 +495,19 @@ export default function CappatexDesigner() {
           {variant && <b>{variant.price ? money(Number(variant.price.amount), variant.price.currencyCode) : "Preis noch nicht freigegeben"}</b>}</div>
         {product && variant && <div className="cappatex-variant-fields">
           <label className="cappatex-field">{product.optionLabel || "Farbe"}<select disabled={Boolean(busy)} value={variant.color} onChange={e => {
-            const next = product.variants.find(v => v.color === e.target.value && v.size === variant.size)
-              || product.variants.find(v => v.color === e.target.value)!;
-            selectVariant(product, next.shopifyVariantId);
+            const choice = chooseColor(product, e.target.value, variant.size);
+            if (!choice.ok) { setMissingColor({ ...choice, profileId: product.id, profileVersion: product.profileVersion }); setError(choice.reason); return; }
+            selectVariant(product, choice.variant.shopifyVariantId);
           }}>{[...new Set(product.variants.map(v => v.color))].map(color => <option key={color}>{color}</option>)}</select></label>
           <label className="cappatex-field">Grösse<select disabled={Boolean(busy)} value={variant.shopifyVariantId} onChange={e => selectVariant(product, e.target.value)}>
             {product.variants.filter(v => v.color === variant.color).map(v => <option key={v.shopifyVariantId} value={v.shopifyVariantId}>{v.size}</option>)}</select></label>
         </div>}
+        {product && missingColor && missingColor.profileId === product.id && missingColor.profileVersion === product.profileVersion && <fieldset className="cappatex-photo-options">
+          <legend>{missingColor.color}: verfügbare Grössen ausdrücklich wählen</legend>
+          <p className="cappatex-action-hint">{missingColor.reason}</p>
+          {missingColor.options.map(option => <button type="button" disabled={Boolean(busy)} key={option.variantId}
+            onClick={() => selectVariant(product, option.variantId)}>{missingColor.color} · {option.size}</button>)}
+        </fieldset>}
         {variant && <fieldset className="cappatex-styles cappatex-print-sides"><legend>Druckseite</legend>
           <button type="button" aria-pressed={side === "front"} className={side === "front" ? "active" : ""} disabled={Boolean(busy)} onClick={() => selectSide("front")}>Vorderseite</button>
           {baseVariant?.back && <button type="button" aria-pressed={side === "back"} className={side === "back" ? "active" : ""} disabled={Boolean(busy)} onClick={() => selectSide("back")}>Rückseite</button>}
@@ -493,20 +521,23 @@ export default function CappatexDesigner() {
         <div hidden={Boolean(galleryPhoto)} className={`cappatex-placement-workbench${variant ? " has-product" : ""}`}>
         <div className="cappatex-verified-preview">
           {variant ? <div className="cappatex-blank-photo" style={{ aspectRatio: `${variant.mockup.width}/${variant.mockup.height}` }}>
-            <img key={blankIdentity} className="cappatex-blank-image" src={variant.mockup.url} alt={`${product?.name || "Blanko"}, ${variant.color}, ${variant.size}, unbedruckt`}
+            {blankSrc ? <img key={blankIdentity} className="cappatex-blank-image" src={blankSrc} alt={`${product?.name || "Blanko"}, ${variant.color}, ${variant.size}, unbedruckt`}
               onLoad={e => { if (e.currentTarget.naturalWidth === variant.mockup.width && e.currentTarget.naturalHeight === variant.mockup.height) setLoadedBlank(blankIdentity); else { setLoadedBlank(""); setError("Die Produktansicht stimmt nicht mit der geprüften Vorlage überein."); } }}
               onError={() => { setLoadedBlank(""); setError("Die Produktansicht konnte nicht geladen werden."); }} />
+              : <p className="cappatex-error" role="alert">Diese Produktansicht ist noch nicht als feste Referenz bestätigt. Vorschau und Seitenübernahme bleiben gesperrt.</p>}
             <div className="cappatex-verified-area" style={photoPrintArea(variant)}>
               {image && <img key={image} src={image} alt="Dein unverändertes Motiv in der Druckfläche"
                 onLoad={e => { if (e.currentTarget.naturalWidth === previewSize.width && e.currentTarget.naturalHeight === previewSize.height) setLoadedArtwork(image); else { setLoadedArtwork(""); setError("Die Motivdatei stimmt nicht mit der Druckdatei überein."); } }}
                 onError={() => { setLoadedArtwork(""); setError("Das Motiv konnte nicht geladen werden. Die Bestellung bleibt gesperrt."); }}
-                style={{ ...placedArtwork(variant, artwork, placement), opacity: loadedBlank === blankIdentity && loadedArtwork === image ? 1 : 0 }} />}
+                style={{ ...placedArtwork(variant, artwork, placement), opacity: blankSrc && loadedBlank === blankIdentity && loadedArtwork === image ? 1 : 0 }} />}
             </div>
-            <MockupForeground variant={variant} />
+            {blankSrc && loadedBlank === blankIdentity && <MockupForeground variant={variant} src={blankSrc} />}
           </div> : image ? <div style={{ width: "100%", maxWidth: 460 * artwork.width / artwork.height, aspectRatio: `${artwork.width}/${artwork.height}`, margin: "auto" }}>
             <img className="cappatex-artwork-only" src={image} style={{ width: "100%", height: "100%", objectFit: "fill" }} alt="Dein fertiges Motiv" /></div> :
             <div className="cappatex-preview-placeholder"><span aria-hidden="true">✦</span><b>Hier beginnt dein Einzelstück</b><p>Beschreibe deine Idee oder wähle ein eigenes Bild. Dein Motiv erscheint hier.</p></div>}
         </div>
+        {legacyBlank && <p className="cappatex-profile-note" role="note">Ältere Rückseitenansicht: Dieses Anbieterfoto ist noch nicht als feste Referenz bestätigt.
+          Die Gestaltung bleibt für deinen Entwurf nutzbar; der Verkauf bleibt bis zur Freigabe gesperrt.</p>}
         {variant && <div className="cappatex-customize">
           <button type="button" disabled={!image || Boolean(busy)} onClick={() => { setPlacement(initialPlacement(variant.area, artwork)); }}>Passend einfügen</button>
           <button type="button" disabled={!image || Boolean(busy)} onClick={() => { setPlacement({ ...placement, x: .5, y: .5 }); }}>Zentrieren</button>
