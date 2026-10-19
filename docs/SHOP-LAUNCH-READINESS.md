@@ -4,6 +4,20 @@ Stand 17.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-prod
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
 
+## Hilfe ohne Entwurfsverlust und sichtbare Tab-Sicherung · 19.10.2026
+
+Kontakt aus den beiden Studio-Hauptseiten öffnet einen ausdrücklich gekennzeichneten neuen Tab. Das gilt für Kopfzeile und Footer sowie die persönliche Hilfe im 3D-Studio und den AB3D-FAQ. Andere Kontaktseiten navigieren weiterhin im selben Tab. Die neue persönliche 3D-Hilfe ist schon vor einem kostenpflichtigen Druckpaket erreichbar. Keine automatischen Anhänge, Motivdaten oder Kontoinformationen werden übertragen.
+
+Beide Kontaktseiten bieten zusätzlich Kopierbuttons für Telefonnummer und E-Mail. Erfolg wird erst nach erfolgreichem Clipboard-Aufruf angezeigt. Verweigert der Browser den Zugriff, nennt die Seite das manuelle Kopieren als Alternative. Kein automatischer Versand, keine zusätzliche Kontakt-API.
+
+Die normale CAPPATEX-Tab-Sicherung verschluckt Schreibfehler nicht mehr. Eine eigene Statusmeldung erklärt, dass die letzte Änderung nicht im Tab gesichert wurde. Nur diese Meldung wird nach einer später erfolgreichen Sicherung entfernt; bestehende Warnungen über unklare Serverspeicherung bleiben erhalten. Ausdrückliches Speichern bleibt unabhängig davon möglich. Es wird weiterhin nur die aktuelle Variante im Tab gesichert, nicht jeder Entwurf dauerhaft gespeichert.
+
+Browserabnahme mit tatsächlichem Anwendungscode: Kopierbuttons zeigen Erfolg; interner Wechsel von AB3D-Kontakt zu CAPPATEX-Kontakt per Klick bestätigt. Beide Studio-Hilfewege öffneten zusätzliche echte Kontakt-Tabs, die eingegebenen Testideen blieben im ursprünglichen Studio erhalten. Die zuvor dokumentierte Unsicherheit der Kontakt-Navigation ist damit lokal geklärt. Kontaktbuttons wurden bei 320px mit 48px Hauptaktionen und 44px Kopieraktionen innerhalb der Ansicht gemessen; keine Aussage über eine neue vollständige Smartphone-Abnahme aller Shopseiten.
+
+Gezielte Offline-Fixture mit synthetischem Konto, Produkt und Vorder-/Rückseitenmotiv: Lesen aus dem Tab-Speicher funktioniert, Schreiben wirft einen simulierten QuotaExceededError. Warnung sichtbar, beide übernommenen Seiten erhalten, Speichern-Button tatsächlich aktiviert. Ein ausdrücklicher Klick erreichte genau einen lokalen 503-Speichermock; keine externe Mutation. Nach Freigabe des Tab-Speichers und Mengenänderung verschwand ausschliesslich der Autosave-Hinweis; die getrennte Warnung über unklare Serverspeicherung blieb sichtbar. CSP beschränkte Verbindungen auf localhost. Kein kostenpflichtiger KI-Aufruf, echter Kauf oder Produktionsauftrag. Die Fixture liegt ausschliesslich im ignorierten outputs-Verzeichnis.
+
+Abschliessend: 510/510 Tests, Typprüfung, vollständiges ESLint und Produktionsbuild erfolgreich. Quellscan über 343 Dateien ohne Treffer vorhandener lokaler Secretwerte. Keine neue Abhängigkeit, Datenbankmigration oder Änderung an Produktions-Servervariablen und Verkaufsfreigaben.
+
 ## Persönlicher Kontakt · 19.10.2026
 
 Auf ausdrücklichen Wunsch des Betreibers sind `/kontakt` für AB3D und `/cappatex/kontakt` für CAPPATEX ergänzt. Beide Bereiche haben einen ständig sichtbaren Kontaktlink in der Kopfzeile und einen passenden Footerlink. Die Kontaktseiten benötigen keine zusätzliche Anmeldung. CAPPATEX bietet ausserdem einen Link zur persönlichen Designhilfe in einem neuen Tab, damit der aktuelle Entwurf offen bleibt.

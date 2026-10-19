@@ -1,4 +1,51 @@
 /* Direct contact with Berk; inherits each area's existing colours. */
+.studio-personal-help {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.studio-personal-help a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.studio-personal-help small {
+  display: block;
+  font-size: 12px;
+}
+
+.contact-copy button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: 700 13px/1.5 Arial, Helvetica, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.contact-copy button:disabled { cursor: progress; }
+
+.contact-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.contact-copy p:empty { display: none; }
+
 .contact-page {
   min-height: 100vh;
   color: var(--ink);

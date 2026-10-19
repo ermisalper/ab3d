@@ -908,6 +908,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           {error && <div className="ai-error" role="alert">{error}</div>}
           {(mode === "image" || plannerApproved) && <><div className="generation-actions"><button className="generate-button" onClick={generate} disabled={busy||!galleryChoiceValid(galleryChoice,"ab3d")}>{busy ? <><i className="spinner" /> KI arbeitet · {formatElapsed(elapsedSeconds)}</> : signedIn ? <><span>✦</span> {generationMode === "fast" ? "Schnellvorschau erstellen" : "3D-Design in bester Qualität"}{unlimited ? " · Launch-Pass" : ` · ${tokenCost} Token`}</> : <>Anmelden & Design starten</>}</button>{busy && <button type="button" className="stop-generation" onClick={stopWatching}>Überwachung stoppen</button>}</div>
           <p className="credit-note">{signedIn ? unlimited ? <><b>Launch-Pass aktiv · unbegrenzte Generierungen</b></> : <>Dein Guthaben: <b>{tokenBalance ?? "–"} Design-Tokens</b> · Exakte Grössenskalierung: 1 Token</> : <>Neue Accounts erhalten Start-Tokens für die erste Kreation.</>}</p></>}
+          <p className="studio-personal-help">Fragen zu deiner Idee oder zum Ergebnis? <a href="/kontakt" target="_blank" rel="noopener noreferrer">Persönliche 3D-Hilfe ↗</a><small>Öffnet einen neuen Tab. Dein Studio bleibt hier geöffnet.</small></p>
         </div>
 
         <div className={`ai-output-panel state-${state}`}>

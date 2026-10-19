@@ -103,7 +103,7 @@ export default function CappatexStudio({ userName, finishedProducts, storeDomain
       <footer className="cappatex-footer">
         <div className="footer-brand"><Link className="brand" href="/#top"><span>AB</span><b>3D</b></Link><p>CAPPATEX verbindet deine Idee mit hochwertigem Print on Demand.</p><ReplayBrandIntro studio="cappatex"/></div>
         <div><b>CAPPATEX</b><a href="#studio">Motiv gestalten</a><Link href="/cappatex/designs">Designgalerie</Link><Link href="/cappatex/sammlung">Meine Motive</Link><Link href="/cappatex#kollektion">Fertige Artikel</Link><Link href="/#studio">3D-Modell gestalten</Link></div>
-        <div><b>Service & Recht</b><a href="/cappatex/kontakt">Kontakt</a><Link href="/recht">Rechtscenter</Link><Link href="/recht/datenschutz">Datenschutz</Link><Link href="/recht/agb">AGB</Link><Link href="/recht/versand-rueckgabe">Versand & Rückgabe</Link></div>
+        <div><b>Service & Recht</b><a href="/cappatex/kontakt" target="_blank" rel="noopener noreferrer" aria-label="Kontakt (neuer Tab)">Kontakt ↗</a><Link href="/recht">Rechtscenter</Link><Link href="/recht/datenschutz">Datenschutz</Link><Link href="/recht/agb">AGB</Link><Link href="/recht/versand-rueckgabe">Versand & Rückgabe</Link></div>
         <small>© 2026 AB3D · CAPPATEX · Designed in Switzerland</small>
       </footer>
     </main>

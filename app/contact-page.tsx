@@ -1,4 +1,5 @@
 import SiteHeader from "./site-header";
+import ContactCopy from "./contact-copy";
 import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, contactEmailUrl, contactPageHref, contactWhatsAppUrl } from "./contact-details";
 
 type ContactArea = "objects" | "cappatex";
@@ -51,6 +52,7 @@ export default function ContactPage({ area, userName }: { area: ContactArea; use
             <p>Schreib mir direkt im Chat. Du kannst auch ein Bild oder einen Screenshot deiner Idee ergänzen.</p>
             <p className="contact-value">{CONTACT_PHONE_DISPLAY}</p>
             <a className="contact-action" href={contactWhatsAppUrl(area)} target="_blank" rel="noopener noreferrer"><span>WhatsApp öffnen</span><ContactArrow /></a>
+            <ContactCopy value={CONTACT_PHONE_DISPLAY} label="Nummer kopieren" />
           </article>
 
           <article className="contact-channel contact-channel-email" aria-labelledby="contact-email-heading">
@@ -59,6 +61,7 @@ export default function ContactPage({ area, userName }: { area: ContactArea; use
             <p>Mehr Platz für deine Idee, Fragen oder besondere Wünsche. Schreib mir in deinem E-Mail-Programm.</p>
             <p className="contact-value">{CONTACT_EMAIL}</p>
             <a className="contact-action contact-action-secondary" href={contactEmailUrl(area)}><span>E-Mail schreiben</span><ContactArrow /></a>
+            <ContactCopy value={CONTACT_EMAIL} label="E-Mail kopieren" />
           </article>
           <p className="contact-channel-note">Die Nachricht wird erst gesendet, wenn du sie in WhatsApp oder deinem E-Mail-Programm abschickst.</p>
         </section>

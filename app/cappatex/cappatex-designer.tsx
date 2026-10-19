@@ -127,6 +127,7 @@ export default function CappatexDesigner() {
   const [drafts, setDrafts] = useState<Record<string, CompositionDraft>>({});
   const [sessionKey, setSessionKey] = useState("");
   const [sessionNotice, setSessionNotice] = useState("");
+  const [autosaveNotice, setAutosaveNotice] = useState("");
   const [restoreProblem, setRestoreProblem] = useState<{ kind: "load" | "invalid" | "conflict" | "saved"; hasLocalDraft: boolean; pending: boolean;
     preparationId?: string } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -327,8 +328,15 @@ export default function CappatexDesigner() {
 
   useEffect(() => {
     if (!restorationComplete || !sessionKey || localRecoveryBlocked || selectionNeedsReview || !product || !baseVariant || !designId) return;
-    try { window.sessionStorage.setItem(sessionKey, serializeSessionDraft(product, baseVariant, currentDraft, motifs, quantity, country, side)); }
-    catch { /* A blocked/full session store must never stop explicit server-side saving. */ }
+    let notice = "";
+    try {
+      window.sessionStorage.setItem(sessionKey, serializeSessionDraft(product, baseVariant, currentDraft, motifs, quantity, country, side));
+    } catch {
+      notice = "Die letzte Änderung konnte nicht im Tab gesichert werden. Lass diese Seite geöffnet und speichere deine übernommenen Druckseiten, bevor du sie verlässt. Bereits gespeicherte Stände bleiben erhalten.";
+    }
+    let active = true;
+    queueMicrotask(() => { if (active) setAutosaveNotice(notice); });
+    return () => { active = false; };
   }, [restorationComplete, sessionKey, localRecoveryBlocked, selectionNeedsReview, product, baseVariant, designId, currentDraft, motifs, quantity, country, side]);
 
   useEffect(() => {
@@ -648,6 +656,7 @@ export default function CappatexDesigner() {
         </>}
         {error && <p className="cappatex-error" role="alert">{error}</p>}
         {sessionNotice && <p className="cappatex-action-hint" role="status">{sessionNotice}</p>}
+        {autosaveNotice && <p className="cappatex-action-hint" role="status">{autosaveNotice}</p>}
         <p className="cappatex-action-hint">Dein Motiv sieht noch nicht so aus wie gewünscht? <a className="text-link" href="/cappatex/kontakt" target="_blank" rel="noopener noreferrer">Persönliche Designhilfe ↗</a></p>
         <section className="cappatex-save-step" id="cappatex-save" aria-labelledby="cappatex-save-heading">
         <div className="cappatex-step-heading"><span>3</span><div><h3 id="cappatex-save-heading">Prüfen & speichern</h3><p>Prüfe dein Motiv und die gewünschten Druckseiten.</p></div></div>

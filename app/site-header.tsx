@@ -33,6 +33,7 @@ const cappatexLinks = [
 export default function SiteHeader({ area, userName, cartCount = 0, onCartOpen }: SiteHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
+  const keepStudioOpen = pathname === "/" || pathname === "/cappatex";
   const current = (href: string) => !href.includes("#") && href === pathname ? "page" as const : undefined;
   const isObjects = area === "objects";
   const links = isObjects ? objectLinks : cappatexLinks;
@@ -65,9 +66,13 @@ export default function SiteHeader({ area, userName, cartCount = 0, onCartOpen }
           <span className="mobile-area-label">{isObjects ? "3D Objekte" : "CAPPATEX"}</span>
 
           <div className="nav-actions">
-            <a className="header-contact-link" href={contactPageHref(area)} aria-current={current(contactPageHref(area))} onClick={() => setMenuOpen(false)}>
+            <a className="header-contact-link" href={contactPageHref(area)} aria-current={current(contactPageHref(area))}
+              target={keepStudioOpen ? "_blank" : undefined} rel={keepStudioOpen ? "noopener noreferrer" : undefined}
+              aria-label={keepStudioOpen ? "Kontakt (neuer Tab, dein Studio bleibt geöffnet)" : undefined}
+              title={keepStudioOpen ? "Öffnet einen neuen Tab. Dein Studio bleibt hier geöffnet." : undefined}
+              onClick={() => setMenuOpen(false)}>
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-7a8 8 0 1 1 18-3Z" /><path d="M7 10h8m-8 4h5" /></svg>
-              <span>Kontakt</span>
+              <span>Kontakt{keepStudioOpen && <span aria-hidden="true"> ↗</span>}</span>
             </a>
             <Link className="account-button" href={accountHref}>
               <i aria-hidden="true" /> <span>{userName ? userName.split(" ")[0] : "Anmelden"}</span>
