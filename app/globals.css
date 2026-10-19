@@ -614,6 +614,12 @@ section[id],:target{scroll-margin-top:132px}
 .cappatex-saved-toolbar { display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; margin:24px 0; }
 .cappatex-saved-toolbar p,.cappatex-saved-help { max-width:760px; font-size:14px; line-height:1.65; color:#566059; }
 .cappatex-saved-toolbar .button { flex-shrink:0; }
+.cappatex-saved-search { display:flex; align-items:end; flex-wrap:wrap; gap:14px; padding:24px 0; border-block:1px solid var(--line); }
+.cappatex-saved-search label { display:grid; gap:8px; font-size:12px; min-width:0; }
+.cappatex-saved-search label:first-child { flex:1 1 280px; }
+.cappatex-saved-search input,.cappatex-saved-search select { min-height:46px; width:100%; min-width:0; padding:12px; border:1px solid var(--line); background:white; color:var(--ink); font:14px Arial,sans-serif; }
+.cappatex-saved-search .button { min-height:46px; font-size:12px; }
+@media(max-width:650px) { .cappatex-saved-search label,.cappatex-saved-search .button { flex:1 1 100%; width:100%; } }
 .cappatex-saved-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; margin:28px 0 48px; }
 .cappatex-saved-card { min-width:0; border:1px solid var(--line); border-top:3px solid var(--sage); padding:20px; background:#fff; }
 .cappatex-saved-card h2 { font-size:26px; line-height:1.2; overflow-wrap:anywhere; }

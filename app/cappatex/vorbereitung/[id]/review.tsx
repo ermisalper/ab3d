@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { PreparedReceipt } from "../../cappatex-preparation-panel";
 import type { PreparationSummary } from "../../../cappatex-preparation";
+import { parsePreparationResponse } from "../../../cappatex-preparation-response";
 
 type ReviewReceipt = PreparationSummary & {
   checkout?: { enabled: boolean; reason: string; unitPriceCents?: number; currency?: string };
@@ -24,9 +25,9 @@ export default function PreparedReview({ id }: { id: string }) {
   useEffect(() => {
     let active = true;
     fetch(`/api/cappatex/preparations/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) }).then(async response => {
-      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Stand nicht verfügbar.");
-      if (!data || data.id !== id) throw new Error("Der gespeicherte Stand konnte nicht eindeutig bestätigt werden.");
-      if (active) { setReceipt(data); setTerms(false); setBusy(""); }
+      const data = await response.json(); if (!response.ok) throw new Error(data?.error || "Stand nicht verfügbar.");
+      const receipt = parsePreparationResponse(data, id);
+      if (active) { setReceipt(receipt); setTerms(false); setBusy(""); }
     }).catch(caught => {
       if (active) { setError(caught instanceof Error ? caught.message : "Stand nicht verfügbar."); setBusy(""); }
     });

@@ -1,6 +1,7 @@
 import { sha256 } from "./cappatex-artwork";
 
 export const PREPARATION_LIST_SIZE = 12;
+export const PREPARATION_LIST_MAX_QUERY_LENGTH = 80;
 const CPP_ID = /^CPP-[a-f0-9]{32}$/;
 const MAX_DATE = 8_640_000_000_000_000;
 type ListBase = { id: string; createdAt: number };
@@ -13,6 +14,14 @@ export type PreparationListItem = ListBase & ({ integrity: "unavailable" } | {
 export type PreparationListResponse = { items: PreparationListItem[]; nextCursor: string | null };
 export type PreparationListRow = { id: string; created_at: number; payload_json: string | null; payload_sha256: string | null };
 export type PreparationListCursor = { createdAt: number; id: string };
+export type PreparationListFilters = { q: string; sides: "front" | "back" | "both" | null };
+
+export function preparationListFilters(q: string | null = null, sides: string | null = null): PreparationListFilters {
+  const term = q === null ? "" : q.trim();
+  if (term.length > PREPARATION_LIST_MAX_QUERY_LENGTH || (sides !== null && !["front", "back", "both"].includes(sides)))
+    throw new Error("invalid_preparation_filters");
+  return { q: term, sides: sides as PreparationListFilters["sides"] };
+}
 
 function validDate(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= MAX_DATE;
@@ -27,22 +36,48 @@ function dimension(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 10000;
 }
 
-export function preparationListCursor(value: PreparationListCursor) {
-  if (!validDate(value.createdAt) || !CPP_ID.test(value.id)) throw new Error("invalid_preparation_cursor");
-  return btoa(JSON.stringify({ v: 1, createdAt: value.createdAt, id: value.id })).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+function encodeCursor(value: Record<string, unknown>) {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(value))))
+    .replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-export function parsePreparationListCursor(value: string | null): PreparationListCursor | null {
+export function preparationListCursor(value: PreparationListCursor, filters: PreparationListFilters = { q: "", sides: null }) {
+  if (!validDate(value.createdAt) || !CPP_ID.test(value.id)) throw new Error("invalid_preparation_cursor");
+  const normalized = preparationListFilters(filters.q, filters.sides);
+  return encodeCursor({ v: 2, createdAt: value.createdAt, id: value.id, q: normalized.q, sides: normalized.sides });
+}
+
+export function parsePreparationListCursor(value: string | null, filters: PreparationListFilters = { q: "", sides: null }): PreparationListCursor | null {
   if (value === null) return null;
-  if (!value || value.length > 256 || !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("invalid_preparation_cursor");
+  if (!value || value.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("invalid_preparation_cursor");
   try {
-    const decoded: unknown = JSON.parse(atob(value.replaceAll("-", "+").replaceAll("_", "/")));
-    if (!record(decoded) || decoded.v !== 1 || Object.keys(decoded).length !== 3 || !validDate(decoded.createdAt)
+    const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(
+      Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), character => character.charCodeAt(0))));
+    if (!record(decoded) || !validDate(decoded.createdAt)
       || typeof decoded.id !== "string" || !CPP_ID.test(decoded.id)) throw new Error("invalid_preparation_cursor");
     const cursor = { createdAt: decoded.createdAt, id: decoded.id };
-    if (preparationListCursor(cursor) !== value) throw new Error("invalid_preparation_cursor");
+    const expected = preparationListFilters(filters.q, filters.sides);
+    if (decoded.v === 1) {
+      if (Object.keys(decoded).length !== 3 || expected.q || expected.sides
+        || encodeCursor({ v: 1, ...cursor }) !== value) throw new Error("invalid_preparation_cursor");
+    } else if (decoded.v === 2) {
+      if (Object.keys(decoded).length !== 5 || decoded.q !== expected.q || decoded.sides !== expected.sides
+        || preparationListCursor(cursor, expected) !== value) throw new Error("invalid_preparation_cursor");
+    } else throw new Error("invalid_preparation_cursor");
     return cursor;
   } catch { throw new Error("invalid_preparation_cursor"); }
+}
+
+/** Recheck only the SHA-verified DTO, never search private payload fields or a corrupt candidate. */
+export function preparationListMatchesFilters(item: PreparationListItem, filters: PreparationListFilters): boolean {
+  if (!filters.q && !filters.sides) return true;
+  if (item.integrity !== "verified") return false;
+  if (filters.sides === "both" ? item.sides.length !== 2
+    : filters.sides !== null && (item.sides.length !== 1 || item.sides[0].position !== filters.sides)) return false;
+  // Match SQLite's default lower() semantics; no ICU/Unicode case-folding is assumed.
+  const fold = (value: string) => value.replace(/[A-Z]/g, character => character.toLowerCase());
+  return !filters.q || [item.name, item.variant.color, item.variant.size, ...item.sides.map(side => side.designId)]
+    .some(value => fold(value).includes(fold(filters.q)));
 }
 
 /** List integrity confirms the stored metadata, not current availability or a sales/production approval. */

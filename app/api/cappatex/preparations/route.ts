@@ -10,7 +10,8 @@ import { renderPrintFile, PRINT_RENDERER_VERSION } from "../../../cappatex-print
 import { preparationInput, preparationSummary, type PreparedDesign } from "../../../cappatex-preparation";
 import { readPreparation, preparationDownloadAllowed } from "../../../cappatex-preparation-storage";
 import { PREPARATION_LIST_SIZE, parsePreparationListCursor, preparationListCursor, preparationListItem,
-  type PreparationListRow, type PreparationListCursor, type PreparationListResponse } from "../../../cappatex-preparation-list";
+  preparationListFilters, preparationListMatchesFilters,
+  type PreparationListRow, type PreparationListCursor, type PreparationListResponse, type PreparationListFilters } from "../../../cappatex-preparation-list";
 
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 const fail = (status: number, code: string, error: string) => Response.json({ code, error }, { status, headers });
@@ -22,24 +23,40 @@ export async function GET(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return fail(401, "sign_in_required", "Bitte melde dich an, um deine gespeicherten Gestaltungen anzusehen.");
   let cursor: PreparationListCursor | null;
+  let filters: PreparationListFilters;
   try {
     const query = new URL(request.url).searchParams;
-    if ([...query.keys()].some(key => key !== "cursor") || query.getAll("cursor").length > 1) throw new Error("invalid_preparation_cursor");
-    cursor = parsePreparationListCursor(query.get("cursor"));
+    if ([...query.keys()].some(key => !["cursor", "q", "sides"].includes(key))
+      || ["cursor", "q", "sides"].some(key => query.getAll(key).length > 1)) throw new Error("invalid_preparation_cursor");
+    filters = preparationListFilters(query.get("q"), query.get("sides"));
+    cursor = parsePreparationListCursor(query.get("cursor"), filters);
   } catch { return fail(400, "invalid_list_request", "Die gespeicherte Listenseite ist ungültig. Bitte öffne deine Gestaltungen erneut."); }
   try {
+    // CASE keeps every JSON function safe even when a ready row contains broken JSON.
+    const document = "(CASE WHEN length(payload_json) <= 256000 AND json_valid(payload_json) THEN payload_json ELSE '{}' END)";
+    const searchable = ["$.name", "$.variant.color", "$.variant.size", "$.sides[0].designId", "$.sides[1].designId"];
+    const search = filters.q ? `AND (${searchable.map(path => `instr(lower(CASE WHEN json_type(${document}, '${path}') = 'text'
+      THEN json_extract(${document}, '${path}') ELSE '' END), lower(?)) > 0`).join(" OR ")})` : "";
+    const sideFilter = filters.sides ? `AND json_type(${document}, '$.sides') = 'array' AND CASE ?
+      WHEN 'both' THEN json_array_length(${document}, '$.sides') = 2
+        AND ((json_extract(${document}, '$.sides[0].position') = 'front' AND json_extract(${document}, '$.sides[1].position') = 'back')
+          OR (json_extract(${document}, '$.sides[0].position') = 'back' AND json_extract(${document}, '$.sides[1].position') = 'front'))
+      ELSE json_array_length(${document}, '$.sides') = 1 AND json_extract(${document}, '$.sides[0].position') = ? END` : "";
     const rows = await env.DB.prepare(`SELECT id,created_at,payload_json,payload_sha256 FROM cappatex_preparations
       WHERE email = ? AND state = 'ready'
         AND length(id) = 36 AND substr(id,1,4) = 'CPP-' AND substr(id,5) NOT GLOB '*[^a-f0-9]*'
         AND typeof(created_at) = 'integer' AND created_at >= 0 AND created_at <= 8640000000000000
         ${cursor ? "AND (created_at < ? OR (created_at = ? AND id < ?))" : ""}
+        ${search} ${sideFilter}
       ORDER BY created_at DESC,id DESC LIMIT ?`)
-      .bind(user.email, ...(cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : []), PREPARATION_LIST_SIZE + 1).all<PreparationListRow>();
+      .bind(user.email, ...(cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : []),
+        ...(filters.q ? searchable.map(() => filters.q) : []), ...(filters.sides ? [filters.sides, filters.sides] : []),
+        PREPARATION_LIST_SIZE + 1).all<PreparationListRow>();
     const page = rows.results.slice(0, PREPARATION_LIST_SIZE);
-    const items = await Promise.all(page.map(preparationListItem));
+    const items = (await Promise.all(page.map(preparationListItem))).filter(item => preparationListMatchesFilters(item, filters));
     const last = page.at(-1);
     const result: PreparationListResponse = { items, nextCursor: rows.results.length > PREPARATION_LIST_SIZE && last
-      ? preparationListCursor({ createdAt: last.created_at, id: last.id }) : null };
+      ? preparationListCursor({ createdAt: last.created_at, id: last.id }, filters) : null };
     return Response.json(result, { headers });
   } catch { return fail(503, "preparation_list_unavailable", "Deine gespeicherten Gestaltungen konnten gerade nicht geladen werden. Bitte versuche es erneut."); }
 }

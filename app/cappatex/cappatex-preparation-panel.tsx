@@ -5,6 +5,7 @@ import type { ArtworkSize, Placement } from "../cappatex-print-profile";
 import type { PreparationInput, PreparationSummary, PrintSide } from "../cappatex-preparation";
 import { preparationRequestId, type CompositionDraft } from "../cappatex-resume";
 import PreparationPreview, { preparationPreviewIdentity } from "../cappatex-preparation-preview";
+import { parseSavedPreparationResponse } from "../cappatex-preparation-response";
 
 const sideName = (side: PrintSide) => side === "front" ? "Vorderseite" : "Rückseite";
 
@@ -68,14 +69,15 @@ export default function CappatexPreparationPanel({ product, variant, side, desig
       const response = await fetch("/api/cappatex/preparations", { method: "POST", headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(30_000), body: JSON.stringify(body) });
       const result = await response.json();
-      if (response.status === 202) { setMessage(result.error); return; }
+      if (response.status === 202) { setMessage(typeof result?.error === "string" ? result.error : "Speicherstatus noch offen. Bitte mit derselben Auswahl erneut prüfen."); return; }
       // Keep the request ID after an ambiguous server/network failure; only a confirmed
       // failed reservation permits a new attempt. A completed save must never be duplicated.
-      if (!response.ok) { if (result.code === "failed") onDraftChange(current => ({ ...current, requestId: "", pendingSignature: null }));
-        throw new Error(result.error || "Speichern fehlgeschlagen."); }
-      onDraftChange(current => ({ ...current, receipt: result, savedSignature: signature }));
-      onPersist({ ...draft, requestId, pendingSignature: signature, receipt: result, savedSignature: signature });
-      const url = new URL(window.location.href); url.searchParams.set("preparationId", result.id); url.hash = "order-preparation";
+      if (!response.ok) { if (result?.code === "failed") onDraftChange(current => ({ ...current, requestId: "", pendingSignature: null }));
+        throw new Error(result?.error || "Speichern fehlgeschlagen."); }
+      const saved = parseSavedPreparationResponse(result, body);
+      onDraftChange(current => ({ ...current, receipt: saved, savedSignature: signature }));
+      onPersist({ ...draft, requestId, pendingSignature: signature, receipt: saved, savedSignature: signature });
+      const url = new URL(window.location.href); url.searchParams.set("preparationId", saved.id); url.hash = "order-preparation";
       window.history.replaceState(window.history.state, "", url);
       setMessage("Alle ausgewählten Druckseiten sind unveränderlich gespeichert. Es wurde keine Bestellung ausgelöst.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Speicherstatus unklar. Bitte mit derselben Auswahl erneut prüfen."); }

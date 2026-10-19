@@ -2,7 +2,7 @@
 
 Stand 17.10.2026. Repository `ermisalper/ab3d`, Branch `codex/cappatex-production`. Ergänzung zur [Verkaufsvorbereitung](SHOP-LAUNCH-READINESS.md) und [Versandabnahme](CAPPATEX-SALES-AND-SHIPPING-ACCEPTANCE.md). Keine Verkaufs- oder Produktionsfreigabe.
 
-Aktuelle Fortsetzung vom 19.10.2026: siehe „Stabile Produktansichten und sichere Auswahl“ am Ende. Das ursprüngliche Protokoll zur Version 56 bleibt nachfolgend erhalten.
+Aktuelle Fortsetzungen vom 19.10.2026: siehe „Stabile Produktansichten und sichere Auswahl“ sowie „Suche und Wiederherstellung“. Das ursprüngliche Protokoll zur Version 56 bleibt nachfolgend erhalten.
 
 ## Konzept
 
@@ -87,3 +87,21 @@ Anschliessend wurden auf der tatsächlichen privaten Version 57 mit dem bereits 
 Auch die drei problematischen Farbwechsel wurden live geprüft: Tanktop White/L blieb nach Black-Wunsch unverändert White/L und bot wegen des aktuellen Bestands nur Black/S zur ausdrücklichen Auswahl an; diese Auswahl wechselte erst nach Klick zu Black/S. Hoodie Navy/4XL blieb bei White-Wunsch Navy/4XL. Langarmshirt Black/5XL blieb bei White-Wunsch Black/5XL. Die Hinweise nannten jeweils die tatsächlich angebotenen Alternativgrössen.
 
 Die vorhandene Vorder-/Rückseiten-Kopie wurde nach Neuladen erneut vollständig aus der kontobezogenen Tab-Sicherung übernommen; die Legacy-Rückseite zeigte ihren sichtbaren Vorbehalt. Kein neuer Upload, Speicher-POST, kostenpflichtiger KI-Aufruf, Shopify-Checkout, Kauf oder Produktionsauftrag wurde ausgelöst. Mobile Browserbreite wurde anschliessend zurückgesetzt. Lokale Screenshots und Prüfprotokolle liegen ausschliesslich im ignorierten `outputs`-Ordner. Dieser Dokumentationsnachtrag ändert den bereitgestellten Anwendungscode nicht.
+
+## Suche und Wiederherstellung · 19.10.2026
+
+Die private Übersicht unterstützt jetzt eine wörtliche Suche nach Produktname, Farbe, Grösse und Motiv-ID sowie exakte Filter für nur Vorderseite, nur Rückseite oder beide Druckseiten. Prozent- und Unterstrichzeichen sind keine Suchplatzhalter. SQLite und die nachgelagerte DTO-Prüfung verwenden identische ASCII-Gross-/Kleinschreibung; eine allgemeine Unicode-Faltung wird nicht zugesagt. Filter stehen in der URL und sind an die fortgesetzte Listenseite gebunden. Alte Cursor ohne Filter bleiben lesbar. Kontoisolation, Prüfsummenprüfung und ausschliesslich lesende GETs bleiben bestehen.
+
+Der Cursor folgt der letzten geprüften Datenbankzeile, auch wenn beschädigte Kandidaten aus gefilterten Ergebnissen entfallen. Deshalb kann eine Zwischenseite ohne sichtbare Treffer weitere Ergebnisse anbieten. Die Oberfläche erhält diese Weiterladeaktion und zeigt keine erfundene Gesamttrefferzahl. Neue Suchen verwerfen veraltete Antworten; Mehrladen entfernt doppelte Karten. Lade- und Anmeldefehler lassen gespeicherte Originale erhalten.
+
+Erfolgreiche Listen- und Detailantworten werden vor der Darstellung auf ihre tatsächlichen Felder, IDs, Seiten, URLs, Masse, Geometrie und eventuelle CHF-Preise geprüft. Unbekannte Zusatzfelder werden nicht übernommen. Eine Speicherbestätigung muss ausserdem genau zum abgesendeten Profil, zur Variante, Menge, zum Lieferland und zu jedem Motiv samt Platzierung passen. Bei beschädigten oder abweichenden Bestätigungen bleiben Anfrage-ID und unklarer Speicherstatus erhalten; es erfolgt kein automatischer neuer POST.
+
+Katalog- und Wiederaufnahmefehler bieten eine ausdrückliche GET-Neuprüfung. Beschädigte, veraltete oder mit einem neu geöffneten Motiv kollidierende lokale Referenzen werden nicht still überschrieben. Bei einem Motivkonflikt kann stattdessen der bisherige Tab-Entwurf geöffnet werden. Das gezielte Verwerfen verlangt zwei Klicks, eine frisch bestätigte identische Kontozuordnung und exakt unveränderte lokale Rohdaten; nur dieser eine kontobezogene Sitzungsschlüssel wird entfernt. Dauerhafte Motive und Druckvorbereitungen bleiben erhalten. Ein unklarer früherer Speicherversuch wird sichtbar benannt, Wiederholen der Ladeprüfung löst keine Speicherung aus.
+
+Die bestehende Priorität einer ausdrücklich geöffneten Kopie vor einer gültigen Tab-Sicherung bleibt erhalten. Nur eine beschädigte oder alte lokale Sicherung hält das Ersetzen an. Ein expliziter gespeicherter Stand und seine eigenen Motivquellen können vorher gelesen werden; die Oberfläche verlinkt die direkte Prüfansicht. Eine neue Kopie wird in diesem Fall erst nach bewusstem Verwerfen der lokalen Referenz aktiviert.
+
+Gesamtprüfung: **482/482 Offline-Tests**, TypeScript, vollständiges ESLint und Produktionsbuild erfolgreich. Neue Prüfungen umfassen 13 zusätzliche Listenfälle, elf Response-/Speicherbestätigungsfälle und fünf Recovery-Fälle. Keine Migration, Preisfreigabe, neue Secretvariable oder Kontoänderung.
+
+Die tatsächlichen React-Komponenten wurden über CUA in isolierten lokalen HTTP-Fixtures bedient. Listenprüfung: wörtliche Suche, beide Druckseiten, leere Seite mit weiterem Cursor, verspätete alte Suchantwort, beschädigte 200-Antwort mit erfolgreichem Retry, 401-Anmeldung, überlappende Mehrladeseite ohne doppelte Karten und beschädigter Vergleichsbeleg. Bei 390px passten alle Suchfelder und Buttons in die Ansicht.
+
+Recovery-Prüfung: beschädigte Referenz mit Abbrechen und zweistufigem lokalem Verwerfen; ausstehende Speicherung nach Katalog-503 mit Reparatur und GET-Neuprüfung; unveränderte Rohdaten und null Mock-POSTs; Galerie-Konflikt mit Öffnen des alten Entwurfs; Ablehnung nach synthetischem Kontowechsel; veraltetes Druckprofil und altes Schema. Die Recovery-Buttons passten bei 390px in die Ansicht. Ein Überlauf des synthetischen Fixture-Titels betrifft nicht die Produktionskomponente. Kein echter lokaler Nutzerentwurf wurde gelöscht, kein eigenes Motiv erzeugt, keine neue Vorbereitung gespeichert und kein externer Bestellaufruf ausgeführt.

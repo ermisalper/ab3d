@@ -9,10 +9,11 @@ import { initialPlacement, placementGeometry, type ArtworkSize, type Placement }
 import { maximumPrintSizeCm, printSizeHelp } from "../cappatex-print-size";
 import { compositionKey, emptyCompositionDraft, ownedMotif, preparationDesignIds, resumePreparation,
   type CompositionDraft, type OwnedMotif, type WorkingSide } from "../cappatex-resume";
-import type { PreparationSummary } from "../cappatex-preparation";
-import { hydrateSessionDraft, parseSessionDraft, serializeSessionDraft, sessionDraftDesignIds } from "../cappatex-session-draft";
+import { hydrateSessionDraft, serializeSessionDraft, sessionDraftDesignIds } from "../cappatex-session-draft";
 import { chooseColor, productFrontChoice, type MissingColorChoice } from "../cappatex-designer-choice";
 import { knownLegacyMockup, resolveMockupAsset } from "../cappatex-mockup-assets";
+import { accountDraftKey, assertDiscardTarget, conflictsWithLocalMotif, inspectLocalDraft, recoveryUrl } from "../cappatex-recovery";
+import { parsePreparationResponse } from "../cappatex-preparation-response";
 import type { CappatexDesignProduct } from "../cappatex-design-catalog";
 import { prepareCustomerImage } from "../cappatex-upload-client";
 import { designStateUrl, readDesignState, retainedPlacement, verifiedDesignSelection, rememberConfiguration, rememberedConfiguration, reconcileConfigurations,
@@ -126,7 +127,12 @@ export default function CappatexDesigner() {
   const [drafts, setDrafts] = useState<Record<string, CompositionDraft>>({});
   const [sessionKey, setSessionKey] = useState("");
   const [sessionNotice, setSessionNotice] = useState("");
+  const [restoreProblem, setRestoreProblem] = useState<{ kind: "load" | "invalid" | "conflict" | "saved"; hasLocalDraft: boolean; pending: boolean;
+    preparationId?: string } | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const recoveryRaw = useRef<string | null | undefined>(undefined);
   const [missingColor, setMissingColor] = useState<(MissingColorChoice & { profileId: string; profileVersion: string }) | null>(null);
+  const localRecoveryBlocked = Boolean(restoreProblem?.hasLocalDraft);
 
   const product = products.find(p => p.id === productId) || (selectionNeedsReview ? undefined : products[0]);
   const baseVariant = product?.variants.find(v => v.shopifyVariantId === variantId) || (selectionNeedsReview ? undefined : product?.variants[0]);
@@ -193,31 +199,46 @@ export default function CappatexDesigner() {
       setGenerationEnabled(account?.account?.cappatexGeneration?.enabled === true); setPilotOwner(account?.account?.cappatexGeneration?.pilotOwner === true);
       setUploadEnabled(account?.account?.cappatexUpload?.enabled === true); setCanDownloadHd(account?.account?.capabilities?.canDownloadHd === true);
       setAccountCanDownloadHd(account?.account?.capabilities?.canDownloadHd === true);
+      let storageKey = "", inspection: ReturnType<typeof inspectLocalDraft> = { kind: "empty", reference: null };
+      if (typeof account?.account?.email === "string" && account.account.email) {
+        storageKey = await accountDraftKey(account.account.email);
+        try { recoveryRaw.current = window.sessionStorage.getItem(storageKey); inspection = inspectLocalDraft(recoveryRaw.current); }
+        catch { setSessionNotice("Dein Browser erlaubt keine Sitzungssicherung. Speichere die Druckseiten vor dem Verlassen dieser Seite."); }
+        if (!active) return;
+        setSessionKey(storageKey);
+      }
+      const recovery = { kind: "load" as const, hasLocalDraft: inspection.kind !== "empty", pending: Boolean(inspection.reference?.pendingSignature) };
+      if (recovery.hasLocalDraft) setRestoreProblem({ ...recovery, kind: inspection.kind === "invalid" ? "invalid" : "load" });
       if (!catalogResponse?.ok) {
         setMessage("Die Blanko-Produkte sind vorübergehend nicht erreichbar. Produktwahl und Druckvorbereitung bleiben gesperrt.");
+        setRestoreProblem({ ...recovery, kind: inspection.kind === "invalid" ? "invalid" : "load" });
         throw new Error("Der Produktkatalog konnte nicht bestätigt werden. Bereits freigegebene Motiv-Erstellung und Bildupload bleiben verfügbar; es wird nichts automatisch erstellt.");
       }
       const data = await catalogResponse.json(), catalogProducts: CappatexDesignProduct[] = Array.isArray(data.products) ? data.products : [];
       if (!active) return;
       setProducts(catalogProducts); setMessage(data.message || "Die Blanko-Produkte sind derzeit nicht verfügbar.");
-      let storageKey = "", reference = null;
-      if (typeof account?.account?.email === "string" && account.account.email) {
-        const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(account.account.email.trim().toLowerCase()));
-        storageKey = `cappatex-draft-v1:${[...new Uint8Array(hash)].map(n => n.toString(16).padStart(2, "0")).join("")}`;
-        try { reference = parseSessionDraft(window.sessionStorage.getItem(storageKey)); }
-        catch { setSessionNotice("Dein Browser erlaubt keine Sitzungssicherung. Speichere die Druckseiten vor dem Verlassen dieser Seite."); }
-        if (!active) return;
-        setSessionKey(storageKey);
+      if (inspection.kind === "invalid" && !/^CPP-[a-f0-9]{32}$/.test(query.get("preparationId") || "")) {
+        setRestoreProblem({ ...recovery, kind: "invalid" });
+        throw new Error("Der lokale Tab-Entwurf ist beschädigt oder verwendet ein älteres Format. Er wird nicht automatisch überschrieben.");
+      }
+      const reference = inspection.reference;
+      const intendedSide = reference && !restored.profileId ? reference.side : restored.side || "front";
+      if (reference && !query.has("preparationId") && conflictsWithLocalMotif(reference, restored.designId, intendedSide)) {
+        setRestoreProblem({ ...recovery, kind: "conflict" });
+        throw new Error("Du hast ein anderes Motiv geöffnet. Im Tab liegt noch ein Entwurf mit eigenen Druckseiten. Wähle zuerst, welchen Stand du weiterbearbeiten möchtest.");
       }
       if (query.get("resume") === "1") {
         const id = query.get("preparationId") || "";
         if (!/^CPP-[a-f0-9]{32}$/.test(id)) throw new Error("Der Verweis auf die gespeicherten Druckseiten ist ungültig.");
         const response = await fetch(`/api/cappatex/preparations/${id}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
         if (!response.ok) throw new Error("Dieser gespeicherte Stand ist für dein Konto nicht verfügbar.");
-        const preparation = await response.json() as PreparationSummary;
-        if (preparation.id !== id) throw new Error("Der gespeicherte Stand konnte nicht eindeutig bestätigt werden.");
+        const preparation = parsePreparationResponse(await response.json(), id);
         const own = await Promise.all(preparationDesignIds(preparation).map(readOwnMotif));
         const verified = Object.fromEntries(own.map(motif => [motif.designId, motif]));
+        if (inspection.kind === "invalid") {
+          setRestoreProblem({ ...recovery, kind: "saved", preparationId: id });
+          throw new Error("Der gespeicherte Stand und seine eigenen Motive wurden gelesen. Bevor du ihn als Kopie öffnest, entscheide bitte über den vorhandenen lokalen Tab-Entwurf. Dieser wird nicht automatisch ersetzt.");
+        }
         const copy = resumePreparation(preparation, catalogProducts, verified, crypto.randomUUID());
         if (!active) return;
         setMotifs(verified); setProductId(copy.profileId); setVariantId(copy.variantId); setQuantity(copy.quantity); setCountry(copy.country); setSide(copy.side);
@@ -231,6 +252,10 @@ export default function CappatexDesigner() {
       } else if (reference && (!query.has("preparationId") || query.get("preparationId") === reference.receiptId || query.get("preparationId") === reference.copyOf)
         && (!restored.profileId || restored.profileId === reference.profileId)
         && (!restored.variantId || restored.variantId === reference.variantId)) {
+        if (conflictsWithLocalMotif(reference, restored.designId, intendedSide)) {
+          setRestoreProblem({ ...recovery, kind: "conflict" });
+          throw new Error("Du hast ein anderes Motiv geöffnet. Im Tab liegt noch ein Entwurf mit eigenen Druckseiten. Wähle zuerst, welchen Stand du weiterbearbeiten möchtest.");
+        }
         const ids = [...new Set([...sessionDraftDesignIds(reference), ...(restored.designId ? [restored.designId] : [])])];
         const own = await Promise.all(ids.map(readOwnMotif)), verified = Object.fromEntries(own.map(motif => [motif.designId, motif]));
         const loaded = hydrateSessionDraft(reference, catalogProducts, verified);
@@ -246,8 +271,8 @@ export default function CappatexDesigner() {
         if (reference.receiptId) {
           const response = await fetch(`/api/cappatex/preparations/${reference.receiptId}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
           if (response.ok) {
-            const receipt = await response.json() as PreparationSummary;
-            if (receipt.id === reference.receiptId && receipt.profileId === loaded.product.id && receipt.profileVersion === loaded.product.profileVersion
+            const receipt = parsePreparationResponse(await response.json(), reference.receiptId);
+            if (receipt.profileId === loaded.product.id && receipt.profileVersion === loaded.product.profileVersion
               && receipt.variant.shopifyVariantId === loaded.variant.shopifyVariantId) {
               loaded.draft.receipt = receipt;
               loaded.draft.savedSignature = JSON.stringify({ profileId: receipt.profileId, profileVersion: receipt.profileVersion,
@@ -266,10 +291,13 @@ export default function CappatexDesigner() {
         if (!/^CPP-[a-f0-9]{32}$/.test(id)) throw new Error("Der Verweis auf den gespeicherten Stand ist ungültig.");
         const response = await fetch(`/api/cappatex/preparations/${id}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
         if (!response.ok) throw new Error("Der gespeicherte Stand ist für dein Konto nicht verfügbar.");
-        const receipt = await response.json() as PreparationSummary;
-        if (receipt.id !== id) throw new Error("Der gespeicherte Stand konnte nicht eindeutig bestätigt werden.");
+        const receipt = parsePreparationResponse(await response.json(), id);
         const own = await Promise.all([...new Set([...preparationDesignIds(receipt), ...(restored.designId ? [restored.designId] : [])])].map(readOwnMotif));
         const verified = Object.fromEntries(own.map(motif => [motif.designId, motif]));
+        if (inspection.kind === "invalid") {
+          setRestoreProblem({ ...recovery, kind: "saved", preparationId: id });
+          throw new Error("Der gespeicherte Stand und seine eigenen Motive wurden gelesen. Der vorhandene lokale Tab-Entwurf bleibt geschützt, bis du entscheidest, welchen Stand du weiterbearbeitest.");
+        }
         const copy = resumePreparation(receipt, catalogProducts, verified, crypto.randomUUID());
         copy.draft.receipt = receipt; copy.draft.savedSignature = JSON.stringify({ profileId: receipt.profileId, profileVersion: receipt.profileVersion,
           shopifyVariantId: receipt.variant.shopifyVariantId, quantity: receipt.quantity, country: receipt.country,
@@ -290,17 +318,18 @@ export default function CappatexDesigner() {
         if (selection.requiresSelection) setError("Die gespeicherte Produktvariante ist nicht mehr verfügbar oder das Druckprofil wurde geändert. Bitte wähle Produkt und Variante erneut.");
         if (motif) { setMotifs({ [motif.designId]: motif }); showMotif(motif, selection.placement || null); }
       }
+      if (active) setRestoreProblem(null);
     }
-    restore().catch(caught => { if (active) { setSelectionNeedsReview(true); setError(caught instanceof Error ? caught.message : "Der Gestaltungsstand konnte nicht sicher geladen werden."); } })
+    restore().catch(caught => { if (active) { setRestoreProblem(current => current || { kind: "load", hasLocalDraft: false, pending: false }); setSelectionNeedsReview(true); setError(caught instanceof Error ? caught.message : "Der Gestaltungsstand konnte nicht sicher geladen werden."); } })
       .finally(() => { if (active) { setBusy(""); setRestorationComplete(true); } });
     return () => { active = false; };
   }, [showMotif]);
 
   useEffect(() => {
-    if (!restorationComplete || !sessionKey || selectionNeedsReview || !product || !baseVariant || !designId) return;
+    if (!restorationComplete || !sessionKey || localRecoveryBlocked || selectionNeedsReview || !product || !baseVariant || !designId) return;
     try { window.sessionStorage.setItem(sessionKey, serializeSessionDraft(product, baseVariant, currentDraft, motifs, quantity, country, side)); }
     catch { /* A blocked/full session store must never stop explicit server-side saving. */ }
-  }, [restorationComplete, sessionKey, selectionNeedsReview, product, baseVariant, designId, currentDraft, motifs, quantity, country, side]);
+  }, [restorationComplete, sessionKey, localRecoveryBlocked, selectionNeedsReview, product, baseVariant, designId, currentDraft, motifs, quantity, country, side]);
 
   useEffect(() => {
     if (!restorationComplete || !designId || selectionNeedsReview) return;
@@ -309,6 +338,29 @@ export default function CappatexDesigner() {
       configurations: product && variant ? rememberConfiguration(configurations, { ...product, id: side === "back" ? `${product.id}:back` : product.id }, variant.shopifyVariantId, placement) : configurations });
     window.history.replaceState(window.history.state, "", url);
   }, [restorationComplete, selectionNeedsReview, designId, product, productId, variant, variantId, placement, quantity, country, configurations, side]);
+
+  function recheckStudio(action: "retry" | "local" = "retry") {
+    if (busy) return;
+    setBusy("restore");
+    const target = recoveryUrl(window.location.href, action, motifs[designId]?.designId || "");
+    window.history.replaceState(window.history.state, "", target);
+    window.location.reload();
+  }
+
+  async function discardLocalDraft() {
+    if (busy || !confirmDiscard || !sessionKey || !restoreProblem?.hasLocalDraft || recoveryRaw.current === undefined || recoveryRaw.current === null) return;
+    setBusy("recovery");
+    try {
+      const response = await fetch("/api/account", { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+      if (!response.ok) throw new Error("Dein aktuelles Konto konnte nicht bestätigt werden. Der lokale Entwurf bleibt erhalten.");
+      const account = await response.json();
+      assertDiscardTarget(sessionKey, await accountDraftKey(account?.account?.email), recoveryRaw.current, window.sessionStorage.getItem(sessionKey));
+      window.sessionStorage.removeItem(sessionKey);
+      const target = recoveryUrl(window.location.href, "retry", motifs[designId]?.designId || "");
+      window.history.replaceState(window.history.state, "", target);
+      window.location.reload();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Der lokale Entwurf konnte nicht verworfen werden. Es wurde nichts gelöscht."); setBusy(""); }
+  }
 
   function rememberDraft() {
     return draftKey && designId ? { ...drafts, [draftKey]: currentDraft } : drafts;
@@ -321,6 +373,7 @@ export default function CappatexDesigner() {
   }
 
   function selectProduct(nextProduct: CappatexDesignProduct) {
+    if (localRecoveryBlocked) { setError("Bitte entscheide zuerst, ob du den lokalen Tab-Entwurf erneut prüfst oder verwirfst."); return; }
     const updated = product && variant && !selectionNeedsReview
       ? rememberConfiguration(configurations, configurationProduct!, variant.shopifyVariantId, placement) : configurations;
     const saved = rememberedConfiguration(nextProduct, updated);
@@ -339,6 +392,7 @@ export default function CappatexDesigner() {
   }
 
   function selectVariant(nextProduct: CappatexDesignProduct, nextId: string) {
+    if (localRecoveryBlocked) return;
     const matches = nextProduct.variants.filter(v => v.shopifyVariantId === nextId), next = matches[0];
     if (matches.length !== 1 || !next || next.available !== true) { setError("Die gewählte Variante ist nicht eindeutig verfügbar. Deine bisherige Auswahl bleibt erhalten."); return; }
     setMissingColor(null);
@@ -428,6 +482,29 @@ export default function CappatexDesigner() {
       <li><a href="#cappatex-product"><span>2</span><b>Produkt gestalten</b><small>Farbe, Grösse & Druckseite</small></a></li>
       <li><a href="#cappatex-save"><span>3</span><b>Prüfen & speichern</b><small>Deinen Stand sichern</small></a></li>
     </ol>
+    {restoreProblem && <section className="cappatex-profile-note" aria-labelledby="cappatex-recovery-heading">
+      <h3 id="cappatex-recovery-heading">Deinen Gestaltungsstand sicher laden</h3>
+      <p>{restoreProblem.kind === "invalid" ? "Der lokale Tab-Entwurf ist beschädigt oder stammt aus einem älteren Format. Sein Inhalt bleibt bis zu deiner Entscheidung unverändert."
+        : restoreProblem.kind === "conflict" ? "Ein anderes Motiv wurde geöffnet. Dein bisheriger lokaler Entwurf mit seinen Druckseiten wird nicht automatisch ersetzt."
+        : restoreProblem.kind === "saved" ? "Dein gespeicherter Stand und seine Motive sind für dieses Konto lesbar. Die lokale Sicherung ist beschädigt oder stammt aus einem älteren Format; sie wird nicht automatisch ersetzt."
+        : "Katalog, Konto oder gespeicherte Quellen konnten nicht vollständig geprüft werden. Du kannst die Ladeprüfung wiederholen."}</p>
+      <p>„Erneut prüfen“ lädt Katalog, Konto und Quellen neu. Es erstellt kein Motiv und sendet keine Speicheranfrage.</p>
+      {restoreProblem.pending && <p role="status"><strong>Der Ausgang einer früheren Speicherung ist möglicherweise noch unklar.</strong> Die bisherige Anfrage-ID bleibt bei „Erneut prüfen“ erhalten.
+        Eine unveränderte Speicherung wird erst mit deinem ausdrücklichen Klick auf „Druckseiten & Dateien speichern“ erneut angefragt.</p>}
+      <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => recheckStudio()}>Erneut prüfen</button>
+      {restoreProblem.kind === "conflict" && <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => recheckStudio("local")}>Bisherigen Tab-Entwurf öffnen</button>}
+      {restoreProblem.preparationId && <p><Link className="text-link" href={`/cappatex/vorbereitung/${restoreProblem.preparationId}`}>Diesen gespeicherten Stand ansehen →</Link></p>}
+      {restoreProblem.hasLocalDraft && sessionKey && !confirmDiscard && <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => setConfirmDiscard(true)}>Nur lokalen Tab-Entwurf verwerfen</button>}
+      {confirmDiscard && <div role="group" aria-label="Lokales Verwerfen bestätigen">
+        <p>Wirklich nur diesen lokalen Tab-Entwurf verwerfen? Nicht gespeicherte Druckseiten und Platzierungen gehen dabei verloren.
+          Deine dauerhaft gespeicherten Motive und Druckvorbereitungen bleiben erhalten.</p>
+        {restoreProblem.pending && <p>Eine möglicherweise bereits gespeicherte Druckvorbereitung bleibt bestehen. Prüfe deine gespeicherten Stände, bevor du dieselben Seiten als neue Zusammenstellung speicherst.</p>}
+        <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={discardLocalDraft}>Ja, nur lokalen Tab-Entwurf verwerfen</button>
+        <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => setConfirmDiscard(false)}>Abbrechen und Entwurf behalten</button>
+      </div>}
+      <p><Link className="text-link" href="/cappatex/gestaltungen">Gespeicherte Druckvorbereitungen ansehen →</Link>{" "}
+        <Link className="text-link" href="/cappatex/sammlung">Gespeicherte Motive ansehen →</Link></p>
+    </section>}
     <section className="cappatex-comparison" aria-labelledby="cappatex-compare-heading">
       <div className="cappatex-comparison-heading"><h3 id="cappatex-compare-heading">Produkte vergleichen</h3>
         <p>{image ? "Jede Karte zeigt den Vorderseiten-Entwurf, der bei der Auswahl geöffnet wird. Produkte behalten ihre eigenen Motive und Platzierungen."
@@ -444,7 +521,7 @@ export default function CappatexDesigner() {
         return <ProductComparisonCard key={item.id} product={item} variant={choice.variant} placement={choice.placement}
           image={cardMotif?.previewUrl || null} artwork={cardMotif ? { width: cardMotif.width, height: cardMotif.height } : artwork}
           previewSize={cardMotif ? { width: cardMotif.previewWidth, height: cardMotif.previewHeight } : previewSize}
-          active={isActive} disabled={Boolean(busy)} onSelect={() => selectProduct(item)} />;
+          active={isActive} disabled={Boolean(busy) || localRecoveryBlocked} onSelect={() => selectProduct(item)} />;
       })}</div>
       {!products.length && <a className="text-link" href="#kollektion">Fertige Motive im Katalog ansehen →</a>}
     </section>
@@ -573,7 +650,7 @@ export default function CappatexDesigner() {
         {sessionNotice && <p className="cappatex-action-hint" role="status">{sessionNotice}</p>}
         <section className="cappatex-save-step" id="cappatex-save" aria-labelledby="cappatex-save-heading">
         <div className="cappatex-step-heading"><span>3</span><div><h3 id="cappatex-save-heading">Prüfen & speichern</h3><p>Prüfe dein Motiv und die gewünschten Druckseiten.</p></div></div>
-        {pilotOwner && product && variant && <CappatexPreparationPanel key={`${product.id}:${product.profileVersion}:${variant.shopifyVariantId}`}
+        {pilotOwner && product && variant && !localRecoveryBlocked && <CappatexPreparationPanel key={`${product.id}:${product.profileVersion}:${variant.shopifyVariantId}`}
           product={product} variant={variant} side={side} designId={designId} artwork={artwork} placement={placement}
           ready={previewReady && Boolean(geometry?.ok) && !busy} quantity={quantity} country={country}
           draft={currentDraft} onDraftChange={update => setDrafts(current => ({ ...current,
