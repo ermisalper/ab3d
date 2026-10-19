@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./ui-refresh.css";
+import "./contact.css";
 import BrandIntro from "./brand-intro";
 
 export const metadata: Metadata = {

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { CONTACT_EMAIL } from "./contact-details";
 
 type Message = { role: "assistant" | "user"; text: string };
 
@@ -29,7 +30,7 @@ export default function AssistantChat({ signedIn }: { signedIn: boolean }) {
       const data = await response.json();
       setMessages((current) => [...current, { role: "assistant", text: data.answer || "Bitte versuche es nochmals." }]);
     } catch {
-      setMessages((current) => [...current, { role: "assistant", text: "Ich bin kurz nicht erreichbar. Du kannst uns an hello@ab3d.ch schreiben." }]);
+      setMessages((current) => [...current, { role: "assistant", text: `Ich bin kurz nicht erreichbar. Du kannst Berk über „Kontakt“ oder an ${CONTACT_EMAIL} schreiben.` }]);
     } finally {
       setBusy(false);
     }

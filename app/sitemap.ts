@@ -6,6 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: baseUrl, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
     { url: `${baseUrl}/cappatex`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.9 },
+    ...["kontakt", "cappatex/kontakt"].map(route => ({ url: `${baseUrl}/${route}`, changeFrequency: "monthly" as const, priority: 0.5 })),
     ...legalRoutes.map((route) => ({ url: `${baseUrl}/${route}`, lastModified: new Date(), changeFrequency: "monthly" as const, priority: route === "recht" ? 0.5 : 0.4 })),
   ];
 }

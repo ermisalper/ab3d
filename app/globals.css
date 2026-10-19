@@ -362,6 +362,10 @@ footer{grid-template-columns:1.6fr repeat(3,1fr)}
 .division-copy b{font-size:12px;line-height:1.1;letter-spacing:.01em}
 .division-copy small{font-size:10px;line-height:1.1;letter-spacing:.01em;color:inherit;opacity:.68;text-transform:none}
 .nav-actions{justify-self:end;gap:12px}
+.header-contact-link{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 14px;border:1px solid var(--line);border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap}
+.header-contact-link svg{width:20px;height:20px;flex:none}
+.header-contact-link:hover,.header-contact-link[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
+@media(max-width:620px){.header-contact-link{padding:0 10px;gap:6px}.header-contact-link svg{width:18px;height:18px}}
 .account-button{min-height:44px;padding:0 10px;border-radius:10px;transition:background-color .2s}
 .account-button:hover{color:var(--ink);background:#f0eadf}
 .cart-button{display:inline-flex;align-items:center;gap:9px;min-height:44px;padding:0 5px 0 12px;border:1px solid rgba(29,39,33,.18);border-radius:12px;background:#fff;transition:transform .2s var(--ease-out),border-color .2s}
@@ -414,6 +418,13 @@ section[id],:target{scroll-margin-top:132px}
 
 @media(max-width:620px){
   .design-agent{margin-inline:-4px;padding:14px;border-radius:15px}.agent-head em{display:none}.agent-customer-message{max-width:94%}.agent-question-title{padding:15px 14px 12px}.agent-question-title h3{font-size:17px}.agent-question-title>b{display:none}.agent-options{padding-inline:8px}.agent-options button{min-height:72px;padding:12px 11px}.agent-options button b{font-size:14px}.agent-options button small{font-size:12px}.agent-plan-grid,.manufacturing-columns{grid-template-columns:1fr}.manufacturing-head{align-items:flex-start;flex-direction:column-reverse}.agent-nav button{min-height:46px}.planner-start{min-height:56px;font-size:14px}
+}
+
+@media(min-width:901px) and (max-width:1260px){
+  .site-header .nav-shell{grid-template-columns:auto minmax(0,1fr) auto;gap:12px}
+  .site-header .division-nav-desktop{justify-self:center}
+  .site-header .cart-button .cart-label{display:none}
+  .site-header .cart-button{min-width:44px;padding-inline:6px}
 }
 
 @media(max-width:900px){

@@ -62,7 +62,7 @@ const faqItems = [
 export function FaqSection() {
   return (
     <section className="faq-section section" id="faq">
-      <div data-reveal><p className="eyebrow">Gut zu wissen</p><h2>Fragen vor<br />der Bestellung.</h2><p>Der Design-Guide unten rechts hilft dir ebenfalls sofort weiter.</p></div>
+      <div data-reveal><p className="eyebrow">Gut zu wissen</p><h2>Fragen vor<br />der Bestellung.</h2><p>Der Design-Guide unten rechts hilft dir weiter. Für eigene Wünsche oder persönliche Hilfe kannst du <Link className="text-link" href="/kontakt">Berk direkt kontaktieren</Link>.</p></div>
       <div className="faq-list">{faqItems.map(([question, answer]) => <details data-reveal key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div>
     </section>
   );
@@ -71,7 +71,7 @@ export function FaqSection() {
 const footerGroups = [
   { title: "3D Objekte", links: [["Kollektion", "/#kollektion"], ["3D gestalten", "/#studio"], ["Modellgalerie", "/modelle"], ["Meine 3D-Modelle", "/sammlung"], ["Creator Plans", "/#preise"]] },
   { title: "CAPPATEX", links: [["Motiv gestalten", "/cappatex#studio"], ["Designgalerie", "/cappatex/designs"], ["Meine Motive", "/cappatex/sammlung"]] },
-  { title: "Service & Recht", links: [["Kontakt", "mailto:hello@ab3d.ch"], ["Rechtscenter", "/recht"], ["Impressum", "/recht/impressum"], ["Datenschutz", "/recht/datenschutz"], ["AGB", "/recht/agb"], ["Versand & Rückgabe", "/recht/versand-rueckgabe"]] },
+  { title: "Service & Recht", links: [["Kontakt", "/kontakt"], ["Rechtscenter", "/recht"], ["Impressum", "/recht/impressum"], ["Datenschutz", "/recht/datenschutz"], ["AGB", "/recht/agb"], ["Versand & Rückgabe", "/recht/versand-rueckgabe"]] },
 ] as const;
 
 export function ShopFooter() {

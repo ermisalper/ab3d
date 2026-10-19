@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
 import ts from "typescript";
+import * as contactDetails from "../app/contact-details.ts";
 
 const routes = [
   { name: "assistant", body: { message: "Welche Materialien gibt es?" }, fallback: "guide" },
@@ -23,6 +24,7 @@ function handler(route, { flag, key = "test-only-placeholder", user = { email: "
     process: { env: { OPENAI_ASSISTANT_ENABLED: flag, OPENAI_API_KEY: key } },
     require(specifier) {
       if (specifier === "../../chatgpt-auth") return { getChatGPTUser: async () => user };
+      if (specifier === "../../contact-details") return contactDetails;
       if (specifier === "../../design-planner") return {
         buildDesignPlan: () => ({ complete: true, summary: "Fixture plan", technicalBrief: "Fixture geometry" }),
       };

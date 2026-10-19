@@ -23,7 +23,7 @@ export default function LegalOverviewPage() {
         <h2>Vor dem öffentlichen Start noch erforderlich</h2>
         <ul>
           <li>Vollständigen Namen beziehungsweise Firma und Rechtsform bestätigen.</li>
-          <li>Ladungsfähige Geschäftsadresse und Kontakttelefon ergänzen.</li>
+          <li>Ladungsfähige Geschäftsadresse ergänzen.</li>
           <li>UID- und MWST-Nummer ergänzen, sofern vorhanden beziehungsweise erforderlich.</li>
           <li>Freiwillige Rückgabefrist und genaue Abo-Kündigungsregeln festlegen.</li>
           <li>Finale rechtliche Prüfung für das konkrete Unternehmen und Sortiment durchführen lassen.</li>

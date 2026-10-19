@@ -189,7 +189,7 @@ body:has(.brand-intro[open]) { overflow: hidden; }
   }
 }
 @media (max-width:390px) {
-  .site-header .nav-shell { grid-template-columns: auto minmax(0,1fr) auto; }
-  .mobile-area-label { display: block; min-width: 0; font-size: 13px; white-space: nowrap; }
-  .nav-actions { grid-column: 3; }
+  .site-header .nav-shell { grid-template-columns: minmax(0,1fr) auto; height: auto; min-height: 76px; row-gap: 3px; padding-block: 7px; }
+  .mobile-area-label { display: block; grid-column: 1 / -1; grid-row: 2; justify-self: start; min-width: 0; font-size: 12px; white-space: nowrap; }
+  .nav-actions { grid-column: 2; grid-row: 1; gap: 6px; }
 }

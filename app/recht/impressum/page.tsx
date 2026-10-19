@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LegalShell from "../legal-shell";
+import { CONTACT_PHONE_DISPLAY, contactWhatsAppUrl } from "../../contact-details";
 
 export const metadata: Metadata = { title: "Impressum | AB3D Swiss Design" };
 
@@ -18,8 +19,8 @@ export default function ImpressumPage() {
       </section>
       <section>
         <h2>Kontakt</h2>
-        <p>E-Mail: <a href="mailto:hello@ab3d.ch">hello@ab3d.ch</a></p>
-        <p className="legal-placeholder">Telefonnummer: vor Publikation ergänzen</p>
+        <p>E-Mail: <a href="mailto:berk_ermis@icloud.com">berk_ermis@icloud.com</a></p>
+        <p>WhatsApp: <a href={contactWhatsAppUrl("objects")} target="_blank" rel="noopener noreferrer">{CONTACT_PHONE_DISPLAY}</a></p>
         <p>Für Bestellungen, Mängelmeldungen oder Datenschutzanfragen bitte die Bestell- beziehungsweise Designreferenz angeben. Sensible Daten sollen nicht unnötig per E-Mail übermittelt werden.</p>
       </section>
       <section>

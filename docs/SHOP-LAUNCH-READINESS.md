@@ -4,6 +4,20 @@ Stand 17.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-prod
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
 
+## Persönlicher Kontakt · 19.10.2026
+
+Auf ausdrücklichen Wunsch des Betreibers sind `/kontakt` für AB3D und `/cappatex/kontakt` für CAPPATEX ergänzt. Beide Bereiche haben einen ständig sichtbaren Kontaktlink in der Kopfzeile und einen passenden Footerlink. Die Kontaktseiten benötigen keine zusätzliche Anmeldung. CAPPATEX bietet ausserdem einen Link zur persönlichen Designhilfe in einem neuen Tab, damit der aktuelle Entwurf offen bleibt.
+
+WhatsApp nutzt `https://wa.me/41788206684` mit einem statischen bereichsspezifischen Nachrichtentwurf. Die angegebene Schweizer Nummer `0788206684` wird als `+41 78 820 66 84` angezeigt. E-Mail nutzt `berk_ermis@icloud.com` mit einem statischen passenden Betreff. Es gibt keine Kontakt-API, Formdatenspeicherung, WhatsApp-SDK, Tracking-Einbettung, automatische Nachricht oder automatische Übernahme von Motiven, Kontodaten und Bestellreferenzen. Besucher wählen ihren Kanal und senden selbst.
+
+Die frühere Kontaktadresse wurde in Footer, Impressum, Service-/Rechtstexten und Assistant-Hinweisen ersetzt. Im Impressum ist WhatsApp statt des bisherigen Telefon-Platzhalters angegeben. Geschäftsadresse, Rechtsform und übrige offene Betreiberangaben bleiben ausdrücklich offen; keine rechtlichen Regeln, Zahlungen, Kontoabos oder Verkaufs-/Produktionsfreigaben wurden verändert.
+
+Browserabnahme lokal: beide echten Kontaktseiten HTTP200; richtige Bereichslinks, Nummer und Mail-Betreff; 48px Kontaktbuttons und Kopfzeilenkontakt bei 320px ohne horizontalen Überlauf. Der echte AB3D-Header wurde einschliesslich Warenkorb bei 320px geprüft. Für schmale Geräte steht die Bereichskennung in einer zweiten Zeile. Eine zusätzlich bestätigte Überlappung der Desktop-Bereichswahl mit Kontakt/Konto/Warenkorb bei 901px ist durch kompaktere Kopfzeilenspalten und einen Warenkorb ohne Textlabel in dieser Breite behoben; beide Bereiche bleiben sichtbar.
+
+Das WhatsApp-Ziel wurde im Browser geöffnet und zeigte exakt die angegebene Nummer sowie den erwarteten AB3D-Entwurf. Kein App-Login, Versand einer Testnachricht oder Zustelltest. Die E-Mail-Verknüpfung wurde als `mailto:` mit Adresse und Bereichsbetreff geprüft; kein E-Mail-Versand. Die Kontaktdaten wurden vom Betreiber bereitgestellt, nicht aus Konto- oder Anbieterzugängen übernommen.
+
+510/510 vorhandene Tests, Typprüfung und vollständiges ESLint erfolgreich. Der bestehende isolierte Assistant-Test lädt die neuen Kontaktdaten aus dem tatsächlichen reinen Modul; seine Kosten-/Anmeldegates bleiben unverändert geprüft. Keine neuen Tests für reine Link-/Textdarstellung. Die abschliessende private Bereitstellung und Live-Abnahme werden nachfolgend dokumentiert.
+
 Fortsetzung nach Version 54: [Preis-, Versand- und Etikettenabnahme](CAPPATEX-SALES-AND-SHIPPING-ACCEPTANCE.md). Dort stehen die neue Bindung bezahlter Versandtarife, der aktuelle Pflichtlayer-Nachweis und die sichtbaren Druckgrössengrenzen. Das nachfolgende Protokoll beschreibt den Stand der Version 54.
 
 ## Bestellkonzept
