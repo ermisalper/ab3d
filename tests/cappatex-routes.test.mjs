@@ -852,7 +852,8 @@ describe("offline real CAPPATEX upload and owned artwork routes", { concurrency:
     const preview = decode(previewBytes, { checkCrc: true });
     assert.equal(preview.width, 3);
     assert.equal(preview.height, 2);
-    assert.deepEqual(Array.from(preview.data.slice(-4)), [216, 200, 70, 255]);
+    // The last 3×2.5 source-pixel region is averaged uniformly, rather than enlarged from one edge pixel.
+    assert.deepEqual(Array.from(preview.data.slice(-4)), [189, 160, 70, 255]);
     const repeated = await callUpload(bytes), repeatedBody = await repeated.json();
     assert.equal(repeated.status, 200);
     const repeatedRow = uploadRows().find(value => value.id === repeatedBody.designId);
@@ -1576,6 +1577,74 @@ describe("offline immutable multi-side print preparations", { concurrency: false
     fixture.db.sqlite.prepare("UPDATE cappatex_designs SET style='Upload' WHERE id = ?").run(design.id);
     const result = await (await post(input(design))).json();
     assert.ok(result.sides[0].downloadUrl); assert.equal((await get(result.id, "front")).status, 200);
+  });
+
+  const getProof = (id, query = "preview=front") => getPreparation(new Request(`${APP_ORIGIN}/api/cappatex/preparations/${id}?${query}`), { params: Promise.resolve({ id }) });
+
+  test("a motif that disappears during print scaling never becomes a ready preparation", async () => {
+    prepareProfile(); const design = await seedDesign();
+    const data = new Uint8Array(240 * 320 * 4); data.set([255, 0, 0, 1]);
+    const bytes = encode({ width: 240, height: 320, channels: 4, depth: 8, data });
+    fixture.bucket.objects.get(design.key).bytes = bytes;
+    fixture.db.sqlite.prepare("UPDATE cappatex_designs SET artwork_sha256=? WHERE id=?").run(await sha256(bytes), design.id);
+    const body = input(design), response = await post(body), result = await response.json();
+    assert.equal(response.status, 422); assert.equal(result.code, "failed"); assert.match(result.error, /nicht mehr sichtbar/);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_preparations WHERE state='ready'").get().n, 0);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_preparations WHERE state='failed'").get().n, 1);
+    assert.equal((await post(body)).status, 409);
+    assert.equal([...fixture.bucket.objects.keys()].filter(key => key.includes("/preparations/")).length, 0);
+    assert.equal(fixture.carts.length + fixture.uploads.length + fixture.orders.length, 0);
+  });
+
+  test("private print proofs show each actual stored canvas without HD permission or writes", async () => {
+    prepareProfile(); const front = await seedDesign("A", 30), back = await seedDesign("B", 210);
+    const result = await (await post(input(front, back))).json();
+    const before = { ...savedRow(result.id) }, objects = fixture.bucket.objects.size;
+    assert.equal(result.sides[0].downloadUrl, null);
+    assert.equal((await get(result.id, "front")).status, 403);
+    for (const side of result.sides) {
+      assert.deepEqual(side.printPreview, { url: `/api/cappatex/preparations/${result.id}?preview=${side.position}`,
+        width: 384, height: 512, sha256: side.file.sha256 });
+      const response = await getProof(result.id, `preview=${side.position}`);
+      assert.equal(response.status, 200); assert.equal(response.headers.get("content-type"), "image/png");
+      assert.equal(response.headers.get("cache-control"), "private, no-store");
+      assert.match(response.headers.get("content-disposition"), /^inline;/);
+      const image = decode(new Uint8Array(await response.arrayBuffer()), { checkCrc: true });
+      assert.deepEqual([image.width, image.height], [384, 512]);
+      assert.deepEqual([...image.data.subarray(0, 4)], [0, 0, 0, 0]);
+      const color = side.position === "front" ? 30 : 210;
+      assert.ok(image.data.some((value, i) => i % 4 === 3 && value > 0 && image.data[i - 3] === color));
+    }
+    assert.deepEqual({ ...savedRow(result.id) }, before); assert.equal(fixture.bucket.objects.size, objects);
+    assert.equal(fixture.carts.length + fixture.uploads.length + fixture.orders.length, 0);
+    assert.ok(fixture.requests.every(r => r.method === "GET"));
+  });
+
+  test("print proofs retain ownership and reject absent or ambiguous sides", async () => {
+    prepareProfile(); const design = await seedDesign(); const result = await (await post(input(design))).json();
+    runtime.actor = "other@example.test"; assert.equal((await getProof(result.id)).status, 404);
+    runtime.actor = null; assert.equal((await getProof(result.id)).status, 401);
+    runtime.actor = EMAIL;
+    assert.equal((await getProof(result.id, "preview=back")).status, 404);
+    for (const query of ["preview=", "preview=sleeve", "preview=front&preview=back", "preview=front&side=front"])
+      assert.equal((await getProof(result.id, query)).status, 400);
+  });
+
+  for (const issue of ["missing file", "changed file", "wrong raster", "wrong dpi", "renderer"]) test(`print proof blocks ${issue} without modifying the saved original`, async () => {
+    prepareProfile(); const design = await seedDesign(); const result = await (await post(input(design))).json();
+    const payload = JSON.parse(savedRow(result.id).payload_json), side = payload.sides[0];
+    if (issue === "missing file") fixture.bucket.objects.delete(side.file.key);
+    if (issue === "changed file") fixture.bucket.objects.get(side.file.key).bytes[25]++;
+    if (issue === "wrong raster") side.raster = { left: 0, top: 0, width: 1, height: 1 };
+    if (issue === "wrong dpi") side.dpi++;
+    if (issue === "renderer") payload.rendererVersion = "not-approved";
+    const json = JSON.stringify(payload);
+    fixture.db.sqlite.prepare("UPDATE cappatex_preparations SET payload_json=?,payload_sha256=? WHERE id=?")
+      .run(json, await sha256(json), result.id);
+    const before = { ...savedRow(result.id) };
+    assert.equal((await getProof(result.id)).status, 409);
+    assert.deepEqual({ ...savedRow(result.id) }, before);
+    assert.equal(fixture.carts.length + fixture.uploads.length + fixture.orders.length, 0);
   });
 
   test("origin, account and rate gates prevent unwanted rendering", async () => {

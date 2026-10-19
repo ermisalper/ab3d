@@ -2,7 +2,7 @@
 
 Stand 17.10.2026. Repository `ermisalper/ab3d`, Branch `codex/cappatex-production`. Ergänzung zur [Verkaufsvorbereitung](SHOP-LAUNCH-READINESS.md) und [Versandabnahme](CAPPATEX-SALES-AND-SHIPPING-ACCEPTANCE.md). Keine Verkaufs- oder Produktionsfreigabe.
 
-Aktuelle Fortsetzungen vom 19.10.2026: siehe „Stabile Produktansichten und sichere Auswahl“ sowie „Suche und Wiederherstellung“. Das ursprüngliche Protokoll zur Version 56 bleibt nachfolgend erhalten.
+Aktuelle Fortsetzungen vom 19.10.2026: siehe „Stabile Produktansichten und sichere Auswahl“, „Suche und Wiederherstellung“ sowie „Ansicht der tatsächlichen Druckdatei“. Das ursprüngliche Protokoll zur Version 56 bleibt nachfolgend erhalten.
 
 ## Konzept
 
@@ -115,3 +115,29 @@ Hosting-Paket: 142 Dateien, 13.168.640 Bytes im erfassten Tar-Archiv, SHA-256 `7
 Live wurden mit vorhandenen eigenen Daten bestätigt: der bestehende T-Shirt-Stand lädt, Suche nach „Hoodie“ zeigt nachvollziehbar keinen Treffer, Filter zurücksetzen funktioniert, „Vorder- und Rückseite“ zeigt den vorhandenen zweiseitigen Stand. Der Vergleich lädt beide Produktfotos mit 1200×1200 und beide privaten Motivvorschauen mit 512×512; der Vorbehalt des nicht gepinnten historischen Rückseitenfotos bleibt sichtbar. Kein Malformed-Response-Fehler bei den tatsächlich gespeicherten Daten.
 
 Auch nach echtem Neuladen mit `sides=both` bleiben Filter und vorhandener Treffer erhalten. Bei 390px liegen alle Suchfelder und Buttons innerhalb der Ansicht, ohne horizontalen Überlauf. Die Browserbreite wurde zurückgesetzt. Beide lokalen Fixture-Server sind beendet. Screenshot im ignorierten `outputs/cappatex-gestaltungen-v58-20261019.jpg`. Kein Upload, Speicher-POST, kostenpflichtiger KI-Aufruf, Checkout, Kauf oder Produktionsauftrag während dieser Abnahme. Dieser abschliessende Dokumentationsnachtrag ändert den bereitgestellten Anwendungscode nicht.
+
+## Ansicht der tatsächlichen Druckdatei · 19.10.2026
+
+### Konzept und Grenzen
+
+Eine gespeicherte Produktansicht soll die tatsächlich gespeicherte Druck-PNG zeigen. Ein erneutes Zusammensetzen von Quellmotiv und CSS-Platzierung belegt deren Inhalt nicht. Deshalb liefert ein eigener authentifizierter GET `?preview=front|back` eine transparente Ansicht des unveränderlichen finalen Canvas mit maximal 512 Pixeln Kantenlänge. Der volle Canvas wird genau einmal im gemessenen Druckrechteck des Blankofotos angezeigt; keine zweite Motivplatzierung. Vorder- und Rückseite haben getrennte URLs und Quelldatei-Prüfsummen.
+
+Der GET liest ausschliesslich den fertigen Stand des angemeldeten Kontos, prüft Payload- und Datei-SHA, Renderer-Version, Dateimasse sowie die exakte Übereinstimmung von Platzierung, gerundetem Raster und DPI. Er schreibt keine Datenbank-/R2-Daten, verändert keine Originaldatei und ruft keinen Anbieter auf. Die kleinere Vorschau gewährt keine Original-Downloadberechtigung. Der bestehende `?side=`-Download bleibt separat geschützt.
+
+Die PNG-Verkleinerung verarbeitet das bekannte `rgba-area-v1`-Format zeilenweise: maximal 16 MB komprimierte Eingabe, 10.000 Pixel pro Achse und 40 Millionen Gesamtpixel; CRC, erlaubte Chunkfolge, RGBA8, Filter0, Entpackungsgrenzen und vollständige Datenmenge werden geprüft. Im Anwendungscode bleiben nur eine Eingabezeile und ein kleiner Vorschau-Canvas erhalten, kein dekodierter Vollcanvas mit bis zu 160 MB. Die Vorschau nimmt tatsächliche Pixel aus den Mittelpunkten der verkleinerten Bildzellen. Feine Details können bei 512px verloren gehen; falls alle Stichproben transparent wären, wird die Ansicht gesperrt statt als scheinbar leere Druckdatei bestätigt. Dies ist weiterhin kein Farbproof, Stoffmodell oder physischer Drucktest.
+
+Die Detailantwort bindet die Vorschau exakt an CPP-ID, Druckseite, Datei-SHA und berechnete Vorschaumasse. Ein fehlender oder fehlerhafter PNG-GET fällt nicht auf das Quellmotiv zurück. Bei alten Antwortformaten ohne Druckdatei-Vorschau bleibt eine ausdrücklich gekennzeichnete Quellansicht lesbar, erlaubt aber keine Bildbestätigung. Historische, nicht gepinnte Produktfotos bleiben ebenfalls gesperrt. Im noch nicht gespeicherten Entwurf bleibt die Motivvorschau mit Platzierung bestehen.
+
+### Bestätigte Fehler und Korrekturen
+
+Ein gemeinsamer reiner Rasterhelfer verwendet exakt dieselbe unabhängige Achsenrundung wie der bisherige Renderer. Antwortparser, Dateiprüfung und Renderer stimmen damit überein; ein gültig begrenztes, aber zur Platzierung falsches 1×1-Raster wird abgewiesen. Drei vor der Umstellung gesicherte Ausgaben blieben bytegenau identisch, einschliesslich des echten Hoodie-Formats. Die Renderer-Version und akzeptierte Druck-PNGs werden nicht geändert.
+
+Ein tatsächlich möglicher Leerbildfall wurde reproduziert: Ein sehr kleiner opaker Bildpunkt in einer 6144×1024-Quelle war in der Motivvorschau sichtbar, nach Druckverkleinerung aber vollständig transparent. Der Renderer prüft jetzt die quantisierte Ausgabe-Alpha und lehnt vollständig unsichtbare Druckdateien ab. Die Route markiert den Versuch als fehlgeschlagen und meldet HTTP422 mit konkretem Hinweis; kein fertiger Stand oder Auftrag wird freigegeben. Bereits gespeicherte Dateien werden vor einer späteren Bestell-/Fulfillment-Freigabe ebenfalls über die strenge PNG-Prüfung gelesen.
+
+Die verkleinerte Quellvorschau verwendete bei nicht durch vier teilbaren Bildmassen einen kleineren letzten Pixelblock. Das überbetonte schmale Ränder: Bei einer 1025px-Quelle erschien die letzte opake Spalte mit Alpha255 statt proportional64. Gleichmässige, nach Fläche und Alpha gewichtete Abtastung korrigiert das für neue Uploads/Vorschauen. Sichtbarkeit wird erst nach Alpha-Quantisierung bestimmt. Bereits gespeicherte Originale und Quellvorschauen werden nicht umgeschrieben; die neue gespeicherte Produktansicht verwendet deren finale Druck-PNG.
+
+### Nachweise
+
+**510/510 Offline-Tests**, Typprüfung, vollständiges ESLint und Produktionsbuild erfolgreich. Neue Fälle prüfen gleichmässige Randabdeckung, leere Raster, gemeinsame Pixelgeometrie, Bytekompatibilität, echte finale PNG-Pixel, CRC-/Zlib-/Dimensionsfehler, grosse Providerdateien ohne Vollcanvas-Decoding sowie den tatsächlichen GET mit Kontoisolation, HD-Trennung, Front-/Back-Zuordnung und fehlenden/veränderten Dateien. Alle sieben unabhängigen Proof-Handlerfälle sowie gemeinsame Modulprüfungen wurden zusätzlich lesend von einem zweiten Agenten nachvollzogen.
+
+CUA bediente die tatsächlichen Review-/Receipt-Komponenten in einem rein synthetischen lokalen Fixture: gesunde Druckansicht, 404 mit Reparatur und Retry, falsche Vorschaumasse, Legacy-Foto, altes Format ohne Proof, zwei gesunde Seiten und fehlende zweite Seite. Die Einwilligung blieb bei Fehlern gesperrt. Beide gesunden Seiten erlaubten den Button erst nach synthetischer Testbestätigung; kein Checkout-POST wurde ausgelöst. Gezählt: zwei Proof-GETs, null Quellmotiv-GETs und null Mock-POSTs. Die Bilder füllten das Druckrechteck mit 100% ohne erneute Transformation. Bei 390px passten beide 335px-Produktansichten ohne horizontalen Überlauf. Testtab und lokaler Server wurden geschlossen, Browserbreite zurückgesetzt.

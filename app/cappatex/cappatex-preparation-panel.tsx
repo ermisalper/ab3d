@@ -14,13 +14,13 @@ export function PreparedReceipt({ receipt, onPreviewReady }: { receipt: Preparat
   const report = useCallback((identity: string, ready: boolean) => {
     setLoaded(current => current[identity] === ready ? current : { ...current, [identity]: ready });
   }, []);
-  const ready = receipt.sides.length > 0 && receipt.sides.every(side => loaded[preparationPreviewIdentity(side)] === true);
+  const ready = receipt.sides.length > 0 && receipt.sides.every(side => loaded[preparationPreviewIdentity(side, side.printPreview ?? null)] === true);
   useEffect(() => { onPreviewReady?.(ready); }, [ready, onPreviewReady]);
   return <div className="cappatex-preparation-receipt"><h4>Gespeicherter Stand</h4>
     <p>{receipt.name} · {receipt.variant.color} / {receipt.variant.size} · {receipt.quantity} Stück · {receipt.country}</p>
     <p>Dieser Stand bleibt unverändert, auch wenn du im Designer weiterarbeitest.</p>
     <div className="cappatex-preparation-sides">{receipt.sides.map(s => <article key={s.position}><h4>{sideName(s.position)}</h4>
-      <PreparationPreview key={preparationPreviewIdentity(s)} selection={s} onReadyChange={report} /><p>{s.file.width} × {s.file.height} px · Motiv: {Math.floor(s.dpi)} dpi</p>
+      <PreparationPreview key={preparationPreviewIdentity(s, s.printPreview ?? null)} selection={s} printPreview={s.printPreview ?? null} onReadyChange={report} /><p>{s.file.width} × {s.file.height} px · Motiv: {Math.floor(s.dpi)} dpi</p>
       {s.downloadUrl ? <a className="text-link" href={s.downloadUrl}>{sideName(s.position)} als Druck-PNG herunterladen</a> : <p>Original-Download für dein Konto noch nicht freigegeben.</p>}
     </article>)}</div>
     <a className="text-link" href={`/cappatex/vorbereitung/${receipt.id}`}>Gespeicherten Stand öffnen →</a>

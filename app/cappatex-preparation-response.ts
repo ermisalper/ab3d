@@ -1,6 +1,6 @@
 import type { PreparationListItem, PreparationListResponse } from "./cappatex-preparation-list";
 import { preparationInput, type PreparationInput, type PreparationSummary, type PrintSide } from "./cappatex-preparation";
-import { placementGeometry } from "./cappatex-print-profile";
+import { assertPreparedRaster, printProofDimensions } from "./cappatex-print-raster";
 
 const CPP_ID = /^CPP-[a-f0-9]{32}$/;
 const CPX_ID = /^CPX-[A-Z0-9]{12}$/;
@@ -108,7 +108,6 @@ function detailSide(value: Record<string, unknown>, preparationId: string): Prep
   const artwork = dimensions(value.artwork, 6144), file = { ...dimensions(value.file), sha256: id(object(value.file).sha256, /^[a-f0-9]{64}$/) };
   if (artwork.width * artwork.height > 6_291_456 || file.width !== printArea.widthPx || file.height !== printArea.heightPx) return invalid();
   const p = object(value.placement), placement = { x: number(p.x, 0, 1), y: number(p.y, 0, 1), scale: number(p.scale, Number.MIN_VALUE, 1) };
-  if (!placementGeometry(printArea, artwork, placement).ok) return invalid();
   const photo = mockup(value.mockup);
   if (Math.abs(photo.printWidth / photo.printHeight - printArea.widthPx / printArea.heightPx) >= .01) return invalid();
   const r = object(value.raster), raster = { left: integer(r.left, 0, file.width), top: integer(r.top, 0, file.height),
@@ -116,8 +115,17 @@ function detailSide(value: Record<string, unknown>, preparationId: string): Prep
   if (raster.left + raster.width > file.width || raster.top + raster.height > file.height) return invalid();
   const downloadUrl = value.downloadUrl;
   if (downloadUrl !== null && downloadUrl !== `/api/cappatex/preparations/${preparationId}?side=${side}`) return invalid();
-  return { position: side, designId, area: printArea, mockup: photo, placement, artwork,
-    dpi: number(value.dpi, printArea.minDpi, 1_000_000), raster, file, previewUrl: previewUrl(value.previewUrl, designId), downloadUrl };
+  let printPreview: PreparationSummary["sides"][number]["printPreview"] = null;
+  if (value.printPreview !== null && value.printPreview !== undefined) {
+    const proof = object(value.printPreview), size = printProofDimensions(file.width, file.height);
+    const url = `/api/cappatex/preparations/${preparationId}?preview=${side}`;
+    if (proof.url !== url || proof.width !== size.width || proof.height !== size.height || proof.sha256 !== file.sha256) return invalid();
+    printPreview = { url, ...size, sha256: file.sha256 };
+  }
+  const result = { position: side, designId, area: printArea, mockup: photo, placement, artwork,
+    dpi: number(value.dpi, printArea.minDpi, 1_000_000), raster, file, printPreview, previewUrl: previewUrl(value.previewUrl, designId), downloadUrl };
+  assertPreparedRaster(result);
+  return result;
 }
 
 /** Shape validation grants no ownership, image, price, checkout or production approval. */

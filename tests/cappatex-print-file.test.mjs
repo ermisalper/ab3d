@@ -12,6 +12,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { renderPrintFile } = await import("../app/cappatex-print-file.ts");
+const { CAPPATEX_DESIGN_PROFILES } = await import("../app/cappatex-design-profiles.ts");
 const area = (w, h) => ({ position: "front", decorationMethod: "dtg", widthPx: w, heightPx: h,
   widthMm: w * 25.4 / 300, heightMm: h * 25.4 / 300, minDpi: 300, minScale: .01, maxScale: 1 });
 const image = (w, h, color) => encode({ width: w, height: h, channels: 4, depth: 8,
@@ -72,4 +73,13 @@ test("large provider print area is streamed at its original dimensions", async (
   assert.equal(view.getUint32(16),4606); assert.equal(view.getUint32(20),5787);
   assert.ok(result.bytes.length < 1_000_000);
   console.log(`Large print raster: ${Math.round(performance.now()-started)} ms, ${result.bytes.length} bytes`);
+});
+
+test("a source pixel that vanishes after print-alpha quantization cannot produce a ready blank tanktop file", async () => {
+  const tank = CAPPATEX_DESIGN_PROFILES.find(profile => profile.id === "bella-3480-tde-front");
+  const printArea = tank.variants.find(variant => variant.size === "S" && variant.color === "White").area;
+  const width = 6144, height = 1024, data = new Uint8Array(width * height * 4);
+  data.set([210, 50, 90, 255], (120 * width + 620) * 4);
+  const input = encode({ width, height, depth: 8, channels: 4, data });
+  await assert.rejects(renderPrintFile(input, printArea, { x: .5, y: .5, scale: printArea.minScale }), /empty_print_file/);
 });

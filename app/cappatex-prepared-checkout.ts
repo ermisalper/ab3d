@@ -6,6 +6,8 @@ import { placementGeometry, profileIsVerified, type PrintProfile, type ProfileVa
 import { PRINT_RENDERER_VERSION } from "./cappatex-print-file";
 import { pngSize, sha256 } from "./cappatex-artwork";
 import { readPreparation } from "./cappatex-preparation-storage";
+import { assertPreparedRaster } from "./cappatex-print-raster";
+import { printFileProof } from "./cappatex-print-proof";
 import type { PreparedDesign, PrintSide } from "./cappatex-preparation";
 import { moneyCents, type PreparedCheckoutSnapshot } from "./cappatex-snapshot";
 import { shippingReleaseForBasket, shippingReleaseBinding, type ShippingReleaseBinding } from "./cappatex-shipping";
@@ -23,6 +25,7 @@ export type PreparedCheckoutContext = { email?: string; catalogs?: ReturnType<ty
 
 /** The approved full-canvas bytes are the only files sent to Printify; never re-render after payment. */
 export async function preparedPrintFile(side: PreparedDesign["sides"][number]) {
+    assertPreparedRaster(side);
     if (!/^[a-f0-9]{64}$/.test(side.file.sha256) || side.file.width !== side.area.widthPx || side.file.height !== side.area.heightPx)
       throw new Error("prepared_file_changed");
     const object = await env.BUCKET.get(side.file.key);
@@ -32,7 +35,8 @@ export async function preparedPrintFile(side: PreparedDesign["sides"][number]) {
     const dimensions = pngSize(bytes);
     if (bytes.length > 16_000_000 || await sha256(bytes) !== side.file.sha256 || dimensions.width !== side.file.width
       || dimensions.height !== side.file.height || bytes[24] !== 8 || bytes[25] !== 6) throw new Error("prepared_file_changed");
-    return { position: side.position, bytes, width: dimensions.width, height: dimensions.height };
+    const proof = await printFileProof(bytes);
+    return { position: side.position, bytes, width: dimensions.width, height: dimensions.height, proof };
 }
 
 /** At most one full-canvas PNG is retained while uploading; never collect both sides into an array. */

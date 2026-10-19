@@ -152,10 +152,12 @@ export async function POST(request: Request) {
     return Response.json(preparationSummary(saved, await preparationDownloadAllowed(saved, user.email)), { status: 201, headers });
   } catch (error) {
     const known = ["unsupported_upload", "invalid_png", "invalid_png_data", "unsupported_print_source", "invalid_placement",
-      "invalid_raster_bounds", "print_file_too_large", "print_area_too_large", "artwork_missing", "artwork_changed", "artwork_dimensions_changed", "preparation_not_saved"];
+      "invalid_raster_bounds", "print_file_too_large", "print_area_too_large", "empty_print_file", "artwork_missing", "artwork_changed", "artwork_dimensions_changed", "preparation_not_saved"];
     console.error("cappatex_preparation_failed", { phase, reason: error instanceof Error && known.includes(error.message) ? error.message : "unclassified" });
     if (reservedId) await env.DB.prepare("UPDATE cappatex_preparations SET state = 'failed' WHERE id = ? AND email = ? AND state = 'preparing'")
       .bind(reservedId, user.email).run().catch(() => {});
-    return fail(503, "preparation_failed", "Die Druckdateien konnten nicht vollständig bestätigt werden. Es wurde keine Bestellung ausgelöst.");
+    return error instanceof Error && error.message === "empty_print_file"
+      ? fail(422, "failed", "Das Motiv ist in der gewählten Druckgrösse nicht mehr sichtbar. Verwende ein deutlicheres Motiv oder vergrössere es innerhalb der erlaubten Auflösung. Es wurde keine Bestellung ausgelöst.")
+      : fail(503, "preparation_failed", "Die Druckdateien konnten nicht vollständig bestätigt werden. Es wurde keine Bestellung ausgelöst.");
   }
 }

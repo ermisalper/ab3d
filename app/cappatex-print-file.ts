@@ -1,6 +1,7 @@
 import { decode } from "fast-png";
 import { validateUploadPng } from "./cappatex-upload";
-import { placementGeometry, type Placement, type ProfileVariant } from "./cappatex-print-profile";
+import type { Placement, ProfileVariant } from "./cappatex-print-profile";
+import { printRaster } from "./cappatex-print-raster";
 
 export const PRINT_RENDERER_VERSION = "rgba-area-v1";
 const MAX_PRINT_BYTES = 16_000_000;
@@ -19,21 +20,14 @@ function chunk(type: string, data: Uint8Array) {
 
 /** Row-streamed full-placeholder PNG. No full-sized target RGBA allocation. */
 export async function renderPrintFile(bytes: Uint8Array, area: ProfileVariant["area"], placement: Placement, sourceType: "upload" | "generated" = "upload") {
-  const size = await validateUploadPng(bytes, { generatedContentCredentials: sourceType === "generated" }), geometry = placementGeometry(area, size, placement);
-  if (!geometry.ok) throw new Error("invalid_placement");
+  const size = await validateUploadPng(bytes, { generatedContentCredentials: sourceType === "generated" });
+  const { left, top, width: printWidth, height: printHeight, dpi } = printRaster(area, size, placement);
   const width = area.widthPx, height = area.heightPx;
-  if (![width, height].every(n => Number.isSafeInteger(n) && n > 0 && n <= 10000) || width * height > 40_000_000)
-    throw new Error("print_area_too_large");
   const source = decode(bytes, { checkCrc: true });
   if (source.depth !== 8 || ![3, 4].includes(source.channels) || source.palette || source.transparency?.length || source.iccEmbeddedProfile)
     throw new Error("unsupported_print_source");
-  const printWidth = Math.max(1, Math.round(geometry.width! * width));
-  const printHeight = Math.max(1, Math.round(geometry.height! * height));
-  const left = Math.max(0, Math.min(width - printWidth, Math.round(placement.x * width - printWidth / 2)));
-  const top = Math.max(0, Math.min(height - printHeight, Math.round(placement.y * height - printHeight / 2)));
-  if (printWidth > width || printHeight > height || printWidth > size.width || printHeight > size.height) throw new Error("invalid_raster_bounds");
   const sx = size.width / printWidth, sy = size.height / printHeight;
-  let rowIndex = 0;
+  let rowIndex = 0, hasVisiblePixel = false;
   const rows = new ReadableStream<Uint8Array<ArrayBuffer>>({
     pull(controller) {
       if (rowIndex === height) { controller.close(); return; }
@@ -56,6 +50,7 @@ export async function renderPrintFile(bytes: Uint8Array, area: ProfileVariant["a
           const i = 1 + (left + dx) * 4;
           row[i] = alpha ? Math.round(r / alpha) : 0; row[i + 1] = alpha ? Math.round(g / alpha) : 0;
           row[i + 2] = alpha ? Math.round(b / alpha) : 0; row[i + 3] = Math.round(alpha / ((x1 - x0) * (y1 - y0)));
+          if (row[i + 3] > 0) hasVisiblePixel = true;
         }
       }
       controller.enqueue(row);
@@ -76,8 +71,9 @@ export async function renderPrintFile(bytes: Uint8Array, area: ProfileVariant["a
       parts.push(part);
     }
   } finally { reader.releaseLock(); }
+  if (!hasVisiblePixel) throw new Error("empty_print_file");
   parts.push(chunk("IEND", new Uint8Array())); length += 12;
   const output = new Uint8Array(length); let offset = 0;
   for (const part of parts) { output.set(part, offset); offset += part.length; }
-  return { bytes: output, width, height, raster: { left, top, width: printWidth, height: printHeight }, dpi: geometry.dpi! };
+  return { bytes: output, width, height, raster: { left, top, width: printWidth, height: printHeight }, dpi };
 }

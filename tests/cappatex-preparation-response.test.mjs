@@ -27,7 +27,7 @@ function summary(profileId = "gildan-64000-opt-front", positions = ["front", "ba
       const artwork = { width: 2048, height: 1536 }, placement = { x: .42, y: .47, scale: .2 };
       const geometry = placementGeometry(v.area, artwork, placement);
       assert.equal(geometry.ok, true);
-      const width = Math.round(v.area.widthPx * placement.scale), height = Math.round(width * artwork.height / artwork.width);
+      const width = Math.round(v.area.widthPx * placement.scale), height = Math.round(v.area.widthPx * placement.scale * artwork.height / artwork.width);
       return { position, designId: position === "front" ? FRONT : BACK, source: "upload",
         artwork: { key: "private/original.png", sha256: "a".repeat(64), ...artwork }, area: structuredClone(v.area),
         mockup: structuredClone(v.mockup), placement, file: { key: `private/${position}.png`, sha256: "b".repeat(64), width: v.area.widthPx, height: v.area.heightPx },
@@ -48,6 +48,21 @@ function submittedInput(receipt = summary()) {
 }
 const badList = value => assert.throws(() => parsePreparationListResponse(value), { message: "Deine gespeicherten Gestaltungen konnten nicht sicher geladen werden. Bitte versuche es erneut." });
 const badDetail = (value, expectedId = CPP) => assert.throws(() => parsePreparationResponse(value, expectedId), { message: "Dein gespeicherter Gestaltungsstand konnte nicht sicher geladen werden. Bitte lade ihn erneut." });
+
+test("final-canvas preview metadata binds the saved file, receipt, side and exact bounded dimensions", () => {
+  const receipt = summary();
+  assert.equal(parsePreparationResponse(receipt).sides[0].printPreview.sha256, receipt.sides[0].file.sha256);
+  const changes = [p => { p.url = p.url.replace("preview=front", "preview=back"); },
+    p => { p.url = p.url.replace(CPP, "CPP-" + "b".repeat(32)); }, p => { p.sha256 = "c".repeat(64); },
+    p => { p.width++; }, p => { p.height++; }, p => { p.width = "448"; }, p => { p.url += "&side=front"; }];
+  for (const change of changes) {
+    const bad = structuredClone(receipt); change(bad.sides[0].printPreview); badDetail(bad);
+  }
+  const legacy = structuredClone(receipt); delete legacy.sides[0].printPreview;
+  assert.equal(parsePreparationResponse(legacy).sides[0].printPreview, null);
+  const withExtra = structuredClone(receipt); withExtra.sides[0].printPreview.key = "private/storage";
+  assert.deepEqual(parsePreparationResponse(withExtra), receipt);
+});
 
 test("real summaries for all six families retain every preview field, including legacy backs and poster foreground", () => {
   for (const profile of CAPPATEX_DESIGN_PROFILES) {
@@ -119,6 +134,8 @@ test("all renderer fields have bounded, finite and mutually consistent geometry"
     s => { s.placement.scale = 1; }, s => { s.artwork = null; }, s => { s.artwork.width = 6145; },
     s => { s.artwork.width = 6144; s.artwork.height = 6144; }, s => { s.raster = null; }, s => { s.raster.left = -1; },
     s => { s.raster.width = s.file.width; }, s => { s.file = null; }, s => { s.file.width += 1; },
+    s => { s.raster.width = 1; s.raster.height = 1; }, s => { s.raster.left += 1; }, s => { s.raster.top += 1; },
+    s => { s.raster.width -= 1; }, s => { s.raster.height -= 1; }, s => { s.dpi += 1; },
     s => { s.file.sha256 = "not-a-hash"; }, s => { s.dpi = Infinity; }, s => { s.dpi = 1; },
   ]) { const receipt = summary(); mutate(receipt.sides[0]); badDetail(receipt); }
 });

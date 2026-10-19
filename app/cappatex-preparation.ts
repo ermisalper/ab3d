@@ -1,5 +1,6 @@
 import type { Placement, ProfileVariant } from "./cappatex-print-profile";
 import type { PreparedCheckoutStatus } from "./cappatex-prepared-checkout";
+import { printProofDimensions } from "./cappatex-print-raster";
 
 export type PrintSide = "front" | "back";
 export type PreparationInput = { requestId: string; profileId: string; profileVersion: string; shopifyVariantId: string;
@@ -47,6 +48,10 @@ export function preparationSummary(saved: PreparedDesign, canDownload: boolean, 
     purchaseReady: checkout.enabled, checkout, sides: saved.sides.map(s => ({ position: s.position, designId: s.designId, area: s.area, mockup: s.mockup,
       placement: s.placement, artwork: { width: s.artwork.width, height: s.artwork.height }, dpi: s.dpi, raster: s.raster,
       file: { width: s.file.width, height: s.file.height, sha256: s.file.sha256 },
+      printPreview: saved.rendererVersion === "rgba-area-v1" ? {
+        url: `/api/cappatex/preparations/${saved.id}?preview=${s.position}`,
+        ...printProofDimensions(s.file.width, s.file.height), sha256: s.file.sha256,
+      } : null,
       previewUrl: `/api/cappatex/artwork/${s.designId}`,
       downloadUrl: canDownload ? `/api/cappatex/preparations/${saved.id}?side=${s.position}` : null })) };
 }
