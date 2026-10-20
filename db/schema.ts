@@ -217,6 +217,19 @@ export const productionReviewEvents = sqliteTable("production_review_events", {
   actorEmail: text("actor_email").notNull(), createdAt: integer("created_at").notNull(),
 }, table => [uniqueIndex("production_review_event_version").on(table.orderId, table.version)]);
 
+// Internal, editable calculation only. No payment or production transition is attached.
+export const productionOfferDrafts = sqliteTable("production_offer_drafts", {
+  orderId: text("order_id").primaryKey().references(() => productionOrders.id),
+  version: integer("version").notNull(), payloadJson: text("payload_json").notNull(),
+  payloadSha256: text("payload_sha256").notNull(), writeNonce: text("write_nonce").notNull(),
+  updatedBy: text("updated_by").notNull(), updatedAt: integer("updated_at").notNull(),
+});
+
+export const productionOfferEvents = sqliteTable("production_offer_events", {
+  id: text("id").primaryKey(), orderId: text("order_id").notNull().references(() => productionOrders.id),
+  version: integer("version").notNull(), actorEmail: text("actor_email").notNull(), createdAt: integer("created_at").notNull(),
+}, table => [uniqueIndex("production_offer_event_version").on(table.orderId, table.version)]);
+
 export const cappatexDesigns = sqliteTable(
   "cappatex_designs",
   {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import ModelViewer from "../model-viewer";
+import OfferPanel from "./offer-panel";
 import {
   AB3D_ORDER_STATUS_LABELS, AB3D_REVIEW_LABELS, AB3D_REVIEW_STATES,
   type Ab3dOperationDetail, type Ab3dOperationSummary, type Ab3dReview, type Ab3dReviewState,
@@ -292,6 +293,7 @@ export default function Operations({ ownerEmail }: { ownerEmail: string }) {
             </form>
             <details className="ab3d-ops-history"><summary>Prüfverlauf ({detail.order.events.length})</summary>{detail.order.events.length ? <ol>{detail.order.events.map(event => <li key={event.version}><strong>{AB3D_REVIEW_LABELS[event.state]}</strong><span>Version {event.version} · {date(event.createdAt)} · {event.actorEmail}</span></li>)}</ol> : <p>Noch keine interne Prüfung gespeichert.</p>}</details>
           </>}
+          <OfferPanel orderId={selectedId} ownerEmail={ownerEmail} />
         </>}
       </section>
     </div>
