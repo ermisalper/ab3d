@@ -4,6 +4,14 @@ Stand 17.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-prod
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
 
+## Gemeinsame CAPPATEX-Kontaktadresse · 20.10.2026
+
+Auf Betreiberwunsch verwenden AB3D und CAPPATEX im aktuellen Quellstand `cappatex@gmail.com` statt der persönlichen iCloud-Adresse. Nachweis aus der vorhandenen AB3D-Git-Historie: Commit `2610ac7`, `docs/CAPPATEX-PRODUCTION-STATUS.md:5`, nennt diese Adresse ausdrücklich für das verbundene CAPPATEX-Printify-Konto (Shop23104859). Das ist ein historischer Kontonachweis, kein neu durchgeführter Zustell- oder Postfachzugriffstest. Der Zugriff auf die Shopify-Anmeldung wurde vom Browser mit „user declined“ abgelehnt und nicht umgangen; die Adresse wurde unabhängig davon im lokalen Git-Verlauf gefunden.
+
+Geändert sind die zentrale Kontaktkonstante (beide Kontaktseiten, Mailto-Links, Kopierbuttons und Assistant-Verweise) sowie die bisherigen statischen Kontaktverweise in Impressum, Rechtsfooter, Datenschutz, AGB, Produktsicherheit und Versand/Rückgabe. WhatsApp und Kontologins bleiben unverändert. Historische Prüfprotokolle weiter unten behalten die damalige Adresse. Die vorherige Vorgabe „Nur Code und Tests fertigstellen“ bleibt erhalten: keine Bereitstellung des noch nicht visuell abgenommenen Studio-Umbaus; die live veröffentlichte Version62 enthält weiterhin den alten Kontaktstand.
+
+Prüfung: Beide tatsächlichen `contactEmailUrl`-Funktionen adressieren `cappatex@gmail.com` mit ihrem jeweiligen Bereichsbetreff. Keine Fundstelle der persönlichen Adresse mehr im Anwendungscode. 515/515 Tests, Typprüfung, vollständiges ESLint und Produktionsbuild erfolgreich. Quellscan über347 Dateien ohne Treffer vorhandener lokaler Secretwerte. Kein E-Mail-Versand oder Zustelltest.
+
 ## Geführtes CAPPATEX-Designstudio · 20.10.2026
 
 Ziel des überarbeiteten Kundenwegs: eine Entscheidungsebene pro Schritt statt gleichzeitig sichtbarer Motiv-, Galerie-, Produkt-, Drucktechnik- und Speicherformulare. Die bestehende CAPPATEX-Farbwelt bleibt erhalten: Papierweiss #ffffff, heller Hintergrund #fcf8f4, dunkle Schrift #18312f, Kupfer #a9432e, Linie #dfcec3 und weicher Akzent #f5e3d9. Georgia bleibt die sparsam eingesetzte Titelschrift, Arial die Formularschrift. Die dreiteilige Fortschrittsleiste bezeichnet echte Arbeitsschritte. Sämtliche neuen CSS-Regeln sind auf `.cappatex-guided` begrenzt; das AB3D-Studio wird nicht umgestaltet.

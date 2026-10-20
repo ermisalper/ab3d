@@ -8,7 +8,7 @@ export default function DatenschutzPage() {
     <LegalShell title="Datenschutzerklärung" intro="Wie AB3D Daten im Shop, in den KI-Studios und bei der Produktion verarbeitet.">
       <section>
         <h2>1. Verantwortliche Stelle</h2>
-        <p>Verantwortlich ist der im Impressum bezeichnete Betreiber von AB3D Swiss Design, Zürich, Schweiz. Datenschutzanfragen können an <a href="mailto:berk_ermis@icloud.com">berk_ermis@icloud.com</a> gerichtet werden. Die vollständigen Betreiber- und Adressangaben werden vor der öffentlichen Freigabe ergänzt.</p>
+        <p>Verantwortlich ist der im Impressum bezeichnete Betreiber von AB3D Swiss Design, Zürich, Schweiz. Datenschutzanfragen können an <a href="mailto:cappatex@gmail.com">cappatex@gmail.com</a> gerichtet werden. Die vollständigen Betreiber- und Adressangaben werden vor der öffentlichen Freigabe ergänzt.</p>
       </section>
       <section>
         <h2>2. Welche Daten wir verarbeiten</h2>
@@ -27,7 +27,7 @@ export default function DatenschutzPage() {
       <section>
         <h2>4. Dienstleister und Datenübermittlung</h2>
         <p>Für Hosting, Anmeldung, KI-Generierung, 3D-Verarbeitung, Checkout, Druck und Versand setzen wir sorgfältig ausgewählte Auftrags- und Unterauftragsdienstleister ein. Dabei können Daten auch ausserhalb der Schweiz bearbeitet werden. Wir begrenzen die übermittelten Daten auf den jeweiligen Zweck und verwenden angemessene vertragliche sowie technische Schutzmassnahmen.</p>
-        <p>Empfänger sind – soweit für den jeweiligen Vorgang erforderlich – Anbieter für Website-Hosting und Anmeldung, KI- und 3D-Verarbeitung, Zahlungs- und Shopabwicklung, Auftragsdruck, Versand sowie technischer Support. Bei einer Bearbeitung ausserhalb der Schweiz stützen wir die Übermittlung auf einen anerkannten Angemessenheitsentscheid oder geeignete Garantien, insbesondere anerkannte Standarddatenschutzklauseln. Auskunft zu den für einen konkreten Vorgang eingesetzten Empfängern und Staaten kann über <a href="mailto:berk_ermis@icloud.com">berk_ermis@icloud.com</a> angefordert werden.</p>
+        <p>Empfänger sind – soweit für den jeweiligen Vorgang erforderlich – Anbieter für Website-Hosting und Anmeldung, KI- und 3D-Verarbeitung, Zahlungs- und Shopabwicklung, Auftragsdruck, Versand sowie technischer Support. Bei einer Bearbeitung ausserhalb der Schweiz stützen wir die Übermittlung auf einen anerkannten Angemessenheitsentscheid oder geeignete Garantien, insbesondere anerkannte Standarddatenschutzklauseln. Auskunft zu den für einen konkreten Vorgang eingesetzten Empfängern und Staaten kann über <a href="mailto:cappatex@gmail.com">cappatex@gmail.com</a> angefordert werden.</p>
       </section>
       <section>
         <h2>5. Speicherdauer</h2>

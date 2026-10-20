@@ -19,7 +19,7 @@ export default function ImpressumPage() {
       </section>
       <section>
         <h2>Kontakt</h2>
-        <p>E-Mail: <a href="mailto:berk_ermis@icloud.com">berk_ermis@icloud.com</a></p>
+        <p>E-Mail: <a href="mailto:cappatex@gmail.com">cappatex@gmail.com</a></p>
         <p>WhatsApp: <a href={contactWhatsAppUrl("objects")} target="_blank" rel="noopener noreferrer">{CONTACT_PHONE_DISPLAY}</a></p>
         <p>Für Bestellungen, Mängelmeldungen oder Datenschutzanfragen bitte die Bestell- beziehungsweise Designreferenz angeben. Sensible Daten sollen nicht unnötig per E-Mail übermittelt werden.</p>
       </section>

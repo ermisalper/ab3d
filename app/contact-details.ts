@@ -1,6 +1,6 @@
 export type ContactArea = "objects" | "cappatex";
 
-export const CONTACT_EMAIL = "berk_ermis@icloud.com";
+export const CONTACT_EMAIL = "cappatex@gmail.com";
 export const CONTACT_PHONE_DISPLAY = "+41 78 820 66 84";
 export const CONTACT_WHATSAPP_NUMBER = "41788206684";
 
