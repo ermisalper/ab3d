@@ -13,6 +13,7 @@ import type { PrintSide } from "../../../../cappatex-preparation";
 import { snapshotId, validatePaidLine, verifyShopifyHmac, type CheckoutSnapshot, type PaidLine } from "../../../../cappatex-snapshot";
 import { paidShippingMatchesRelease, shippingReleaseForBasket, snapshotShippingBasket, snapshotShippingReleaseIsCurrent,
   type ShippingPaidOrder } from "../../../../cappatex-shipping";
+import { hasTokenPurchaseMarker } from "../../../../token-purchase-receipt";
 
 type PaidOrder = Omit<ShopifyOrderPayload, "line_items"> & ShippingPaidOrder & { test?: boolean; cancelled_at?: string | null; line_items: PaidLine[] };
 const reply = (status: string) => Response.json({ ok: true, status }, { headers: { "Cache-Control": "no-store" } });
@@ -33,8 +34,18 @@ export async function POST(request: Request) {
   if (!await verifyShopifyHmac(raw, request.headers.get("x-shopify-hmac-sha256") || "", secret)) return new Response("Invalid signature", { status: 401 });
   let order: PaidOrder;
   try { order = JSON.parse(new TextDecoder().decode(raw)); } catch { return new Response("Invalid JSON", { status: 400 }); }
-  if (!order || typeof order !== "object" || !order.id || order.financial_status !== "paid" || !Array.isArray(order.line_items) || !order.shipping_address
+  if (!order || typeof order !== "object" || !order.id || order.financial_status !== "paid" || !Array.isArray(order.line_items)
     || order.cancelled_at || order.test) return new Response("Order not eligible", { status: 400 });
+  // The separate token receipt handler owns digital credits. A pure nonshipping token
+  // envelope has no shipping address and must never enter physical storage or Printify.
+  // CAPPATEX markers and known POD variants always keep their existing validation path.
+  if (order.line_items.length > 0 && hasTokenPurchaseMarker(order)
+    && order.line_items.every(line => line && (line as PaidLine & { requires_shipping?: unknown }).requires_shipping === false
+      && Array.isArray(line.properties) && line.properties.every(property => property && typeof property.name === "string" && typeof property.value === "string")
+      && !line.properties.some(property => /^_?CAPPATEX_/i.test(property.name))
+      && !CAPPATEX_PRINT_PROFILES.some(profile => profile.variants.some(variant => variant.shopifyVariantId === `gid://shopify/ProductVariant/${line.variant_id}`))))
+    return reply("ignored_digital_token_order");
+  if (!order.shipping_address) return new Response("Order not eligible", { status: 400 });
   try {
     await recordPaidShopifyOrder(order);
     const customLines = order.line_items.filter(line => line.properties?.some(p => /^(CAPPATEX_|_CAPPATEX_)/.test(p.name))

@@ -3,6 +3,7 @@ import "./globals.css";
 import "./ui-refresh.css";
 import "./contact.css";
 import "./cappatex/studio.css";
+import "./token-shop.css";
 import BrandIntro from "./brand-intro";
 
 export const metadata: Metadata = {

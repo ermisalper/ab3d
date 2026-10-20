@@ -8,6 +8,7 @@ const legalLinks = [
   ["AGB", "/recht/agb"],
   ["Versand & Rückgabe", "/recht/versand-rueckgabe"],
   ["KI & Produktsicherheit", "/recht/ki-produktsicherheit"],
+  ["Tokenpakete", "/recht/tokenpakete"],
 ] as const;
 
 export default function LegalShell({

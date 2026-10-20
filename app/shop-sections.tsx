@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { creatorPlans, tokenRules } from "./creator-plans";
+import TokenPackTeaser from "./token-pack-teaser";
 import { ReplayBrandIntro } from "./brand-intro";
 
 export function ShopHero({ productCount }: { productCount: number }) {
@@ -46,6 +47,7 @@ export function PlansSection({ signedIn }: { signedIn: boolean }) {
           </article>
         ))}
       </div>
+      <TokenPackTeaser signedIn={signedIn} />
       <div className="home-token-guide" data-reveal><strong>Tokens pro Aktion</strong><div>{tokenRules.map(([tokens, use]) => <span key={tokens}><b>{tokens}</b>{use}</span>)}</div></div>
       <Link className="button primary" href={signedIn ? "/konto" : "/signin-with-chatgpt?return_to=%2Fkonto"}>{signedIn ? "Tokens & Abo verwalten" : "Kostenlos anmelden"}</Link>
     </section>

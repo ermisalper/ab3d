@@ -22,8 +22,34 @@ export const tokenLedger = sqliteTable(
     taskId: text("task_id"),
     createdAt: integer("created_at").notNull(),
   },
-  (table) => [index("token_ledger_email_idx").on(table.email)],
+  (table) => [index("token_ledger_email_idx").on(table.email),
+    uniqueIndex("token_ledger_purchase_once").on(table.taskId).where(sql`${table.reason} = 'token_pack_purchase'`)],
 );
+
+export const tokenPurchases = sqliteTable("token_purchases", {
+  id: text("id").primaryKey(), email: text("email").notNull().references(() => accounts.email),
+  requestId: text("request_id").notNull(), requestSha256: text("request_sha256").notNull(),
+  packId: text("pack_id").notNull(), tokens: integer("tokens").notNull(), priceCents: integer("price_cents").notNull(),
+  currency: text("currency").notNull().default("CHF"), country: text("country").notNull(), shopDomain: text("shop_domain").notNull(),
+  snapshotJson: text("snapshot_json").notNull(), snapshotSha256: text("snapshot_sha256").notNull(),
+  status: text("status").notNull().default("creating_checkout"), cartId: text("cart_id"), checkoutUrl: text("checkout_url"),
+  orderKey: text("order_key"), createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
+}, table => [uniqueIndex("token_purchase_request_once").on(table.email, table.requestId),
+  uniqueIndex("token_purchase_cart_once").on(table.cartId), uniqueIndex("token_purchase_order_once").on(table.orderKey),
+  uniqueIndex("token_purchase_uncertain_once").on(table.email).where(sql`${table.status} IN ('creating_checkout','checkout_uncertain')`),
+  index("token_purchase_owner_created").on(table.email, table.createdAt)]);
+
+export const tokenPurchaseEvents = sqliteTable("token_purchase_events", {
+  id: text("id").primaryKey(), bodySha256: text("body_sha256").notNull(),
+  purchaseId: text("purchase_id").notNull().references(() => tokenPurchases.id), orderKey: text("order_key").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const tokenPurchaseReceipts = sqliteTable("token_purchase_receipts", {
+  orderKey: text("order_key").primaryKey(), purchaseId: text("purchase_id").notNull().references(() => tokenPurchases.id),
+  eventId: text("event_id").notNull().references(() => tokenPurchaseEvents.id), creditNonce: text("credit_nonce").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, table => [uniqueIndex("token_purchase_receipt_once").on(table.purchaseId)]);
 
 export const galleryEntries = sqliteTable("gallery_entries", {
   id: text("id").primaryKey(), email: text("email").notNull().references(() => accounts.email),

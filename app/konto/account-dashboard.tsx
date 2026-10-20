@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { creatorPlans, planName, tokenRules } from "../creator-plans";
+import TokenShop from "./token-shop";
 
 type Account = {
   tokenBalance: number;
@@ -102,6 +103,7 @@ export default function AccountDashboard({ user }: { user: { displayName: string
       setMessage(data.error || "Konto konnte nicht geladen werden.");
     }
     setLoading(false);
+    return response.ok;
   };
 
   useEffect(() => {
@@ -172,6 +174,7 @@ export default function AccountDashboard({ user }: { user: { displayName: string
           <span>Verfügbare Design-Tokens</span>
           <b>{loading ? "—" : account?.unlimited ? "∞" : account?.tokenBalance ?? 0}</b>
           <small>{account?.unlimited ? "Launch-Pass aktiv · aktuell kein Token-Abzug." : "Vor jedem Auftrag siehst du den exakten Tokenpreis."}</small>
+          <a className="token-topup-link" href="#tokens-kaufen">Tokens nachkaufen →</a>
         </div>
         <div>
           <span>Aktueller Plan</span>
@@ -180,6 +183,8 @@ export default function AccountDashboard({ user }: { user: { displayName: string
         </div>
         <Link className="button primary" href="/#studio">Neues 3D-Design</Link>
       </section>
+
+      <TokenShop email={user.email} onRefreshBalance={loadAccount} />
 
       <section className="token-guide" aria-labelledby="token-guide-title">
         <div><p className="eyebrow">Einfach erklärt</p><h2 id="token-guide-title">Was kostet wie viele Tokens?</h2></div>

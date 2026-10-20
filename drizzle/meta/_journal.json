@@ -85,6 +85,13 @@
       "when": 1792245627082,
       "tag": "0011_quick_marvel_zombies",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1792455804383,
+      "tag": "0012_brown_sunspot",
+      "breakpoints": true
     }
   ]
 }

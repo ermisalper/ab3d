@@ -7,6 +7,7 @@ const cards = [
   ["Allgemeine Geschäftsbedingungen", "Regeln für Kollektion, individuelle 3D-Produkte, KI-Designs und Abos.", "/recht/agb"],
   ["Versand & Rückgabe", "Liefergebiete, Kosten, Fertigungszeiten, Schäden und Rückgaben.", "/recht/versand-rueckgabe"],
   ["KI & Produktsicherheit", "Verantwortung für Uploads, Designprüfung, Material- und Sicherheitshinweise.", "/recht/ki-produktsicherheit"],
+  ["Design-Tokenpakete", "Einmalige Tokenkäufe, Zahlungsbestätigung und Gutschrift im Konto.", "/recht/tokenpakete"],
 ] as const;
 
 export default function LegalOverviewPage() {
