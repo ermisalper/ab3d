@@ -4,6 +4,10 @@ Stand 17.10.2026. Repository `ermisalper/ab3d`, Branch `codex/cappatex-productio
 
 Aktuelle Fortsetzungen vom 19.10.2026: siehe „Stabile Produktansichten und sichere Auswahl“, „Suche und Wiederherstellung“ sowie „Ansicht der tatsächlichen Druckdatei“. Das ursprüngliche Protokoll zur Version 56 bleibt nachfolgend erhalten.
 
+Lokale Fortsetzung nach `566ef06`: Speicherbestätigungen sind jetzt nach dem tatsächlichen Routenvertrag geprüft: HTTP201 für einen neuen Stand, HTTP200 für eine Wiederholung, jeweils mit passender vollständiger Komposition. HTTP202, unlesbare Antworten und Verbindungsfehler bleiben unbestätigt; Auswahl und Wiederholungs-ID bleiben erhalten. Die Prüfseite übernimmt weder einen nur mit202 beantworteten Stand noch einen unbestätigten Checkout-Link. Nur bestätigte fehlgeschlagene Reservierungen mit409/422 und `code=failed` erlauben eine neue Speicher-ID. Tatsächliche React-DOM-Regressionen prüfen auch beide Druckseiten vor der Einwilligung. Keine Anbieterabfrage, Generierung, Bestellung, Migration oder Bereitstellung dieser Ergänzungen; historische Browserprotokolle bleiben historische Nachweise.
+
+Nach dem Wechsel auf eine andere gespeicherte Gestaltung oder nach Verlassen der Prüfkomponente bleiben verspätete Checkout-Antworten ohne Wirkung: kein Öffnen des alten Links und kein alter Fehler im neuen Stand. Dies ist mit einem tatsächlichen Komponentenwechsel, neuer gültiger GET-Antwort und anschliessend verspätet eintreffendem altem Checkout-Ergebnis offline geprüft.
+
 ## Konzept
 
 Motive und gestaltete Produkte haben unterschiedliche Aufgaben: `/cappatex/sammlung` enthält eigene Motive. `/cappatex/gestaltungen` enthält unveränderlich gespeicherte Produktstände mit Farbe, Grösse, Menge, Lieferland und den ausgewählten Druckseiten. Beide bleiben im CAPPATEX-Bereich. Die 3D-Sammlung wird nicht geändert.
