@@ -1,9 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { fulfillmentSummary } from "../../cappatex-operations";
+import { EVIDENCE_STATUS_LABELS, type fulfillmentSummary } from "../../cappatex-operations";
+import type { cappatexReadiness } from "../../cappatex-readiness";
 
 type State = { checkedAt: number; configuration: { checkoutEnabled: boolean; fulfillmentEnabled: boolean;
-  automaticProductionRequested: boolean; registeredProfiles: number; registeredShippingReleases: number; webhookConfigured: boolean; productionWritePermissions: string };
+  automaticProductionRequested: boolean; registeredProfiles: number; registeredShippingReleases: number; webhookConfigured: boolean; productionWritePermissions: string;
+  tokenPurchasesRequested: boolean; registeredTokenPackReleases: number };
+  readiness: ReturnType<typeof cappatexReadiness>;
   counts: Array<{ state: string; total: number }>; orders: Array<ReturnType<typeof fulfillmentSummary>>; limit: number };
 const date = (value: number) => new Date(value).toLocaleString("de-CH");
 export default function Operations() {
@@ -27,8 +30,8 @@ export default function Operations() {
     <button className="button secondary" onClick={reload} disabled={busy}>{busy ? "Wird geprüft …" : "Status aktualisieren"}</button>
     {message && <p role="status">{message}</p>}
     {data && config && <>
-      <p>Stand: {date(data.checkedAt)}</p>
-      <h2>Freigaben</h2>
+      <p>Übersicht geladen: {date(data.checkedAt)}. Die Belegstände stehen bei den einzelnen Prüfgrundlagen.</p>
+      <h2>Konfiguration</h2>
       <ul>
         <li>Shopify-Checkout: {config.checkoutEnabled ? "Konfigurationsschalter aktiv – zusätzliche Produktfreigaben erforderlich" : "gesperrt"}.</li>
         <li>Printify-Auftragsanlage: {config.fulfillmentEnabled ? "Konfigurationsschalter aktiv – weitere Prüfungen gelten" : "gesperrt"}.</li>
@@ -36,10 +39,28 @@ export default function Operations() {
         <li>Shopify-Versandfreigaben im Register: {config.registeredShippingReleases}. Jede Freigabe gilt nur für die belegte Kombination aus Artikeln, Menge und Lieferland.</li>
         <li>Webhook-Konfiguration: {config.webhookConfigured ? "hinterlegt; erfolgreiche Zustellung separat nachweisen" : "unvollständig"}.</li>
         <li>Produktions-Schreibrechte: noch nicht nachgewiesen.</li>
+        <li>Neue Tokenkäufe: {config.tokenPurchasesRequested ? "Konfigurationsschalter aktiv – Paket- und Zahlungsabnahme weiterhin erforderlich" : "gesperrt"}. Paketzuordnungen: {config.registeredTokenPackReleases}.</li>
       </ul>
       {config.automaticProductionRequested && <p role="alert">Automatische Produktion ist in der Konfiguration angefordert. Der Bestellweg blockiert diese Einstellung. Vor einer Freigabe korrigieren.</p>}
       <p>Eine Verkaufsfreigabe setzt bestätigte Preise, Shopify-Versand nach CH/LI und die Trennung vom nativen Printify-Import voraus. Die Schalter allein bestätigen keinen funktionierenden Verkauf.</p>
       <p>Der Gestaltungsablauf ist derzeit ein privater Betreibertest. Ein Shopify-Upgrade allein öffnet weder den Kundenbereich noch die Produktion.</p>
+      <section aria-labelledby="readiness-heading">
+        <h2 id="readiness-heading">Freigabeprüfung</h2>
+        <p>Rein lesender Stand der dokumentierten Belege und lokalen Register. Beim Aktualisieren werden keine Anbieter abgefragt, Dateien erzeugt oder Freigaben erteilt.</p>
+        <p><strong>Belegt</strong> gilt nur für die genannte Prüfgrundlage. <strong>Ungeprüft</strong> bedeutet fehlende Abnahme, <strong>veraltet</strong> eine ausdrücklich abgelaufene Gültigkeit und <strong>blockiert</strong> einen bekannten offenen Sperrgrund. Keine dieser Angaben ersetzt eine erfolgreiche Live-Abnahme.</p>
+        {data.readiness.rows.map(item => <article key={item.id} className="cappatex-preparation" style={{ margin: "16px 0", minWidth: 0, overflowWrap: "anywhere" }}>
+          <p className="eyebrow">{item.area} · {item.scope}</p>
+          <h3>{item.title}</h3><p><strong>{EVIDENCE_STATUS_LABELS[item.status]}</strong></p>
+          <p>{item.detail}</p>
+          <details><summary>Prüfgrundlage und nächster Nachweis</summary>
+            <ul>{item.basis.map((basis, index) => <li key={`${basis.reference}-${index}`}>
+              <span>{basis.reference}</span> · {basis.recordedAt ? `Belegstand: ${new Date(basis.recordedAt).toLocaleDateString("de-CH")}` : "Kein Prüfdatum hinterlegt"}
+              {basis.validUntil && ` · Gültig bis: ${new Date(basis.validUntil).toLocaleDateString("de-CH")}`}
+            </li>)}</ul>
+            <p>{item.next}</p>
+          </details>
+        </article>)}
+      </section>
       <h2>Aufträge</h2>
       <p>{data.counts.reduce((sum, count) => sum + count.total, 0)} gespeicherte Aufträge. Angezeigt werden höchstens die {data.limit} zuletzt geänderten Aufträge.</p>
       {!data.orders.length && <p>Es sind noch keine CAPPATEX-Aufträge eingegangen.</p>}

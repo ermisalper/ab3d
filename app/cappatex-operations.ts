@@ -1,4 +1,9 @@
 /** Owner dashboard summaries deliberately omit customers, addresses and artwork. */
+export const EVIDENCE_STATUS_LABELS = {
+  belegt: "Belegt", ungeprueft: "Ungeprüft", veraltet: "Veraltet", blockiert: "Blockiert",
+} as const;
+export type EvidenceStatus = keyof typeof EVIDENCE_STATUS_LABELS;
+
 export type FulfillmentRow = { id: string; external_id: string; state: string; printify_order_id: string | null;
   error_code: string | null; created_at: number; updated_at: number };
 

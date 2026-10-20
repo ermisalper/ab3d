@@ -384,7 +384,7 @@ export default function CappatexDesigner() {
   }
 
   function goToStage(next: 1 | 2 | 3) {
-    if (busy || (next === 3 && (!image || !product || localRecoveryBlocked))) return;
+    if (busy || (next === 3 && (!image || !product || !variant || selectionNeedsReview || localRecoveryBlocked))) return;
     setStage(next);
     if (next === 3) setPhotoUrl("");
     window.requestAnimationFrame(() => {
@@ -508,7 +508,7 @@ export default function CappatexDesigner() {
     <ol className="cappatex-flow-steps" aria-label="Deine Gestaltung in drei Schritten">
       <li><button type="button" disabled={Boolean(busy)} aria-current={stage === 1 ? "step" : undefined} onClick={() => goToStage(1)}><span>1</span><b>Motiv</b><small>Deine Idee gestalten</small></button></li>
       <li><button type="button" disabled={Boolean(busy)} aria-current={stage === 2 ? "step" : undefined} onClick={() => goToStage(2)}><span>2</span><b>Produkt</b><small>Auswählen & platzieren</small></button></li>
-      <li><button type="button" disabled={Boolean(busy) || !image || !product || localRecoveryBlocked} aria-current={stage === 3 ? "step" : undefined} onClick={() => goToStage(3)}><span>3</span><b>Prüfen</b><small>Druckseiten speichern</small></button></li>
+      <li><button type="button" disabled={Boolean(busy) || !image || !product || !variant || selectionNeedsReview || localRecoveryBlocked} aria-current={stage === 3 ? "step" : undefined} onClick={() => goToStage(3)}><span>3</span><b>Prüfen</b><small>Druckseiten speichern</small></button></li>
     </ol>
     {restoreProblem && <section className="cappatex-profile-note" aria-labelledby="cappatex-recovery-heading">
       <h3 id="cappatex-recovery-heading">Deinen Gestaltungsstand sicher laden</h3>
@@ -643,12 +643,18 @@ export default function CappatexDesigner() {
         <div className="cappatex-verified-preview">
           {variant ? <div className="cappatex-blank-photo" style={{ aspectRatio: `${variant.mockup.width}/${variant.mockup.height}` }}>
             {blankSrc ? <img key={blankIdentity} className="cappatex-blank-image" src={blankSrc} alt={`${product?.name || "Blanko"}, ${variant.color}, ${variant.size}, unbedruckt`}
-              onLoad={e => { if (e.currentTarget.naturalWidth === variant.mockup.width && e.currentTarget.naturalHeight === variant.mockup.height) setLoadedBlank(blankIdentity); else { setLoadedBlank(""); setError("Die Produktansicht stimmt nicht mit der geprüften Vorlage überein."); } }}
+              onLoad={e => { if (e.currentTarget.naturalWidth === variant.mockup.width && e.currentTarget.naturalHeight === variant.mockup.height) {
+                setLoadedBlank(blankIdentity);
+                setError(current => ["Die Produktansicht stimmt nicht mit der geprüften Vorlage überein.", "Die Produktansicht konnte nicht geladen werden."].includes(current) ? "" : current);
+              } else { setLoadedBlank(""); setError("Die Produktansicht stimmt nicht mit der geprüften Vorlage überein."); } }}
               onError={() => { setLoadedBlank(""); setError("Die Produktansicht konnte nicht geladen werden."); }} />
               : <p className="cappatex-error" role="alert">Diese Produktansicht ist noch nicht als feste Referenz bestätigt. Vorschau und Seitenübernahme bleiben gesperrt.</p>}
             <div className="cappatex-verified-area" style={photoPrintArea(variant)}>
               {image && <img key={image} src={image} alt="Dein unverändertes Motiv in der Druckfläche"
-                onLoad={e => { if (e.currentTarget.naturalWidth === previewSize.width && e.currentTarget.naturalHeight === previewSize.height) setLoadedArtwork(image); else { setLoadedArtwork(""); setError("Die Motivdatei stimmt nicht mit der Druckdatei überein."); } }}
+                onLoad={e => { if (e.currentTarget.naturalWidth === previewSize.width && e.currentTarget.naturalHeight === previewSize.height) {
+                  setLoadedArtwork(image);
+                  setError(current => ["Die Motivdatei stimmt nicht mit der Druckdatei überein.", "Das Motiv konnte nicht geladen werden. Die Bestellung bleibt gesperrt."].includes(current) ? "" : current);
+                } else { setLoadedArtwork(""); setError("Die Motivdatei stimmt nicht mit der Druckdatei überein."); } }}
                 onError={() => { setLoadedArtwork(""); setError("Das Motiv konnte nicht geladen werden. Die Bestellung bleibt gesperrt."); }}
                 style={{ ...placedArtwork(variant, artwork, placement), opacity: blankSrc && loadedBlank === blankIdentity && loadedArtwork === image ? 1 : 0 }} />}
             </div>
@@ -693,7 +699,7 @@ export default function CappatexDesigner() {
         {image && <div className="cappatex-capture-status" role="status"><strong>{side === "front" ? "Vorderseite" : "Rückseite"}</strong><span>{capturedSide ? capturedSideChanged ? "Geändert · erneut übernehmen" : "Übernommen ✓" : "Noch nicht übernommen"}</span></div>}
         <div className="cappatex-stage-actions"><button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => goToStage(1)}>← Motiv bearbeiten</button>
           {pilotOwner && <button type="button" className="button secondary" disabled={!previewReady || !geometry?.ok || Boolean(busy) || Boolean(galleryPhoto) || localRecoveryBlocked} onClick={() => captureSide.current?.capture()}>{side === "front" ? "Vorderseite" : "Rückseite"} {capturedSide ? "erneut übernehmen" : "übernehmen"}</button>}
-          <button type="button" className="button primary" disabled={Boolean(busy) || !image || !product || localRecoveryBlocked} onClick={() => goToStage(3)}>Druckseiten prüfen →</button></div>
+          <button type="button" className="button primary" disabled={Boolean(busy) || !image || !product || !variant || selectionNeedsReview || localRecoveryBlocked} onClick={() => goToStage(3)}>Druckseiten prüfen →</button></div>
         <a className="cappatex-subtle-link" href="/cappatex/kontakt" target="_blank" rel="noopener noreferrer">Persönliche Designhilfe ↗</a>
         </div>
         <section className="cappatex-save-step" id="cappatex-save" hidden={stage !== 3} tabIndex={-1} aria-labelledby="cappatex-save-heading">

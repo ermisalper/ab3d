@@ -50,7 +50,7 @@ class ReadOnlyD1 {
   async batch() { this.writeAttempts++; throw new Error("Dashboard attempted to batch-write"); }
 }
 const variables = ["CAPPATEX_GENERATION_ALLOWED_EMAILS", "CAPPATEX_GENERATION_AUDIENCE", "AB3D_OWNER_EMAILS",
-  "CAPPATEX_CHECKOUT_ENABLED", "CAPPATEX_FULFILLMENT_ENABLED", "CAPPATEX_AUTO_PRODUCTION_ENABLED", "SHOPIFY_WEBHOOK_SECRET", "SHOPIFY_STORE_DOMAIN"];
+  "CAPPATEX_CHECKOUT_ENABLED", "CAPPATEX_FULFILLMENT_ENABLED", "CAPPATEX_AUTO_PRODUCTION_ENABLED", "SHOPIFY_WEBHOOK_SECRET", "SHOPIFY_STORE_DOMAIN", "TOKEN_PURCHASES_ENABLED"];
 const previous = Object.fromEntries(variables.map(key => [key, process.env[key]]));
 const priorFetch = globalThis.fetch;
 let database, networkCalls;
@@ -58,7 +58,7 @@ beforeEach(() => {
   database = new ReadOnlyD1(); runtime.env.DB = database; runtime.actor = owner; networkCalls = 0;
   Object.assign(process.env, { CAPPATEX_GENERATION_ALLOWED_EMAILS: owner, CAPPATEX_GENERATION_AUDIENCE: "subscribers",
     AB3D_OWNER_EMAILS: other, CAPPATEX_CHECKOUT_ENABLED: "false", CAPPATEX_FULFILLMENT_ENABLED: "false", CAPPATEX_AUTO_PRODUCTION_ENABLED: "false",
-    SHOPIFY_WEBHOOK_SECRET: "offline-webhook-secret-never-expose", SHOPIFY_STORE_DOMAIN: "fixture-shop.myshopify.com" });
+    SHOPIFY_WEBHOOK_SECRET: "offline-webhook-secret-never-expose", SHOPIFY_STORE_DOMAIN: "fixture-shop.myshopify.com", TOKEN_PURCHASES_ENABLED: "false" });
   runtime.env.BUCKET = new Proxy({}, { get() { throw new Error("Dashboard must not access artwork storage"); } });
   globalThis.fetch = async () => { networkCalls++; throw new Error("Live network prohibited in operations tests"); };
 });
@@ -111,7 +111,7 @@ test("owner response contains only operational metadata, generic reasons and boo
   const before = database.db.prepare("SELECT * FROM cappatex_fulfillments").all();
   const response = await api.GET(); assert.equal(response.status, 200); privateHeaders(response);
   const result = await response.json();
-  assert.deepEqual(Object.keys(result).sort(), ["checkedAt", "configuration", "counts", "limit", "orders"]);
+  assert.deepEqual(Object.keys(result).sort(), ["checkedAt", "configuration", "counts", "limit", "orders", "readiness"]);
   assert.deepEqual(Object.keys(result.orders[0]).sort(), ["createdAt", "id", "label", "needsReview", "printifyOrderId", "reason", "reference", "stalled", "state", "updatedAt"]);
   assert.equal(result.orders[0].reason, "Weitere Prüfung erforderlich.");
   assert.equal(result.orders[0].printifyOrderId, "printify-fixture-123");
@@ -121,6 +121,10 @@ test("owner response contains only operational metadata, generic reasons and boo
   assert.equal(result.configuration.webhookConfigured, true);
   assert.equal(typeof result.configuration.registeredProfiles, "number");
   assert.equal(result.configuration.registeredShippingReleases, 0);
+  assert.equal(result.configuration.tokenPurchasesRequested, false);
+  assert.equal(result.configuration.registeredTokenPackReleases, 0);
+  assert.equal(result.readiness.checkedAt, result.checkedAt);
+  assert.equal(result.readiness.externalChecksPerformed, false);
   assert.ok(Number.isSafeInteger(result.checkedAt));
   const serialized = JSON.stringify(result);
   for (const hidden of ["hidden@example.test", "private/artwork", "secret-customer", "offline-webhook-secret", "fixture-shop.myshopify.com", "payload_json", "input_sha256", "request_sha256"])
@@ -140,14 +144,20 @@ test("latest order list is bounded and counts include older records without muta
 });
 
 test("configuration flags are exact, report production risk and never imply verified write rights", async () => {
-  Object.assign(process.env, { CAPPATEX_CHECKOUT_ENABLED: "true", CAPPATEX_FULFILLMENT_ENABLED: "true", CAPPATEX_AUTO_PRODUCTION_ENABLED: "true" });
-  let config = (await (await api.GET()).json()).configuration;
+  Object.assign(process.env, { CAPPATEX_CHECKOUT_ENABLED: "true", CAPPATEX_FULFILLMENT_ENABLED: "true", CAPPATEX_AUTO_PRODUCTION_ENABLED: "true", TOKEN_PURCHASES_ENABLED: "true" });
+  const result = await (await api.GET()).json();
+  let config = result.configuration;
   assert.equal(config.checkoutEnabled, true); assert.equal(config.fulfillmentEnabled, true); assert.equal(config.automaticProductionRequested, true);
   assert.equal(config.productionWritePermissions, "unverified");
-  Object.assign(process.env, { CAPPATEX_CHECKOUT_ENABLED: "TRUE", CAPPATEX_FULFILLMENT_ENABLED: "1", CAPPATEX_AUTO_PRODUCTION_ENABLED: " true ", SHOPIFY_WEBHOOK_SECRET: " " });
+  assert.equal(config.tokenPurchasesRequested, true);
+  assert.equal(result.readiness.rows.find(row => row.id === "webhook-delivery").status, "ungeprueft");
+  for (const id of ["token-variants", "sales-prices", "customer-shipping", "required-labels"])
+    assert.equal(result.readiness.rows.find(row => row.id === id).status, "blockiert", "Flags and a secret must never be promoted to live approval");
+  Object.assign(process.env, { CAPPATEX_CHECKOUT_ENABLED: "TRUE", CAPPATEX_FULFILLMENT_ENABLED: "1", CAPPATEX_AUTO_PRODUCTION_ENABLED: " true ", SHOPIFY_WEBHOOK_SECRET: " ", TOKEN_PURCHASES_ENABLED: "TRUE" });
   config = (await (await api.GET()).json()).configuration;
   assert.equal(config.checkoutEnabled, false); assert.equal(config.fulfillmentEnabled, false); assert.equal(config.automaticProductionRequested, false);
   assert.equal(config.webhookConfigured, false);
+  assert.equal(config.tokenPurchasesRequested, false);
   assert.equal(api.POST, undefined); assert.equal(api.PATCH, undefined); assert.equal(api.DELETE, undefined);
 });
 
