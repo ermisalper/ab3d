@@ -4,6 +4,8 @@ import "./ui-refresh.css";
 import "./contact.css";
 import "./cappatex/studio.css";
 import "./token-shop.css";
+import "./ab3d-operations.css";
+import "./production-inquiry.css";
 import BrandIntro from "./brand-intro";
 
 export const metadata: Metadata = {

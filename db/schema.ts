@@ -193,6 +193,7 @@ export const productionOrders = sqliteTable(
     quantity: integer("quantity").notNull().default(1),
     estimatedTotalCents: integer("estimated_total_cents").notNull(),
     currency: text("currency").notNull().default("CHF"),
+    requestDetailsJson: text("request_details_json"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -201,6 +202,20 @@ export const productionOrders = sqliteTable(
     index("production_orders_status_created_idx").on(table.status, table.createdAt),
   ],
 );
+
+// Internal review is separate from payment/production and never promotes an inquiry.
+export const productionReviews = sqliteTable("production_reviews", {
+  orderId: text("order_id").primaryKey().references(() => productionOrders.id),
+  state: text("state").notNull().default("new"), notes: text("notes").notNull().default(""),
+  version: integer("version").notNull(), writeNonce: text("write_nonce").notNull(),
+  updatedBy: text("updated_by").notNull(), updatedAt: integer("updated_at").notNull(),
+}, table => [index("production_reviews_state_idx").on(table.state)]);
+
+export const productionReviewEvents = sqliteTable("production_review_events", {
+  id: text("id").primaryKey(), orderId: text("order_id").notNull().references(() => productionOrders.id),
+  version: integer("version").notNull(), state: text("state").notNull(),
+  actorEmail: text("actor_email").notNull(), createdAt: integer("created_at").notNull(),
+}, table => [uniqueIndex("production_review_event_version").on(table.orderId, table.version)]);
 
 export const cappatexDesigns = sqliteTable(
   "cappatex_designs",

@@ -8,6 +8,7 @@ import { printReportVerified, type Printability } from "./meshy-policy";
 import GalleryConsent from "./gallery-consent";
 import { galleryChoiceValid, newGalleryDraft } from "./gallery-policy";
 import { productionQuote } from "./production-quote";
+import { productionInquiryDetails, type ProductionInquiryDetails } from "./production-inquiry-details";
 
 type InputMode = "text" | "image";
 type GenerationMode = "fast" | "quality";
@@ -157,6 +158,8 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   const [productionOrderId, setProductionOrderId] = useState("");
   const [orderBusy, setOrderBusy] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
+  const [orderError, setOrderError] = useState("");
+  const [inquiryDetails, setInquiryDetails] = useState<ProductionInquiryDetails>({});
   const [heightCm, setHeightCm] = useState(templates[0].defaultHeight);
   const [scaledHeight, setScaledHeight] = useState<number | null>(null);
   const [printability, setPrintability] = useState<Printability | null>(null);
@@ -177,6 +180,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const generationRef = useRef(0);
+  const inquiryPendingRef = useRef(false);
 
   const busy = ["uploading", "transforming", "generating", "refining", "resizing", "analyzing", "repairing", "converting"].includes(state);
   const creativeImage = mode === "image" && imageStrategy === "creative";
@@ -248,6 +252,8 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
     setError("");
     setProductionOrderId("");
     setOrderMessage("");
+    setOrderError("");
+    setInquiryDetails({});
   };
 
   const resetPlanner = () => {
@@ -684,9 +690,16 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   };
 
   const createProductionOrder = async () => {
-    if (!printFilesReady || scaledHeight !== heightCm || !taskId || !quote || orderBusy) return;
+    if (!printFilesReady || scaledHeight !== heightCm || !taskId || !quote || orderBusy || productionOrderId || inquiryPendingRef.current) return;
+    const requestDetails = productionInquiryDetails(inquiryDetails);
+    if (!requestDetails) {
+      setOrderError("Bitte prüfe deine Kontaktangaben. Für Ort oder Postleitzahl bitte das Land wählen; die Postleitzahl hat vier Ziffern.");
+      return;
+    }
+    inquiryPendingRef.current = true;
     setOrderBusy(true);
     setError("");
+    setOrderError("");
     setOrderMessage("");
     try {
       const response = await fetch("/api/production-orders", {
@@ -699,6 +712,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           material,
           finish,
           quantity,
+          requestDetails,
         }),
       });
       const data = await response.json();
@@ -706,8 +720,9 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       setProductionOrderId(data.order.id);
       setOrderMessage(data.message);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Die unverbindliche Anfrage konnte nicht gespeichert werden.");
+      setOrderError(caught instanceof Error ? caught.message : "Die unverbindliche Anfrage konnte nicht gespeichert werden. Deine Angaben bleiben hier erhalten.");
     } finally {
+      inquiryPendingRef.current = false;
       setOrderBusy(false);
     }
   };
@@ -947,7 +962,23 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           )}
 
           {state === "complete" && (
-            <><div className="result-actions">
+            <><details className="production-inquiry-contact">
+              <summary>Angaben für deine Anfrage <span>(optional)</span></summary>
+              <p>Hilf AB3D, Rückfragen und eine passende Offerte vorzubereiten. Die Antwort geht an die E-Mail deines angemeldeten Kontos.</p>
+              <fieldset disabled={orderBusy || Boolean(productionOrderId)}>
+                <legend className="sr-only">Optionale Kontaktangaben für AB3D</legend>
+                <label>Name<input name="inquiry-name" autoComplete="name" maxLength={120} value={inquiryDetails.name ?? ""} onChange={event => setInquiryDetails(current => ({ ...current, name: event.target.value }))} /></label>
+                <label>Telefon<input name="inquiry-phone" type="tel" autoComplete="tel" maxLength={40} value={inquiryDetails.phone ?? ""} onChange={event => setInquiryDetails(current => ({ ...current, phone: event.target.value }))} /></label>
+                <label>Land<select name="inquiry-country" autoComplete="country" value={inquiryDetails.country ?? ""} onChange={event => setInquiryDetails(current => ({ ...current, country: event.target.value === "CH" || event.target.value === "LI" ? event.target.value : undefined }))}><option value="">Bitte wählen (optional)</option><option value="CH">Schweiz</option><option value="LI">Liechtenstein</option></select></label>
+                <label>Postleitzahl<input name="inquiry-postal-code" autoComplete="postal-code" inputMode="numeric" maxLength={4} value={inquiryDetails.postalCode ?? ""} onChange={event => setInquiryDetails(current => ({ ...current, postalCode: event.target.value }))} /></label>
+                <label>Ort<input name="inquiry-city" autoComplete="address-level2" maxLength={120} value={inquiryDetails.city ?? ""} onChange={event => setInquiryDetails(current => ({ ...current, city: event.target.value }))} /></label>
+                <label className="inquiry-note">Wünsche oder Rückfragen<textarea name="inquiry-note" maxLength={1000} rows={3} placeholder="Zum Beispiel Wunschfarbe, Einsatzzweck oder Fragen zum Modell" value={inquiryDetails.customerNote ?? ""} onChange={event => setInquiryDetails(current => ({ ...current, customerNote: event.target.value }))} /></label>
+              </fieldset>
+              <p>Die vollständige Lieferadresse wird erst vor einer späteren verbindlichen Bestellung benötigt.</p>
+            </details>
+            <div className="production-inquiry-disclosure">Mit „Unverbindlich bei AB3D anfragen“ sendest du dein Druckpaket und diese Angaben an AB3D zur persönlichen Prüfung. Dein Modell wird dadurch nicht öffentlich. <Link href="/recht/datenschutz" target="_blank" rel="noopener noreferrer">Datenschutz ↗</Link></div>
+            {orderError && <p className="production-inquiry-error" role="alert">{orderError}</p>}
+            <div className="result-actions">
               <div>{modelUrls.glb && <a href={modelUrls.glb} download>{scaledHeight === heightCm ? `GLB · ${heightCm} cm` : "GLB herunterladen"}</a>}{printFilesReady && canDownload3d && modelUrls.stl && <a href={modelUrls.stl} download>STL · {heightCm} cm</a>}{printFilesReady && canDownload3d && modelUrls["3mf"] && <a href={modelUrls["3mf"]} download>3MF · {heightCm} cm</a>}{printFilesReady && !canDownload3d && <Link href="/konto#plaene">STL selbst laden · Abo wählen</Link>}</div>
               <button className="button light" type="button" onClick={createProductionOrder} disabled={!printFilesReady || scaledHeight !== heightCm || !quote || orderBusy || Boolean(productionOrderId)}>{orderBusy ? "Anfrage wird gespeichert …" : productionOrderId ? `Anfrage gespeichert · ${productionOrderId}` : printFilesReady ? "Unverbindlich bei AB3D anfragen" : "Zuerst Druckpaket vorbereiten"}</button>
             </div>{generationMode === "fast" && <div className="quality-upgrade"><div><b>Gefällt dir die Grundform?</b><span>Erstelle jetzt Material, Farben und die druckbaren STL-/3MF-Dateien.</span></div><button type="button" onClick={() => { setGenerationMode("quality"); workspaceRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" }); }}>Beste Qualität vorbereiten</button></div>}</>

@@ -194,11 +194,12 @@ export default function AccountDashboard({ user }: { user: { displayName: string
         <p>Tokens werden nur bei gestarteten KI- oder Druckaufbereitungen eingesetzt. Eine physische Bestellung enthält die interne Produktionsdatei für AB3D – du brauchst dafür kein Abo.</p>
       </section>
 
-      <section className="order-history">
+      <section className="order-history" id="3d-anfragen">
         <div className="section-heading">
           <div><p className="eyebrow">3D-Anfragen & Fertigung</p><h2>{account?.isOwner ? "Anfragen und Druckaufträge." : "Deine 3D-Anfragen."}</h2></div>
           <p>Neue Anfragen sind unverbindlich: AB3D prüft Modell, Herstellbarkeit und Richtpreis. Sie lösen keine Zahlung oder Produktion aus. Frühere Fertigungsaufträge behalten ihren bisherigen Status.</p>
         </div>
+        {account?.isOwner && <p><Link className="button secondary" href="/betrieb">Alle AB3D-Anfragen prüfen →</Link></p>}
         {productionOrders.length ? (
           <div className="production-order-list">
             {productionOrders.map((order) => (

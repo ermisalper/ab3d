@@ -15,6 +15,7 @@ export default function DatenschutzPage() {
         <ul>
           <li><b>Konto:</b> E-Mail-Adresse, Anzeigename, Anmeldestatus, Plan, Token-Guthaben und Abonnementanfragen.</li>
           <li><b>Bestellung:</b> Name, Lieferadresse, optional Telefonnummer und Hinweise, Warenkorb, Varianten, Preise und Status.</li>
+          <li><b>Individuelle AB3D-Anfrage:</b> Konto-E-Mail, Modellreferenz und Druckwünsche sowie freiwillig angegebener Name, Telefonnummer, Lieferland, Postleitzahl, Ort und Hinweise. Der Betreiber kann die eingereichte Modelldatei zur persönlichen Prüfung einsehen und interne Bearbeitungsnotizen mit Änderungszeitpunkt speichern. Diese Angaben und Notizen erscheinen nicht in der öffentlichen Galerie.</li>
           <li><b>Kreativdaten:</b> Prompts, Antworten im Designplaner, hochgeladene Bilder, generierte Vorschauen, 3D-Dateien, Druckparameter und Designreferenzen.</li>
           <li><b>Nutzung und Sicherheit:</b> technisch erforderliche Protokoll-, Fehler-, Missbrauchs- und Request-Daten.</li>
           <li><b>Zahlung und Versand:</b> Status- und Referenzdaten, die für Checkout, Produktion, Lieferung, Rückerstattung oder Support benötigt werden. Vollständige Kartendaten werden nicht durch AB3D gespeichert.</li>
@@ -53,7 +54,7 @@ export default function DatenschutzPage() {
       </section>
       <section>
         <h2>9. Stand und Änderungen</h2>
-        <p>Stand: 17. Oktober 2026. Wir passen diese Erklärung an, wenn sich Funktionen, Dienstleister oder gesetzliche Anforderungen ändern. Die jeweils aktuelle Fassung wird hier veröffentlicht.</p>
+        <p>Stand: 20. Oktober 2026. Wir passen diese Erklärung an, wenn sich Funktionen, Dienstleister oder gesetzliche Anforderungen ändern. Die jeweils aktuelle Fassung wird hier veröffentlicht.</p>
       </section>
     </LegalShell>
   );

@@ -28,6 +28,7 @@ const hooks = registerHooks({
 });
 const { POST, GET, PATCH } = await import("../app/api/production-orders/route.ts");
 const { productionQuote } = await import("../app/production-quote.ts");
+const { productionInquiryDetails } = await import("../app/production-inquiry-details.ts");
 
 class D1 {
   constructor() {
@@ -100,6 +101,97 @@ test("the shared estimate keeps existing material, finish, minimum and volume fo
   assert.equal(productionQuote({ ...valid, material: "PETG", finish: "Premium", quantity: 3 }).estimatedTotalCents, 23500);
   assert.equal(productionQuote({ ...valid, templateId: "keycap", heightCm: 2 }).estimatedTotalCents, 2500);
   assert.equal(productionQuote({ ...valid, templateId: "chibi", heightCm: 14 }).templateName, "Chibi-Figur");
+});
+
+test("optional inquiry context is trimmed, canonical and bound to the authenticated customer", async () => {
+  const requestDetails = {
+    customerNote: "  Bitte in Salbeigrün.\r\nFrage: Sind zwei Teile möglich?  ",
+    city: "  Zürich  ", country: " CH ", postalCode: " 8000 ",
+    phone: " +41 78 123 45 67 ", name: "  Léa Müller 🏔️ ",
+  };
+  const response = await post({ email: other, requestDetails });
+  assert.equal(response.status, 200);
+  const row = rows()[0];
+  assert.equal(row.email, user);
+  assert.equal(row.request_details_json, JSON.stringify({
+    name: "Léa Müller 🏔️", phone: "+41 78 123 45 67", country: "CH", postalCode: "8000", city: "Zürich",
+    customerNote: "Bitte in Salbeigrün.\nFrage: Sind zwei Teile möglich?",
+  }));
+  assert.equal(row.status, "inquiry");
+  assert.equal(database.db.prepare("SELECT token_balance FROM accounts WHERE email=?").get(user).token_balance, 20);
+  assert.equal(database.db.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n, 0);
+});
+
+test("older clients, blank context and existing orders do not acquire invented contact data", async () => {
+  const id = legacy();
+  for (const requestDetails of [undefined, {}, { name: "  ", phone: "", country: " ", postalCode: "", city: " ", customerNote: "\r\n " }]) {
+    assert.equal((await post({ requestDetails })).status, 200);
+  }
+  assert.equal(rows().length, 4);
+  assert.ok(rows().every(row => row.request_details_json === null));
+  assert.equal(rows().find(row => row.id === id).status, "awaiting_payment");
+  assert.deepEqual(productionInquiryDetails(undefined), {});
+});
+
+test("contact fields reject wrong types, unsupported countries, controls and field overflows", async () => {
+  for (const requestDetails of [
+    null, [], "contact", 12, { name: 123 }, { phone: false }, { city: null }, { customerNote: {} },
+    { country: "DE" }, { country: "ch" }, { email: other }, { street: "Private address" }, { constructor: "unsafe" },
+    { name: "Line\nBreak" }, { phone: "\u0000+41" }, { city: "Zürich\t" }, { customerNote: "Note\u007f" }, { customerNote: "Note\r" },
+    { name: "a".repeat(121) }, { phone: "1".repeat(41) }, { city: "a".repeat(121), country: "CH" },
+    { customerNote: "x".repeat(1001) }, { postalCode: "9".repeat(13), country: "LI" },
+    { postalCode: "8000" }, { city: "Vaduz" }, { postalCode: "800", country: "CH" }, { postalCode: "80000", country: "CH" },
+  ]) assert.equal((await post({ requestDetails })).status, 400, JSON.stringify(requestDetails));
+  assert.equal(rows().length, 0);
+});
+
+test("country-only context and valid partial quote locations are accepted without a full delivery address", async () => {
+  for (const requestDetails of [{ country: "CH" }, { country: "LI", postalCode: "9490" }, { country: "CH", city: "Genève" },
+    { name: "x".repeat(120), phone: "+".repeat(40), country: "LI", postalCode: "9490", city: "x".repeat(120), customerNote: "x".repeat(1000) }]) {
+    const response = await post({ requestDetails });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.deepEqual(JSON.parse(rows().find(row => row.id === result.order.id).request_details_json), requestDetails);
+  }
+});
+
+test("legacy inquiry listings do not expose raw private request details, including an attempted all-scope read", async () => {
+  await post({ requestDetails: { name: "Private name", phone: "+41 78 123 45 67", customerNote: "Private note" } });
+  for (const actor of [user, other, operator]) {
+    runtime.actor = actor;
+    const response = await GET(new Request(`${origin}/api/production-orders?scope=production`));
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("Cache-Control"), /private, no-store/);
+    const json = await response.json();
+    if (actor === other) assert.deepEqual(json.orders, []);
+    assert.doesNotMatch(JSON.stringify(json), /Private name|Private note|\+41 78|request_details_json|requestDetails/);
+  }
+});
+
+test("the raw inquiry body is limited by UTF-8 bytes even without an honest content-length", async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ ...valid, ignored: "ä".repeat(7000) }));
+  for (const contentLength of [undefined, "1", String(bytes.length)]) {
+    let cancelled = false;
+    const headers = { origin, host: "ab3d.example.test", "Content-Type": "application/json" };
+    if (contentLength) headers["content-length"] = contentLength;
+    const body = new ReadableStream({
+      start(controller) { controller.enqueue(bytes.subarray(0, 100)); controller.enqueue(bytes.subarray(100)); },
+      cancel() { cancelled = true; },
+    });
+    const response = await POST(new Request(`${origin}/api/production-orders`, { method: "POST", headers, body, duplex: "half" }));
+    assert.equal(response.status, 413);
+    if (contentLength !== String(bytes.length)) assert.equal(cancelled, true);
+  }
+  assert.equal(rows().length, 0);
+});
+
+test("invalid JSON, invalid UTF-8, arrays and empty bodies cannot create an inquiry", async () => {
+  for (const body of ["{broken", "[]", "null", "", new Uint8Array([0xff])]) {
+    assert.equal((await POST(new Request(`${origin}/api/production-orders`, {
+      method: "POST", headers: { origin, host: "ab3d.example.test", "Content-Type": "application/json" }, body,
+    }))).status, 400);
+  }
+  assert.equal(rows().length, 0);
 });
 
 test("invalid quantities, size precision, template bounds and enum coercions cannot become saved inquiries", async () => {
