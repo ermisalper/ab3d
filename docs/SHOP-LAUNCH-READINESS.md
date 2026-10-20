@@ -4,6 +4,10 @@ Stand 17.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-prod
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
 
+## Creator-Abos um CHF 3 reduziert · 20.10.2026
+
+Die zentrale Preisliste `app/creator-plans.ts` nennt auf Betreiberwunsch neu CHF16/Monat für 3D Studio, CHF12/Monat für CAPPATEX und CHF26/Monat für Complete. Explorer bleibt bei CHF0; Tokenkontingente und Leistungen bleiben erhalten. Startseite und Kontobereich verwenden dieselbe Liste, weitere Abo-Preisquellen wurden nicht gefunden. Die Abo-Auswahl speichert weiterhin ausschliesslich eine Anfrage, keine kostenpflichtige Abrechnung. Direkte Prüfung aller vier Preis-/Tokenzuordnungen, 13 vorhandene Struktur-/Launchtests, Typprüfung, dateibezogenes ESLint und Produktionsbuild erfolgreich. Gemäss bestehender Code-/Test-Vorgabe noch keine Bereitstellung; live bleibt Version62.
+
 ## Gemeinsame CAPPATEX-Kontaktadresse · 20.10.2026
 
 Auf Betreiberwunsch verwenden AB3D und CAPPATEX im aktuellen Quellstand `cappatex@gmail.com` statt der persönlichen iCloud-Adresse. Nachweis aus der vorhandenen AB3D-Git-Historie: Commit `2610ac7`, `docs/CAPPATEX-PRODUCTION-STATUS.md:5`, nennt diese Adresse ausdrücklich für das verbundene CAPPATEX-Printify-Konto (Shop23104859). Das ist ein historischer Kontonachweis, kein neu durchgeführter Zustell- oder Postfachzugriffstest. Der Zugriff auf die Shopify-Anmeldung wurde vom Browser mit „user declined“ abgelehnt und nicht umgangen; die Adresse wurde unabhängig davon im lokalen Git-Verlauf gefunden.

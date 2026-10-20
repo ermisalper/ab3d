@@ -22,7 +22,7 @@ export const creatorPlans: CreatorPlan[] = [
   {
     id: "3d-studio",
     name: "3D Studio",
-    price: "CHF 19",
+    price: "CHF 16",
     cadence: "/ Monat",
     tokens: "20 Tokens monatlich",
     audience: "Für eigene 3D-Modelle",
@@ -31,7 +31,7 @@ export const creatorPlans: CreatorPlan[] = [
   {
     id: "cappatex",
     name: "CAPPATEX",
-    price: "CHF 15",
+    price: "CHF 12",
     cadence: "/ Monat",
     tokens: "20 Tokens monatlich",
     audience: "Für Motive auf Kleidung",
@@ -40,7 +40,7 @@ export const creatorPlans: CreatorPlan[] = [
   {
     id: "complete",
     name: "Complete",
-    price: "CHF 29",
+    price: "CHF 26",
     cadence: "/ Monat",
     tokens: "40 Tokens monatlich",
     audience: "Beide Studios in einem Abo",
