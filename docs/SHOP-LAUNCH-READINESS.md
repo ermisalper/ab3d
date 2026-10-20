@@ -14,6 +14,14 @@ Die Fotohilfe passt zum gewählten Ablauf: Originalgetreue Verarbeitung nutzt di
 
 Keine neuen Tests für reine Textdarstellung. Die vorhandenen573 Tests, Typprüfung, vollständiges ESLint und Produktionsbuild sind erfolgreich. Quellscan über378 Dateien ohne Treffer vorhandener lokaler Secretwerte. Die gespeicherten Browserregeln bleiben respektiert; keine neue Sichtprüfung oder kostenpflichtige Generierung. Versionsnachweis folgt nach erfolgreichem Deployment.
 
+### Private Bereitstellung · Version 65
+
+Version **65** ist seit20.10.2026 um **20:07 Schweizer Zeit** (18:07 UTC) erfolgreich privat bereitgestellt. Anwendungscode `6e36c1dd57a5c4a0e07e820956771538f6bfd379` stimmt auf GitHub und in der gespeicherten Site-Version überein. Deployment `appgdep_6ad7adc3c8ec8191a0334ffaa15c78c2`, Saved-Version `appgprj_6a69247390f08191811183b6a04bae94~appgver_5e36f55b5ea08191824ebcfb101f0172`, Status `succeeded`, Umgebungsrevision unverändert **11**. Weiterhin ein erlaubter Betreiber, null externe Besucher; Checkout, Fulfillment und automatische Produktion unverändert gesperrt. Keine API-Schlüssel, Tarife oder Zahlungsarten geändert.
+
+Gespeichertes Hosting-Paket:152 Dateien,13.629.440 Bytes, Archivhash `sha256:54f148fa11edc41d7dbc2eb46364e829e9b539bcdf453ed733569038087a45ae`. Lokale komprimierte Transportdatei7.394.934 Bytes, SHA-256 `06980a5e99572f9caa5f6bd4537792df35ef065153dd1f5410f7377a9265630e`. Paket-Scan ohne Treffer vorhandener lokaler Secretwerte. Der offizielle Quellhelfer synchronisierte den Commit; nach seinem bekannten technischen Windows-Paketierungsstartfehler paketierte das bestehende lokale Windows-Verfahren denselben sauberen, geprüften Quellstand. Keine Genehmigungsablehnung wurde umgangen.
+
+Die native Bereitstellung ist bestätigt. Das Öffnen von `/cappatex#studio` in Codex ist vorgemerkt (`queued`); dies bestätigt keine Browser-Sichtprüfung. Keine neue Generierung oder echte Bestellung. Dieser Dokumentationsnachtrag ändert den bereitgestellten Anwendungscode nicht.
+
 ## AB3D-Anfragen persönlich bearbeiten · 20.10.2026
 
 Auf Betreiberwunsch folgt als nächster selbstständig umsetzbarer Schritt eine eigene AB3D-Auftragsverwaltung unter `/betrieb`. Sie bleibt strikt vom CAPPATEX-Betriebsbereich getrennt und ist ausschliesslich für angemeldete, ausdrücklich als AB3D-Betreiber hinterlegte Konten zugänglich. Konto und bisherige 3D-Anfragen verlinken dorthin. Kunden erhalten weder die Betreiberliste noch fremde Daten, interne Notizen oder die internen Prüfdateien.
