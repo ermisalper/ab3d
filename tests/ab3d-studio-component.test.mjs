@@ -16,9 +16,11 @@ const printability = { status: "healthy", issue_count: 0, error_count: 0, warnin
   intended_print: { printer_type: "fdm", height_mm: 200, wall_thickness_mm: 1.2 }, thin_walls: { status: "healthy", has_thin_walls: false } };
 const taskIds = { create: "synthetic-created", resize: "synthetic-resized", analyze: "synthetic-analyzed", convert: "synthetic-converted" };
 const inquiryId = "PRINT-ABCDE00001";
+const receipt = (id = inquiryId, message = "Unverbindliche Anfrage gespeichert; keine Zahlung oder Produktion") => ({ ok: true,
+  order: { id, status: "inquiry", estimatedTotalCents: 4500, currency: "CHF" }, message });
 
-function fixture({ inquiry = async () => json({ order: { id: inquiryId }, message: "Unverbindliche Anfrage gespeichert; keine Zahlung oder Produktion" }), report = printability } = {}) {
-  const calls = [], inquiries = [];
+function fixture({ inquiry = async () => json(receipt()), report = printability } = {}) {
+  const calls = [], inquiries = [], tasks = new Map(); let generation = 0;
   return { calls, inquiries, fetch: async (url, init = {}) => {
     calls.push({ url, method: init.method || "GET", ...(init.body ? { body: JSON.parse(init.body) } : {}) });
     if (url === "/api/account") return json({ account: { email: "customer@example.test", tokenBalance: 100, unlimited: false, capabilities: { canDownload3d: false } } });
@@ -30,14 +32,17 @@ function fixture({ inquiry = async () => json({ order: { id: inquiryId }, messag
     if (url === "/api/meshy") {
       assert.equal(init.method, "POST"); const body = JSON.parse(init.body);
       assert.ok(Object.hasOwn(taskIds, body.action), `Unexpected simulated Meshy action: ${body.action}`);
-      return json({ taskId: taskIds[body.action], type: body.action === "create" ? "text" : body.action, tokenBalance: 99 });
+      if (body.action === "create") generation++;
+      const taskId = `${taskIds[body.action]}${generation > 1 ? `-${generation}` : ""}`;
+      tasks.set(taskId, body.action);
+      return json({ taskId, type: body.action === "create" ? "text" : body.action, tokenBalance: 99 });
     }
     assert.ok(typeof url === "string" && url.startsWith("/api/meshy?taskId="), `Unexpected offline fetch: ${url}`);
     const query = new URL(url, "https://ab3d.example.test").searchParams, id = query.get("taskId");
-    assert.ok(Object.values(taskIds).includes(id));
+    assert.ok(tasks.has(id));
     return json({ id, status: "SUCCEEDED", progress: 100,
-      model_urls: { glb: "https://assets.meshy.ai/synthetic/model.glb", ...(id === taskIds.convert ? { stl: "https://assets.meshy.ai/synthetic/model.stl", "3mf": "https://assets.meshy.ai/synthetic/model.3mf" } : {}) },
-      ...(id === taskIds.analyze ? { printability: report } : {}), collectionSaved: true });
+      model_urls: { glb: "https://assets.meshy.ai/synthetic/model.glb", ...(tasks.get(id) === "convert" ? { stl: "https://assets.meshy.ai/synthetic/model.stl", "3mf": "https://assets.meshy.ai/synthetic/model.3mf" } : {}) },
+      ...(tasks.get(id) === "analyze" ? { printability: report } : {}), collectionSaved: true });
   } };
 }
 
@@ -93,7 +98,7 @@ test("actual AB3D studio preserves each inquiry UUID across failures, explicit r
   const pending = deferred();
   const mock = fixture({ inquiry: async (_body, attempt) => attempt === 1 ? pending.promise : attempt <= 4
     ? json({ error: "Speicherstatus derzeit ungeklärt. Bitte dieselbe Anfrage erneut prüfen." }, 503)
-    : json({ order: { id: inquiryId }, message: "Anfrage unverbindlich gespeichert" }) });
+    : json(receipt(inquiryId, "Anfrage unverbindlich gespeichert")) });
   const ui = await mount(AIDesignStudio, { signedIn: true }, mock);
   try {
     await prepareInquiry(ui);
@@ -145,4 +150,96 @@ test("actual AB3D studio cannot submit an inquiry when its print package is not 
     assert.equal(mock.calls.some(call => call.body?.action === "convert"), false);
     assert.match(ui.text(), /unverbindlich und löst keine Zahlung oder Produktion aus/);
   } finally { await ui.close(); }
+});
+
+test("actual AB3D studio treats malformed successful inquiry replies as unconfirmed and retains the same request", async () => {
+  const valid = receipt(), replies = [
+    () => json({ ...valid, order: { ...valid.order, id: "unverified-id" } }),
+    () => json({ ...valid, ok: false }),
+    () => json({ ...valid, order: { ...valid.order, status: "paid" } }),
+    () => json({ ...valid, order: { ...valid.order, estimatedTotalCents: 45.001 } }),
+    () => json({ ...valid, order: { ...valid.order, currency: "EUR" } }),
+    () => json(valid, 202),
+    () => new Response("<html>Upstream unavailable</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
+    () => json(valid),
+  ];
+  const mock = fixture({ inquiry: async (_body, attempt) => replies[attempt - 1]() });
+  const ui = await mount(AIDesignStudio, { signedIn: true }, mock);
+  try {
+    await prepareInquiry(ui);
+    await until(() => assert.equal(ui.button("Unverbindlich bei AB3D anfragen")?.disabled, false));
+    await ui.change(ui.container.querySelector('[name="inquiry-name"]'), "Synthetic retained input");
+    for (let index = 0; index < replies.length - 1; index++) {
+      await ui.click(ui.button("Unverbindlich bei AB3D anfragen"));
+      assert.equal(ui.button("Unverbindlich bei AB3D anfragen")?.disabled, false, "an unverified response cannot mark the inquiry as saved");
+      assert.match(ui.text(), /Anfrage konnte nicht bestätigt werden/);
+      assert.doesNotMatch(ui.text(), /Anfrage gespeichert ·|Unexpected token|Upstream unavailable/);
+      assert.equal(ui.container.querySelector('[name="inquiry-name"]').value, "Synthetic retained input");
+      assert.deepEqual(mock.inquiries[index], mock.inquiries[0]);
+    }
+    await ui.click(ui.button("Unverbindlich bei AB3D anfragen"));
+    assert.equal(ui.button(`Anfrage gespeichert · ${inquiryId}`).disabled, true);
+    assert.equal(mock.inquiries.length, replies.length);
+    assert.deepEqual(mock.inquiries.at(-1), mock.inquiries[0]);
+  } finally { await ui.close(); }
+});
+
+for (const changeContext of ["template", "mode"]) test(`actual AB3D studio ignores a late inquiry ${changeContext === "mode" ? "network failure" : "receipt"} after ${changeContext} changes and a new model`, async () => {
+  const pending = deferred(), nextId = "PRINT-ABCDE00002";
+  const mock = fixture({ inquiry: async (_body, attempt) => attempt === 1 ? pending.promise : json(receipt(nextId)) });
+  const ui = await mount(AIDesignStudio, { signedIn: true }, mock);
+  try {
+    await prepareInquiry(ui);
+    await until(() => assert.equal(ui.button("Unverbindlich bei AB3D anfragen")?.disabled, false));
+    await ui.click(ui.button("Unverbindlich bei AB3D anfragen"));
+    if (changeContext === "template") {
+      await ui.click(ui.button(/BlumentopfIndividuelles Pflanzgefäss/));
+      await ui.click(ui.button(/Eigene Idee beschreiben/));
+    } else {
+      await ui.click(ui.button(/Foto verwenden$/));
+      await ui.click(ui.button(/Idee eingeben$/));
+    }
+    await prepareInquiry(ui);
+    await until(() => assert.ok(ui.container.querySelector('model-viewer[src*="synthetic-resized-2"]')));
+    await import("react").then(({ act }) => act(async () => {
+      if (changeContext === "mode") pending.reject(new TypeError("Failed to fetch"));
+      else pending.resolve(json(receipt()));
+    }));
+    await until(() => assert.equal(ui.button("Unverbindlich bei AB3D anfragen")?.disabled, false));
+    assert.doesNotMatch(ui.text(), new RegExp(inquiryId));
+    assert.doesNotMatch(ui.text(), /Unverbindliche Anfrage gespeichert; keine Zahlung oder Produktion/);
+    assert.doesNotMatch(ui.text(), /Anfrage konnte nicht bestätigt werden|Failed to fetch/);
+    assert.equal(mock.inquiries.length, 1);
+    await ui.click(ui.button("Unverbindlich bei AB3D anfragen"));
+    assert.equal(mock.inquiries.length, 2);
+    assert.equal(mock.inquiries[1].sourceTaskId, `${taskIds.convert}-2`);
+    assert.notEqual(mock.inquiries[1].requestId, mock.inquiries[0].requestId);
+    assert.equal(ui.button(`Anfrage gespeichert · ${nextId}`).disabled, true);
+  } finally { pending.resolve(json(receipt())); await ui.close(); }
+});
+
+test("actual AB3D studio blocks queued size and production-option changes while its inquiry is being saved", async () => {
+  const pending = deferred(), mock = fixture({ inquiry: async () => pending.promise });
+  const ui = await mount(AIDesignStudio, { signedIn: true }, mock);
+  try {
+    await prepareInquiry(ui);
+    await until(() => assert.equal(ui.button("Unverbindlich bei AB3D anfragen")?.disabled, false));
+    await ui.click(ui.button("Unverbindlich bei AB3D anfragen"));
+    const height = ui.container.querySelector('.size-config input[type="range"]');
+    assert.equal(height.disabled, true);
+    // Simulate an already queued change; the synchronous pending guard must
+    // protect the submitted context in addition to the disabled control.
+    await ui.change(height, "21");
+    assert.match(ui.text(), /Zielhöhe 20 cm/);
+    const [material, finish] = ui.container.querySelectorAll(".price-config select"), quantity = ui.container.querySelector('.price-config input[type="number"]');
+    assert.equal(material.disabled && finish.disabled && quantity.disabled, true);
+    await ui.change(material, "PETG");
+    await ui.change(finish, "Premium");
+    await ui.change(quantity, "2");
+    assert.equal(material.value, "PLA"); assert.equal(finish.value, "Roh"); assert.equal(quantity.value, "1");
+    assert.equal(mock.inquiries[0].heightCm, 20);
+    await import("react").then(({ act }) => act(async () => pending.resolve(json(receipt()))));
+    assert.equal(ui.button(`Anfrage gespeichert · ${inquiryId}`).disabled, true);
+    assert.match(ui.text(), /Zielhöhe 20 cm/);
+  } finally { pending.resolve(json(receipt())); await ui.close(); }
 });

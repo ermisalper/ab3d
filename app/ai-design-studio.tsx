@@ -100,6 +100,18 @@ const colorMoods = {
 const money = new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF" });
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const formatElapsed = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+const INQUIRY_UNCONFIRMED = "Die unverbindliche Anfrage konnte nicht bestätigt werden. Deine Angaben bleiben hier erhalten. Bitte prüfe zuerst den Status im Konto, bevor du sie erneut sendest.";
+
+function savedInquiryConfirmation(value: unknown): { id: string; message: string } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const data = value as Record<string, unknown>, order = data.order;
+  if (data.ok !== true || !order || typeof order !== "object" || Array.isArray(order)) return null;
+  const record = order as Record<string, unknown>;
+  if (typeof record.id !== "string" || !/^PRINT-[A-Z0-9]{10}$/.test(record.id) || record.status !== "inquiry"
+    || record.currency !== "CHF" || !Number.isSafeInteger(record.estimatedTotalCents) || Number(record.estimatedTotalCents) < 0
+    || typeof data.message !== "string" || !data.message.trim() || data.message.length > 500) return null;
+  return { id: record.id, message: data.message };
+}
 
 async function readJson(response: Response) {
   const data = await response.json().catch(() => ({ error: "Unbekannte Serverantwort." }));
@@ -704,6 +716,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
     // Store before fetch; a connection failure must not create another request ID.
     const requestId = inquiryRequestIds.current.get(signature) || crypto.randomUUID();
     inquiryRequestIds.current.set(signature, requestId);
+    const submittedGeneration = generationRef.current;
     inquiryPendingRef.current = true;
     setOrderBusy(true);
     setError("");
@@ -715,13 +728,20 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...inquiry, requestId }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Die unverbindliche Anfrage konnte nicht gespeichert werden.");
-      setProductionOrderId(data.order.id);
-      setOrderMessage(data.message);
+      const data = await response.json().catch(() => null);
+      // A reply belongs to the submitted model, never a later template, mode or
+      // newly generated model. The original inquiry can still appear in Konto.
+      if (generationRef.current !== submittedGeneration) return;
+      if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : INQUIRY_UNCONFIRMED);
+      if (response.status !== 200) throw new Error(INQUIRY_UNCONFIRMED);
+      const confirmation = savedInquiryConfirmation(data);
+      if (!confirmation) throw new Error(INQUIRY_UNCONFIRMED);
+      setProductionOrderId(confirmation.id);
+      setOrderMessage(confirmation.message);
     } catch (caught) {
+      if (generationRef.current !== submittedGeneration) return;
       setOrderError(caught instanceof TypeError
-        ? "Die unverbindliche Anfrage konnte nicht bestätigt werden. Deine Angaben bleiben hier erhalten. Bitte prüfe zuerst den Status im Konto, bevor du sie erneut sendest."
+        ? INQUIRY_UNCONFIRMED
         : caught instanceof Error ? caught.message : "Die unverbindliche Anfrage konnte nicht gespeichert werden. Deine Angaben bleiben hier erhalten.");
     } finally {
       inquiryPendingRef.current = false;
@@ -950,14 +970,14 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             <div className="production-config">
               <div className="size-config">
                 <label>Zielhöhe <b>{heightCm} cm</b></label>
-                <input type="range" min={selectedTemplate.minHeight} max={selectedTemplate.maxHeight} step="1" value={heightCm} onChange={(event) => { setHeightCm(Number(event.target.value)); setScaledHeight(null); setPrintFilesReady(false); setPrintability(null); setProductionOrderId(""); setOrderMessage(""); }} disabled={busy || orderBusy} />
+                <input type="range" min={selectedTemplate.minHeight} max={selectedTemplate.maxHeight} step="1" value={heightCm} onChange={(event) => { if (inquiryPendingRef.current) return; setHeightCm(Number(event.target.value)); setScaledHeight(null); setPrintFilesReady(false); setPrintability(null); setProductionOrderId(""); setOrderMessage(""); }} disabled={busy || orderBusy} />
                 <small>{printFilesReady && scaledHeight === heightCm ? "✓ GLB, STL und 3MF sind exakt skaliert und geprüft." : `Empfohlener Bereich für ${selectedTemplate.name}: ${selectedTemplate.minHeight}–${selectedTemplate.maxHeight} cm.`}</small>
                 <button onClick={preparePrintFiles} disabled={busy || (printFilesReady && scaledHeight === heightCm)}>{busy && printPipeline ? "Druckpaket wird vorbereitet …" : `Druckpaket für ${heightCm} cm vorbereiten`}{unlimited ? " · Launch-Pass" : " · 2–3 Token"}</button>
               </div>
               <div className="price-config">
-                <label>Material<select value={material} disabled={orderBusy} onChange={(event) => { setMaterial(event.target.value as "PLA" | "PETG"); setProductionOrderId(""); setOrderMessage(""); }}><option>PLA</option><option>PETG</option></select></label>
-                <label>Finish<select value={finish} disabled={orderBusy} onChange={(event) => { setFinish(event.target.value as "Roh" | "Premium"); setProductionOrderId(""); setOrderMessage(""); }}><option>Roh</option><option>Premium</option></select></label>
-                <label>Menge<input type="number" min="1" max="20" step="1" value={quantity} disabled={orderBusy} onChange={(event) => { setQuantity(Math.max(1, Math.min(20, Math.trunc(Number(event.target.value) || 1)))); setProductionOrderId(""); setOrderMessage(""); }} /></label>
+                <label>Material<select value={material} disabled={orderBusy} onChange={(event) => { if (inquiryPendingRef.current) return; setMaterial(event.target.value as "PLA" | "PETG"); setProductionOrderId(""); setOrderMessage(""); }}><option>PLA</option><option>PETG</option></select></label>
+                <label>Finish<select value={finish} disabled={orderBusy} onChange={(event) => { if (inquiryPendingRef.current) return; setFinish(event.target.value as "Roh" | "Premium"); setProductionOrderId(""); setOrderMessage(""); }}><option>Roh</option><option>Premium</option></select></label>
+                <label>Menge<input type="number" min="1" max="20" step="1" value={quantity} disabled={orderBusy} onChange={(event) => { if (inquiryPendingRef.current) return; setQuantity(Math.max(1, Math.min(20, Math.trunc(Number(event.target.value) || 1)))); setProductionOrderId(""); setOrderMessage(""); }} /></label>
                 <div className="price-total"><span>Unverbindlicher Richtpreis</span><b>{quote ? money.format(quote.estimatedTotalCents / 100) : "Eingaben prüfen"}</b><small>Modell, Herstellung und endgültigen Preis prüft AB3D persönlich.</small></div>
               </div>
               {printability && <div className={`printability-report status-${printability.status}`}>
