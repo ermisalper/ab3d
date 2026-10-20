@@ -42,6 +42,10 @@
   dem serverseitigen Katalog berechnet.
 - Adress- und Freitextfelder besitzen feste Längen- und Plausibilitätsgrenzen.
 - Öffentliche Bestellnummern verwenden zufällige, nicht fortlaufende Kennungen.
+- Neue Studio-Anfragen verwenden eine stabile Wiederholungs-ID. Der Server
+  bindet sie eindeutig an Konto und normalisierte Anfrage; dieselbe ID mit
+  geändertem Inhalt wird abgewiesen. Automatische Wiederholungen sind nicht
+  vorgesehen. Ältere Anfragen ohne Wiederholungs-ID bleiben lesbar.
 
 ## Interne Bearbeitung und Angebotsentwürfe
 

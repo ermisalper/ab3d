@@ -12,10 +12,10 @@ gesonderte Freigabe. Sie aktivieren durch diese Dokumentation keinen Verkauf.
 
 ## 2. Spätere Migration und Bereitstellung gesondert genehmigen
 
-- **Fehlt:** Produktionsanwendung der vorbereiteten Migration `0014_third_expediter.sql` und Bereitstellung des geprüften Entwicklungsstands.
+- **Fehlt:** Produktionsanwendung der vorbereiteten Migrationen `0014_third_expediter.sql` und `0015_brief_onslaught.sql` sowie Bereitstellung des geprüften Entwicklungsstands.
 - **Wo:** Bestehende D1-/Sites-Verwaltung, nach Prüfung des Branches `codex/cappatex-production`.
 - **Benötigt:** Explizite Freigabe, Datenbanksicherung und abgestimmter Rücksetzungsweg. Vorher vorhandene Tabellen und Migrationsstand prüfen; keine SQL-Datei blind erneut ausführen.
-- **Erfolgreich:** Zwei neue interne Angebotstabellen und Versionsindex vorhanden; alte Anfragen unverändert. Betreiber können Entwürfe speichern und Kunden erhalten keinen Zugriff. Neue Site-Version und zugehöriger Git-Commit sind dokumentiert. Bis dahin ist die neue Funktion nur lokal implementiert.
+- **Erfolgreich:** Zwei neue interne Angebotstabellen und Versionsindex sowie zwei optionale Anfrage-ID-/Hashspalten mit Eindeutigkeitsindex vorhanden; alte Anfragen unverändert. Betreiber können Entwürfe speichern und Kunden erhalten keinen Zugriff. Eine wiederholte Studio-Anfrage mit derselben ID erzeugt genau einen Datensatz. Neue Site-Version und zugehöriger Git-Commit sind dokumentiert. Bis dahin sind die neuen Funktionen nur lokal implementiert.
 
 ## 3. AB3D-Kalkulation und Fertigungsweg bestätigen
 

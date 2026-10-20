@@ -141,7 +141,8 @@ gesonderte Bestätigung des Betreibers.
 Die D1-Migrationen befinden sich in `drizzle/`. Schemaänderungen werden mit
 `pnpm db:generate` erzeugt und vor dem Deployment geprüft.
 
-Migration `0014_third_expediter.sql` für interne Angebotsentwürfe ist nur
+Migrationen `0014_third_expediter.sql` für interne Angebotsentwürfe und
+`0015_brief_onslaught.sql` für eindeutige Anfragewiederholungen sind nur
 vorbereitet und lokal getestet. Eine Anwendung auf die Produktionsdatenbank
 oder Bereitstellung dieses Entwicklungsstands ist nicht freigegeben.
 
