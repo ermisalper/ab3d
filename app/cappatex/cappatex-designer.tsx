@@ -559,15 +559,16 @@ export default function CappatexDesigner() {
     <div className={`cappatex-workspace${image ? " has-artwork" : ""}`}>
       <div className="cappatex-controls" hidden={stage !== 1}>
         <section className="cappatex-step" id="cappatex-motif" tabIndex={-1} aria-labelledby="cappatex-motif-heading">
-          <div className="cappatex-step-heading"><div><h3 id="cappatex-motif-heading">Was ist deine Idee?</h3><p>Beschreibe Motiv, Farben und besondere Wünsche.</p></div></div>
+          <div className="cappatex-step-heading"><div><h3 id="cappatex-motif-heading">Was ist deine Idee?</h3></div></div>
           <fieldset className="cappatex-styles cappatex-source"><legend>Wie möchtest du starten?</legend>
             <button type="button" aria-pressed={source === "prompt"} className={source === "prompt" ? "active" : ""} disabled={Boolean(busy)} onClick={() => setSource("prompt")}>Mit KI gestalten</button>
             <button type="button" aria-pressed={source === "upload"} className={source === "upload" ? "active" : ""} disabled={Boolean(busy)} onClick={() => setSource("upload")}>Eigenes Bild verwenden</button>
           </fieldset>
           {source === "prompt" ? <>
-          <label className="cappatex-prompt"><span>Idee beschreiben</span><textarea value={prompt} maxLength={500} disabled={Boolean(busy)}
+          <label className="cappatex-prompt"><span>Idee beschreiben</span><textarea aria-describedby="cappatex-prompt-help" value={prompt} maxLength={500} disabled={Boolean(busy)}
             onChange={e => setPrompt(e.target.value)} placeholder="Zum Beispiel: Eine alpine Blume als ruhige Linienzeichnung in Terracotta und Creme, ohne Text" />
             <small>{prompt.length}/500 Zeichen</small></label>
+          <p className="cappatex-prompt-help" id="cappatex-prompt-help">Die KI setzt deine Angaben zu Motiv, Farben, Anordnung und Schriftzug in ein Bild um. <strong>Beispiel:</strong> «Eine alpine Blume in Terracotta und Creme, mittig, kräftige Linien, ohne Text.»</p>
           <CappatexPromptHelper value={prompt} onApply={setPrompt} disabled={Boolean(busy)} />
           <fieldset className="cappatex-styles"><legend>Bildstil</legend>{styles.map(value => <button type="button" key={value} aria-pressed={style === value}
             disabled={Boolean(busy)} className={style === value ? "active" : ""} onClick={() => setStyle(value)}>{value}</button>)}</fieldset>

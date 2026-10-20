@@ -45,6 +45,7 @@
 .cappatex-guided .cappatex-styles button.active { background: var(--studio-ink); color: white; border-color: var(--studio-ink); }
 .cappatex-guided .cappatex-prompt textarea { min-height: 120px; padding: 14px 14px 26px; border-color: var(--studio-line); border-radius: 7px; background: var(--studio-surface); }
 .cappatex-guided .cappatex-prompt small { font-size: 11px; }
+.cappatex-guided .cappatex-prompt-help { margin: 12px 0 16px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .cappatex-guided .cappatex-detail,
 .cappatex-guided .cappatex-prompt-helper,
 .cappatex-guided .gallery-consent-collection { border-top: 1px solid var(--studio-line); margin-block: 12px; }

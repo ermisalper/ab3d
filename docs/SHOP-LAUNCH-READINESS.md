@@ -4,6 +4,16 @@ Stand 20.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-prod
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
 
+## Kurze Prompt-Beispiele in beiden Studios · 20.10.2026
+
+Die Eingabefelder erklären jetzt in jeweils zwei kurzen Sätzen, was eine hilfreiche Beschreibung enthält, mit einem sichtbaren Beispiel auch nach dem Tippen. AB3D nennt Objekt, Form und Zweck mit einem oben offenen Eulen-Stiftehalter als Beispiel. CAPPATEX nennt Motiv, Farben, Anordnung und Schriftzug mit einer mittigen alpinen Blume als Beispiel. Bestehender AB3D-Erklärungstext und die doppelte CAPPATEX-Unterzeile wurden ersetzt beziehungsweise entfernt. Die Hinweise sind über `aria-describedby` mit ihren Eingaben verbunden; kein zusätzliches Pflichtformular, kein automatisches Einfügen und keine Generierung.
+
+Grundlage sind die am20.10.2026 gelesenen offiziellen [Meshy-Prompt-Empfehlungen](https://docs.meshy.ai/en/webapp/guides/prompting) und der [Text-to-3D-API-Ablauf](https://docs.meshy.ai/en/api/text-to-3d): konkrete Objektbeschreibung und wichtige Formdetails statt allgemeiner Qualitätswörter; zuerst Geometrie, im anschliessenden Refine-Schritt die Textur. Daraus folgt keine Garantie für exakte Masse, Beschriftung oder Übereinstimmung. Für Fotos wurden die [offiziellen Hinweise zu Bildqualität und mehreren Ansichten](https://docs.meshy.ai/en/webapp/image-to-3d) mit dem tatsächlichen AB3D-Code abgeglichen.
+
+Die Fotohilfe passt zum gewählten Ablauf: Originalgetreue Verarbeitung nutzt die Bilder für die Form; ein Textwunsch wird nur bei tatsächlich verwendeter Qualitätstextur angeboten und als Farb-/Oberflächenwunsch bezeichnet. Im allgemeinen kreativen Ablauf beschreibt der Text die vorgeschaltete Bildänderung. Der spezialisierte Creative-Lab-Ablauf überträgt diesen Freitext nicht; sein bislang irreführendes Eingabefeld wird ausgeblendet und durch eine kurze Fotohilfe ersetzt. Vorhandene API-Payloads, Anbieteraufrufe, Kosten, Berechtigungen und Produktionssperren bleiben unverändert.
+
+Keine neuen Tests für reine Textdarstellung. Die vorhandenen573 Tests, Typprüfung, vollständiges ESLint und Produktionsbuild sind erfolgreich. Quellscan über378 Dateien ohne Treffer vorhandener lokaler Secretwerte. Die gespeicherten Browserregeln bleiben respektiert; keine neue Sichtprüfung oder kostenpflichtige Generierung. Versionsnachweis folgt nach erfolgreichem Deployment.
+
 ## AB3D-Anfragen persönlich bearbeiten · 20.10.2026
 
 Auf Betreiberwunsch folgt als nächster selbstständig umsetzbarer Schritt eine eigene AB3D-Auftragsverwaltung unter `/betrieb`. Sie bleibt strikt vom CAPPATEX-Betriebsbereich getrennt und ist ausschliesslich für angemeldete, ausdrücklich als AB3D-Betreiber hinterlegte Konten zugänglich. Konto und bisherige 3D-Anfragen verlinken dorthin. Kunden erhalten weder die Betreiberliste noch fremde Daten, interne Notizen oder die internen Prüfdateien.

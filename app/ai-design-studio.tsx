@@ -184,6 +184,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
 
   const busy = ["uploading", "transforming", "generating", "refining", "resizing", "analyzing", "repairing", "converting"].includes(state);
   const creativeImage = mode === "image" && imageStrategy === "creative";
+  const specialPhotoWorkflow = creativeImage && imageDatas.length === 1 && isCreativeTemplate(selectedTemplate.id);
   const textured = generationMode === "quality";
   const imageData = imageDatas[0] || "";
   const imagePreview = interpretedPreview || imageData;
@@ -447,7 +448,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       let completed: MeshyTask;
       let finalTaskId: string;
       let finalTaskType: ModelTaskType;
-      const useSpecialWorkflow = mode === "image" && creativeImage && imageDatas.length === 1 && isCreativeTemplate(selectedTemplate.id);
+      const useSpecialWorkflow = specialPhotoWorkflow;
 
       if (useSpecialWorkflow) {
         setState("transforming");
@@ -800,8 +801,8 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             <div className="design-agent-flow">
               <div className="simple-idea-input">
                 <label htmlFor="customer-idea">Was möchtest du gestalten?</label>
-                <p>Schreibe es ganz normal. Der AB3D Produktplaner fragt danach nur die Punkte, die für Funktion und 3D-Druck wirklich fehlen.</p>
-                <textarea id="customer-idea" value={customerWish} onChange={(event) => updateCustomerIdea(event.target.value)} rows={4} placeholder={`Zum Beispiel: ${selectedTemplate.examples[0]}`} disabled={busy || plannerBusy} />
+                <p id="ab3d-prompt-help">Beschreibe Objekt, Form und Zweck konkret; die KI erstellt daraus zuerst die 3D-Form. <strong>Beispiel:</strong> «Ein runder Stiftehalter in Eulenform, oben offen, mit breitem flachem Boden und glatter Oberfläche.»</p>
+                <textarea id="customer-idea" aria-describedby="ab3d-prompt-help" value={customerWish} onChange={(event) => updateCustomerIdea(event.target.value)} rows={4} placeholder={`Zum Beispiel: ${selectedTemplate.examples[0]}`} disabled={busy || plannerBusy} />
                 <div className="wish-examples">{selectedTemplate.examples.map((example) => <button type="button" key={example} onClick={() => updateCustomerIdea(example)} disabled={busy || plannerBusy}>{example}</button>)}</div>
                 {!designPlan && <button type="button" className="planner-start" onClick={startDesignPlanner} disabled={busy || plannerBusy || customerWish.trim().length < 6}>{plannerBusy ? <><i className="spinner" /> Produkt wird analysiert …</> : <><span>✦</span> Idee mit KI planen</>}</button>}
               </div>
@@ -871,7 +872,12 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
                 <button type="button" role="radio" aria-checked={imageStrategy === "creative"} className={imageStrategy === "creative" ? "active" : ""} onClick={() => { setImageStrategy("creative"); setGenerationMode("quality"); setInterpretedPreview(""); resetResult(); }} disabled={busy || imageDatas.length > 1}><b>Kreativ gestalten</b><small>{isCreativeTemplate(selectedTemplate.id) ? `Spezialablauf für ${selectedTemplate.name}` : "Zuerst konsistente Mehransicht gestalten"}</small></button>
                 {imageDatas.length > 1 && <p>Mehrere Ansichten werden immer originalgetreu verarbeitet. So entstehen die zuverlässigsten Proportionen.</p>}
               </div>}
-              <label className="simple-photo-wish"><span>Was soll daraus entstehen?</span><textarea value={customerWish} onChange={(event) => setCustomerWish(event.target.value.slice(0, 180))} rows={3} placeholder={`Zum Beispiel: ${selectedTemplate.examples[0]}`} disabled={busy} /></label>
+              <p className="photo-prompt-help" id="ab3d-photo-prompt-help">{specialPhotoWorkflow
+                ? <>Foto und gewählte Vorlage bestimmen hier den 3D-Entwurf. <strong>Beispiel:</strong> Ein scharfes Foto mit vollständig sichtbarem Hauptmotiv vor ruhigem Hintergrund.</>
+                : creativeImage
+                  ? <>Beschreibe konkret, wie die KI dein Foto vor der 3D-Erstellung verändern soll. <strong>Beispiel:</strong> «Den Hund als sitzende Figur mit runden Formen und breitem Sockel gestalten.»</>
+                  : <>Die Fotos bestimmen die Form: Zeige ein einzelnes Objekt vollständig vor ruhigem Hintergrund. <strong>Beispiel:</strong> Dasselbe Objekt von vorn, seitlich und hinten bei ähnlichem Licht.</>}</p>
+              {!specialPhotoWorkflow && (creativeImage || generationMode === "quality") && <label className="simple-photo-wish"><span>{creativeImage ? "Was möchtest du verändern?" : "Wünsche zur Farbe oder Oberfläche (optional)"}</span><textarea aria-describedby="ab3d-photo-prompt-help" value={customerWish} onChange={(event) => setCustomerWish(event.target.value.slice(0, 180))} rows={3} placeholder={creativeImage ? "Zum Beispiel: Den Hund als rundliche Figur mit breitem Sockel gestalten" : "Zum Beispiel: Eine matte Oberfläche in dunklem Blau"} disabled={busy} /></label>}
             </>
           )}
 
