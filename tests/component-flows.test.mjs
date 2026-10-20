@@ -3,6 +3,7 @@ import { after, test } from "node:test";
 import { closeHarness, deferred, json, MemoryStorage, mount, until } from "./helpers/component-dom.mjs";
 
 const { default: TokenShop } = await import("../app/konto/token-shop.tsx");
+const { TOKEN_PACKS } = await import("../app/token-packs.ts");
 const { default: Operations } = await import("../app/betrieb/operations.tsx");
 const { reviewDraft, serializeReviewDrafts } = await import("../app/betrieb/draft-storage.ts");
 const { default: CappatexDesigner } = await import("../app/cappatex/cappatex-designer.tsx");
@@ -12,7 +13,7 @@ const { emptyProductionOffer, calculateProductionOffer, productionOfferSheet } =
 const { default: CappatexOperations } = await import("../app/cappatex/betrieb/operations.tsx");
 const owner = "operator@example.test";
 const packId = "tokens-5";
-const enabledCatalog = () => ({ enabled: true, message: "Synthetic catalogue", packs: [{ id: packId, available: true }], purchases: [] });
+const enabledCatalog = () => ({ enabled: true, message: "Synthetic catalogue", packs: [{ ...TOKEN_PACKS[0], available: true }], purchases: [] });
 const pendingSelection = { packId, country: "CH", requestId: "c6560f12-47b3-46d9-bb96-e1f0493570aa" };
 async function checkoutKey(email = owner) {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email.trim().toLowerCase()));
@@ -373,7 +374,7 @@ test("actual token shop keeps one saved request after not_ready and a remount; o
     ui = await mount(TokenShop, { email: owner, onRefreshBalance: async () => {} }, { storage, fetch });
     await until(() => assert.ok(ui.button(/Denselben Checkout öffnen/)));
     assert.equal(ui.container.querySelector('input[type="checkbox"]').checked, false, "reload cannot preserve legal acceptance");
-    catalog = { ...enabledCatalog(), purchases: [{ ...pendingSelection, requestId: crypto.randomUUID(), id: "other", tokens: 5, priceCents: 500, currency: "CHF", createdAt: 1, status: "credited" }] };
+    catalog = { ...enabledCatalog(), purchases: [{ ...pendingSelection, requestId: crypto.randomUUID(), id: `TP-${"b".repeat(32)}`, tokens: 5, priceCents: 500, currency: "CHF", createdAt: 1, status: "credited" }] };
     await ui.click(ui.button("Kaufstatus & Guthaben aktualisieren"));
     assert.ok(storage.getItem(key), "an unrelated credit cannot clear the outstanding request");
     catalog.purchases[0].requestId = pendingSelection.requestId;
@@ -403,11 +404,12 @@ test("actual token shop retains the same UUID across ambiguous provider errors a
     if (url === "/api/token-purchases") return json(enabledCatalog());
     posts.push(JSON.parse(init.body));
     if (posts.length === 1) throw new TypeError("Synthetic connection lost");
-    return json({ checkoutUrl: "https://1hagfh-b0.myshopify.com/cart/c/synthetic" });
+    return json({ purchaseId: `TP-${"a".repeat(32)}`, checkoutUrl: "https://1hagfh-b0.myshopify.com/cart/c/synthetic" });
   } });
   try {
     await choosePack(ui); await ui.click(ui.button(/Weiter zur Zahlung/));
-    assert.match(ui.text(), /Synthetic connection lost/);
+    assert.match(ui.text(), /Checkout konnte nicht bestätigt werden/);
+    assert.doesNotMatch(ui.text(), /Synthetic connection lost/);
     assert.equal(storage.values.size, 1);
     await ui.click(ui.button(/Denselben Checkout öffnen/));
     assert.equal(posts.length, 2);
