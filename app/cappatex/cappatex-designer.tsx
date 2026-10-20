@@ -2,7 +2,8 @@
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import CappatexPreparationPanel from "./cappatex-preparation-panel";
+import CappatexPreparationPanel, { type CaptureSideHandle } from "./cappatex-preparation-panel";
+import CappatexPromptHelper from "./cappatex-prompt-helper";
 import GalleryConsent from "../gallery-consent";
 import { galleryChoiceValid, newGalleryDraft } from "../gallery-policy";
 import { initialPlacement, placementGeometry, type ArtworkSize, type Placement } from "../cappatex-print-profile";
@@ -87,6 +88,9 @@ function ProductComparisonCard({ product, variant, placement, image, artwork, pr
 }
 
 export default function CappatexDesigner() {
+  const [stage, setStage] = useState<1 | 2 | 3>(1);
+  const productPicker = useRef<HTMLDetailsElement | null>(null);
+  const captureSide = useRef<CaptureSideHandle | null>(null);
   const [products, setProducts] = useState<CappatexDesignProduct[]>([]);
   const [message, setMessage] = useState("Blanko-Produkte werden geprüft …");
   const [generationEnabled, setGenerationEnabled] = useState(false);
@@ -155,6 +159,9 @@ export default function CappatexDesigner() {
   const storedDraft = useMemo(() => drafts[draftKey] || emptyCompositionDraft(), [drafts, draftKey]);
   const currentDraft: CompositionDraft = useMemo(() => designId ? { ...storedDraft,
     working: { ...storedDraft.working, [side]: { designId, placement: { ...placement } } } } : storedDraft, [storedDraft, designId, side, placement]);
+  const capturedSide = currentDraft.selections.find(selection => selection.position === side);
+  const capturedSideChanged = Boolean(capturedSide && (capturedSide.designId !== designId || capturedSide.placement.x !== placement.x
+    || capturedSide.placement.y !== placement.y || capturedSide.placement.scale !== placement.scale));
   const galleryHint = !galleryChoice.visibility ? "Bitte wähle, ob dein Motiv privat bleibt oder für die Galerie vorgeschlagen wird."
     : galleryChoice.visibility === "public" && !galleryChoice.rightsConfirmed ? "Bitte bestätige die Rechte für die Galerie."
     : !galleryChoiceValid(galleryChoice, "cappatex") ? "Bitte vervollständige die Angaben für deine Sammlung." : "";
@@ -173,6 +180,7 @@ export default function CappatexDesigner() {
     : galleryHint || "Alles bereit – du kannst dein Bild übernehmen.";
 
   function showProductPreview() {
+    setStage(2);
     window.requestAnimationFrame(() => {
       const panel = previewPanel.current;
       if (!panel) return;
@@ -182,6 +190,7 @@ export default function CappatexDesigner() {
   }
 
   const showMotif = useCallback((motif: OwnedMotif, nextPlacement: Placement | null) => {
+    setStage(2);
     setImage(motif.previewUrl); setDesignId(motif.designId); setArtwork({ width: motif.width, height: motif.height });
     setPreviewSize({ width: motif.previewWidth, height: motif.previewHeight }); setUploadedArtwork(motif.source === "upload");
     setCanDownloadHd(motif.canDownloadOriginal); setLoadedArtwork(current => current === motif.previewUrl ? current : "");
@@ -374,6 +383,17 @@ export default function CappatexDesigner() {
     return draftKey && designId ? { ...drafts, [draftKey]: currentDraft } : drafts;
   }
 
+  function goToStage(next: 1 | 2 | 3) {
+    if (busy || (next === 3 && (!image || !product || localRecoveryBlocked))) return;
+    setStage(next);
+    if (next === 3) setPhotoUrl("");
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById(next === 1 ? "cappatex-motif" : next === 2 ? "cappatex-product" : "cappatex-save");
+      target?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+      target?.focus({ preventScroll: true });
+    });
+  }
+
   function selectDraftLink(draft: CompositionDraft) {
     const url = new URL(window.location.href), id = draft.receipt?.id || draft.copyOf;
     if (id) url.searchParams.set("preparationId", id); else url.searchParams.delete("preparationId");
@@ -482,13 +502,13 @@ export default function CappatexDesigner() {
     } catch (caught) { setCreationError({ source: "upload", message: caught instanceof Error ? caught.message : "Das Bild konnte nicht verarbeitet werden." }); }
     finally { setBusy(""); }
   }
-  return <section className="cappatex-flow" id="studio">
-    <div className="cappatex-flow-intro"><p className="eyebrow">Selbst gestalten</p><h2>Erst dein Motiv.<br />Dann dein Einzelstück.</h2>
-      <p>Gestalte ein Motiv, wähle deinen Blanko-Artikel und prüfe den Druck vor der Bestellung.</p></div>
+  return <section className="cappatex-flow cappatex-guided" id="studio" data-stage={stage}>
+    <div className="cappatex-flow-intro"><p className="eyebrow">Dein Designstudio</p><h2>Von deiner Idee<br />zu deinem Produkt.</h2>
+      <p>Ein Schritt nach dem anderen. Du behältst die Kontrolle.</p></div>
     <ol className="cappatex-flow-steps" aria-label="Deine Gestaltung in drei Schritten">
-      <li><a href="#cappatex-motif"><span>1</span><b>Motiv erstellen</b><small>KI oder eigenes Bild</small></a></li>
-      <li><a href="#cappatex-product"><span>2</span><b>Produkt gestalten</b><small>Farbe, Grösse & Druckseite</small></a></li>
-      <li><a href="#cappatex-save"><span>3</span><b>Prüfen & speichern</b><small>Deinen Stand sichern</small></a></li>
+      <li><button type="button" disabled={Boolean(busy)} aria-current={stage === 1 ? "step" : undefined} onClick={() => goToStage(1)}><span>1</span><b>Motiv</b><small>Deine Idee gestalten</small></button></li>
+      <li><button type="button" disabled={Boolean(busy)} aria-current={stage === 2 ? "step" : undefined} onClick={() => goToStage(2)}><span>2</span><b>Produkt</b><small>Auswählen & platzieren</small></button></li>
+      <li><button type="button" disabled={Boolean(busy) || !image || !product || localRecoveryBlocked} aria-current={stage === 3 ? "step" : undefined} onClick={() => goToStage(3)}><span>3</span><b>Prüfen</b><small>Druckseiten speichern</small></button></li>
     </ol>
     {restoreProblem && <section className="cappatex-profile-note" aria-labelledby="cappatex-recovery-heading">
       <h3 id="cappatex-recovery-heading">Deinen Gestaltungsstand sicher laden</h3>
@@ -513,10 +533,13 @@ export default function CappatexDesigner() {
       <p><Link className="text-link" href="/cappatex/gestaltungen">Gespeicherte Druckvorbereitungen ansehen →</Link>{" "}
         <Link className="text-link" href="/cappatex/sammlung">Gespeicherte Motive ansehen →</Link></p>
     </section>}
-    <section className="cappatex-comparison" aria-labelledby="cappatex-compare-heading">
-      <div className="cappatex-comparison-heading"><h3 id="cappatex-compare-heading">Produkte vergleichen</h3>
-        <p>{image ? "Jede Karte zeigt den Vorderseiten-Entwurf, der bei der Auswahl geöffnet wird. Produkte behalten ihre eigenen Motive und Platzierungen."
-          : "Wähle ein Blanko. Sobald dein Motiv bereit ist, erscheint es hier auf jedem verfügbaren Produkt."}</p></div>
+    {error && <p className="cappatex-error" role="alert">{error}</p>}
+    {creationError && <p className="cappatex-error" role="alert">{creationError.message}</p>}
+    {["generation", "upload", "preparation"].includes(busy) && <p className="cappatex-operation" role="status">{busy === "generation" ? "Dein Motiv wird erstellt …" : busy === "upload" ? "Dein Bild wird geprüft …" : "Deine Druckdateien werden gespeichert …"} Bitte lasse diese Seite geöffnet.</p>}
+    {sessionNotice && <p className="cappatex-action-hint" role="status">{sessionNotice}</p>}
+    {autosaveNotice && <p className="cappatex-action-hint" role="status">{autosaveNotice}</p>}
+    <details className="cappatex-comparison" ref={productPicker} hidden={stage !== 2} open={!product}>
+      <summary><span><small>Dein Produkt</small><b id="cappatex-compare-heading">{product?.name || "Produkt auswählen"}</b></span><span className="cappatex-picker-action">Produkt wechseln <span aria-hidden="true">＋</span></span></summary>
       <p className="cappatex-catalog-state" role="status">{message}</p>
       <div className="cappatex-products">{products.map(item => {
         const saved = rememberedConfiguration(item, configurations);
@@ -529,55 +552,66 @@ export default function CappatexDesigner() {
         return <ProductComparisonCard key={item.id} product={item} variant={choice.variant} placement={choice.placement}
           image={cardMotif?.previewUrl || null} artwork={cardMotif ? { width: cardMotif.width, height: cardMotif.height } : artwork}
           previewSize={cardMotif ? { width: cardMotif.previewWidth, height: cardMotif.previewHeight } : previewSize}
-          active={isActive} disabled={Boolean(busy) || localRecoveryBlocked} onSelect={() => selectProduct(item)} />;
+          active={isActive} disabled={Boolean(busy) || localRecoveryBlocked} onSelect={() => { selectProduct(item); if (productPicker.current) productPicker.current.open = false; }} />;
       })}</div>
       {!products.length && <a className="text-link" href="#kollektion">Fertige Motive im Katalog ansehen →</a>}
-    </section>
+    </details>
     <div className={`cappatex-workspace${image ? " has-artwork" : ""}`}>
-      <div className="cappatex-controls">
-        <section className="cappatex-step" id="cappatex-motif" aria-labelledby="cappatex-motif-heading">
-          <div className="cappatex-step-heading"><span>1</span><div><h3 id="cappatex-motif-heading">Dein Motiv</h3><p>Was möchtest du tragen?</p></div></div>
+      <div className="cappatex-controls" hidden={stage !== 1}>
+        <section className="cappatex-step" id="cappatex-motif" tabIndex={-1} aria-labelledby="cappatex-motif-heading">
+          <div className="cappatex-step-heading"><div><h3 id="cappatex-motif-heading">Was ist deine Idee?</h3><p>Beschreibe Motiv, Farben und besondere Wünsche.</p></div></div>
           <fieldset className="cappatex-styles cappatex-source"><legend>Wie möchtest du starten?</legend>
             <button type="button" aria-pressed={source === "prompt"} className={source === "prompt" ? "active" : ""} disabled={Boolean(busy)} onClick={() => setSource("prompt")}>Mit KI gestalten</button>
             <button type="button" aria-pressed={source === "upload"} className={source === "upload" ? "active" : ""} disabled={Boolean(busy)} onClick={() => setSource("upload")}>Eigenes Bild verwenden</button>
           </fieldset>
           {source === "prompt" ? <>
-          <label className="cappatex-prompt"><span>Idee beschreiben</span><textarea value={prompt} maxLength={500}
+          <label className="cappatex-prompt"><span>Idee beschreiben</span><textarea value={prompt} maxLength={500} disabled={Boolean(busy)}
             onChange={e => setPrompt(e.target.value)} placeholder="Zum Beispiel: Eine alpine Blume als ruhige Linienzeichnung in Terracotta und Creme, ohne Text" />
             <small>{prompt.length}/500 Zeichen</small></label>
+          <CappatexPromptHelper value={prompt} onApply={setPrompt} disabled={Boolean(busy)} />
           <fieldset className="cappatex-styles"><legend>Bildstil</legend>{styles.map(value => <button type="button" key={value} aria-pressed={style === value}
-            className={style === value ? "active" : ""} onClick={() => setStyle(value)}>{value}</button>)}</fieldset>
-          <label className="cappatex-field">Motivformat<select value={canvas} onChange={e => setCanvas(e.target.value)}>
+            disabled={Boolean(busy)} className={style === value ? "active" : ""} onClick={() => setStyle(value)}>{value}</button>)}</fieldset>
+          <details className="cappatex-detail"><summary>Format & Auflösung</summary><label className="cappatex-field">Motivformat<select value={canvas} disabled={Boolean(busy)} onChange={e => setCanvas(e.target.value)}>
             <option value="portrait">Hochformat · 2048 × 3072 px</option><option value="square">Quadratisch · 2048 × 2048 px</option><option value="landscape">Querformat · 3072 × 2048 px</option>
-          </select></label>
-          <GalleryConsent studio="cappatex" value={galleryChoice} onChange={setGalleryChoice} disabled={Boolean(busy)}/>
-          <label className="legal-consent cappatex-consent"><input type="checkbox" checked={confirmed} disabled={!generationEnabled} onChange={e => setConfirmed(e.target.checked)} />
-            <span>{pilotOwner ? "Ein Testmotiv als Betreiber erstellen. Es entstehen OpenAI-API-Kosten; kein Design-Token wird abgezogen." : "Ein Motiv für 1 Design-Token erstellen."}</span></label>
+          </select></label></details>
+          <details className="cappatex-create-review"><summary>Weiter zur Erstellung <span aria-hidden="true">→</span></summary>
+          <GalleryConsent studio="cappatex" compact value={galleryChoice} onChange={setGalleryChoice} disabled={Boolean(busy)}/>
+          <label className="legal-consent cappatex-consent"><input type="checkbox" checked={confirmed} disabled={!generationEnabled || Boolean(busy)} onChange={e => setConfirmed(e.target.checked)} />
+            <span>{pilotOwner ? "Testmotiv erstellen · OpenAI-API-Kosten, kein Design-Token." : "Motiv erstellen · 1 Design-Token."}</span></label>
           <p className="cappatex-action-hint" id="cappatex-generation-hint" role="status">{generationHint}</p>
-          {creationError?.source === "prompt" && <p className="cappatex-error cappatex-action-error" role="alert">{creationError.message}</p>}
           <button className="button primary cappatex-generate" aria-describedby="cappatex-generation-hint" onClick={generate} disabled={!confirmed || !generationEnabled || prompt.trim().length < 12 || Boolean(busy) || !galleryChoiceValid(galleryChoice,"cappatex")}>
             {busy === "generation" ? "Motiv wird erstellt …" : "Motiv erstellen"}</button>
-          <p className="cappatex-wait-note">{generationEnabled ? "Die Vorschau ist eine verkleinerte Ansicht deiner Druckdatei. Es gibt keine automatische zweite Generierung."
-            : "Die KI-Generierung wartet auf den freigegebenen Test. Du kannst deine Idee bereits formulieren; es entstehen keine API-Kosten."}</p>
+          <p className="cappatex-wait-note">{generationEnabled ? "Erst das Motiv prüfen, danach dein Produkt gestalten."
+            : "Die Erstellung ist für dein Konto noch nicht freigegeben."}</p>
+          </details>
           </> : <div className="cappatex-upload">
             <label className="cappatex-field">Bild auswählen<input type="file" accept="image/png,image/jpeg" disabled={Boolean(busy)} onChange={e => { setUploadFile(e.target.files?.[0] || null); setImageRights(false); setError(""); setCreationError(null); }} /></label>
-            <p>PNG oder JPG, bis 12 MB und 6,29 Megapixel. Als Grössenvergleich: 2048 × 3072 Pixel reichen bei {uploadExampleDpi} dpi für höchstens {centimetres(uploadExample.maxWidthCm)} × {centimetres(uploadExample.maxHeightCm)} cm Motivgrösse.
+            <p>PNG oder JPG · maximal 12 MB und 6,29 Megapixel. Ohne KI-Bearbeitung.</p>
+            <details className="cappatex-detail"><summary>Welche Bildgrösse brauche ich?</summary><p>2048 × 3072 Pixel reichen bei {uploadExampleDpi} dpi für höchstens {centimetres(uploadExample.maxWidthCm)} × {centimetres(uploadExample.maxHeightCm)} cm Motivgrösse.
               Grosse Druckflächen können damit nur teilweise bedeckt werden. Nach der Übernahme siehst du die Druckgrössen-Hilfe für deine Datei.
-              Dein Bild wird ohne KI-Bearbeitung und ohne Verkleinerung als PNG-Druckdatei gespeichert.</p>
-            <label className="legal-consent cappatex-consent"><input type="checkbox" checked={imageRights} onChange={e => setImageRights(e.target.checked)} />
+              Dein Bild wird ohne Verkleinerung als PNG-Druckdatei gespeichert.</p></details>
+            <details className="cappatex-create-review"><summary>Bildübernahme vorbereiten <span aria-hidden="true">→</span></summary>
+            <label className="legal-consent cappatex-consent"><input type="checkbox" checked={imageRights} disabled={Boolean(busy)} onChange={e => setImageRights(e.target.checked)} />
               <span>Ich darf dieses Bild verwenden und bedrucken lassen.</span></label>
-            <GalleryConsent studio="cappatex" value={galleryChoice} onChange={setGalleryChoice} disabled={Boolean(busy)}/>
+            <GalleryConsent studio="cappatex" compact value={galleryChoice} onChange={setGalleryChoice} disabled={Boolean(busy)}/>
             <p className="cappatex-action-hint" id="cappatex-upload-hint" role="status">{uploadHint}</p>
-            {creationError?.source === "upload" && <p className="cappatex-error cappatex-action-error" role="alert">{creationError.message}</p>}
             <button className="button primary cappatex-generate" aria-describedby="cappatex-upload-hint" onClick={upload} disabled={!uploadFile || !imageRights || !uploadEnabled || Boolean(busy) || !galleryChoiceValid(galleryChoice,"cappatex")}>{busy === "upload" ? "Bild wird geprüft …" : "Eigenes Bild übernehmen"}</button>
             <p className="cappatex-wait-note">{uploadEnabled ? "Keine KI-Kosten und kein Design-Token. Bis zu zehn Upload-Versuche innerhalb von 24 Stunden."
               : "Der Upload ist noch nicht freigegeben. Für den Test ist ein angemeldetes Betreiberkonto erforderlich."}</p>
+            </details>
           </div>}
+          {image && <button type="button" className="button secondary cappatex-stage-next" disabled={Boolean(busy)} onClick={() => goToStage(2)}>Mit meinem Motiv weiter →</button>}
+          <a className="cappatex-subtle-link" href="/cappatex/kontakt" target="_blank" rel="noopener noreferrer">Hilfe bei deiner Idee ↗</a>
         </section>
       </div>
       <section className="cappatex-preview-panel" id="cappatex-product" ref={previewPanel} tabIndex={-1} aria-labelledby="cappatex-product-heading">
-        <div className="cappatex-preview-head"><div><small>2 · Produkt & Platzierung</small><h3 id="cappatex-product-heading">{product?.name || "Dein Motiv"}</h3></div>
-          {variant && <b>{variant.price ? money(Number(variant.price.amount), variant.price.currencyCode) : "Preis noch nicht freigegeben"}</b>}</div>
+        <div className="cappatex-preview-head" hidden={stage === 3}><div><small>{stage === 1 ? "Deine Vorschau" : "2 · Produkt gestalten"}</small><h3 id="cappatex-product-heading">{stage === 1 ? "Dein Motiv" : product?.name || "Dein Motiv"}</h3></div>
+          {stage === 2 && variant && <b>{variant.price ? money(Number(variant.price.amount), variant.price.currencyCode) : "Gestaltungsvorschau"}</b>}</div>
+        <div className="cappatex-motif-preview" hidden={stage !== 1}>
+          {image ? <img src={image} alt="Dein aktuelles Motiv" /> : <div><span aria-hidden="true">✦</span><h4>Hier beginnt dein Design.</h4><p>Deine Idee wird zum Motiv. Danach wählst du dein Produkt.</p></div>}
+          {image && <button type="button" className="button primary" disabled={Boolean(busy)} onClick={() => goToStage(2)}>Produkt dazu auswählen →</button>}
+        </div>
+        <div className="cappatex-product-tools" hidden={stage !== 2}>
         {product && variant && <div className="cappatex-variant-fields">
           <label className="cappatex-field">{product.optionLabel || "Farbe"}<select disabled={Boolean(busy)} value={variant.color} onChange={e => {
             const choice = chooseColor(product, e.target.value, variant.size);
@@ -597,12 +631,13 @@ export default function CappatexDesigner() {
           <button type="button" aria-pressed={side === "front"} className={side === "front" ? "active" : ""} disabled={Boolean(busy)} onClick={() => selectSide("front")}>Vorderseite</button>
           {baseVariant?.back && <button type="button" aria-pressed={side === "back"} className={side === "back" ? "active" : ""} disabled={Boolean(busy)} onClick={() => selectSide("back")}>Rückseite</button>}
         </fieldset>}
-        {baseVariant && <fieldset className="cappatex-photo-options"><legend>Ansicht</legend>
-          <button type="button" aria-pressed={!galleryPhoto} onClick={() => setPhotoUrl("")}>Motiv platzieren</button>
-          {baseVariant.photos?.map(photo => <button type="button" key={photo.url} aria-pressed={galleryPhoto?.url === photo.url} onClick={() => setPhotoUrl(photo.url)}>{photo.label}</button>)}
+        {baseVariant && <fieldset className="cappatex-photo-options cappatex-view-mode"><legend>Ansicht</legend>
+          <button type="button" disabled={Boolean(busy)} aria-pressed={!galleryPhoto} onClick={() => setPhotoUrl("")}>Dein Design</button>
+          {!!baseVariant.photos?.length && <button type="button" disabled={Boolean(busy)} aria-pressed={Boolean(galleryPhoto)} onClick={() => setPhotoUrl(baseVariant.photos![0].url)}>Produktfotos</button>}
         </fieldset>}
+        {galleryPhoto && <div className="cappatex-photo-strip" role="group" aria-label="Produktfotos auswählen">{baseVariant?.photos?.map(photo => <button type="button" disabled={Boolean(busy)} key={photo.url} aria-pressed={galleryPhoto.url === photo.url} onClick={() => setPhotoUrl(photo.url)}><img src={photo.url} alt="" loading="lazy" /><span>{photo.label}</span></button>)}</div>}
         {galleryPhoto && <figure className="cappatex-provider-photo"><img src={galleryPhoto.url} alt={`${product?.name}, ${baseVariant?.color} – ${galleryPhoto.label}, unbedrucktes Anbieterfoto`} />
-          <figcaption>{galleryPhoto.label} · {baseVariant?.color}. Unbedrucktes Anbieterfoto zur Passform und zum Material. Dein Motiv siehst du unter „Motiv platzieren“.</figcaption></figure>}
+          <figcaption>Unbedrucktes Produkt · {galleryPhoto.label}. Dein Motiv siehst du unter „Dein Design“.</figcaption></figure>}
         <div hidden={Boolean(galleryPhoto)} className={`cappatex-placement-workbench${variant ? " has-product" : ""}`}>
         <div className="cappatex-verified-preview">
           {variant ? <div className="cappatex-blank-photo" style={{ aspectRatio: `${variant.mockup.width}/${variant.mockup.height}` }}>
@@ -626,13 +661,16 @@ export default function CappatexDesigner() {
         {variant && <div className="cappatex-customize">
           <button type="button" disabled={!image || Boolean(busy)} onClick={() => { setPlacement(initialPlacement(variant.area, artwork)); }}>Passend einfügen</button>
           <button type="button" disabled={!image || Boolean(busy)} onClick={() => { setPlacement({ ...placement, x: .5, y: .5 }); }}>Zentrieren</button>
+          <details className="cappatex-detail cappatex-precise"><summary>Position genau einstellen</summary>
           <label>Motivbreite <b>{Math.round(placement.scale * 100)} %</b><input type="range" disabled={!image || Boolean(busy)} min={variant.area.minScale} max={variant.area.maxScale} step="0.01" value={placement.scale} onChange={e => { setPlacement({ ...placement, scale: Number(e.target.value) }); }} /></label>
           <label>Horizontal <b>{Math.round(placement.x * 100)} %</b><input type="range" disabled={!image || Boolean(busy)} min="0" max="1" step="0.01" value={placement.x} onChange={e => { setPlacement({ ...placement, x: Number(e.target.value) }); }} /></label>
           <label>Vertikal <b>{Math.round(placement.y * 100)} %</b><input type="range" disabled={!image || Boolean(busy)} min="0" max="1" step="0.01" value={placement.y} onChange={e => { setPlacement({ ...placement, y: Number(e.target.value) }); }} /></label>
+          </details>
         </div>}
         </div>
         {image && geometry && <p className={geometry.ok ? "cappatex-quality-ok" : "cappatex-error"} role="status">{geometry.reason}
           {geometry.dpi !== undefined && <> · {Math.floor(geometry.dpi)} dpi · {Math.round(geometry.widthMm!)} × {Math.round(geometry.heightMm!)} mm</>}</p>}
+        <details className="cappatex-detail cappatex-print-details"><summary>Druckdetails & Datei</summary>
         {printHelp && <div className="cappatex-profile-note" role="note" aria-label="Druckgrösse deiner Datei">
           <p><strong>Druckgrösse deiner Datei:</strong> Bei mindestens {printHelp.minDpi} dpi reicht die Originalauflösung für höchstens {centimetres(printHelp.maxWidthCm)} × {centimetres(printHelp.maxHeightCm)} cm Motivgrösse.
             Zusätzlich gilt die geprüfte Druckfläche des Produkts.</p>
@@ -648,19 +686,29 @@ export default function CappatexDesigner() {
               Die gestrichelte Linie markiert die erlaubte Fläche. Die Fotovorschau zeigt Position und Grösse.
               {product?.kind === "accessory" ? " Oberfläche und Bildschirmfarben können vom Druck abweichen. Fotohalterungen gehören nicht zum Lieferumfang."
                 : " Stofffalten werden vereinfacht dargestellt. Stoffstruktur und Bildschirmfarben können vom Druck abweichen."}</p>
-          <div className="cappatex-order-config">
+        </>}
+        </details>
+        {!image && <p className="cappatex-stage-hint">Wähle dein Produkt schon jetzt. Dein Motiv erstellst du in Schritt 1.</p>}
+        {image && <div className="cappatex-capture-status" role="status"><strong>{side === "front" ? "Vorderseite" : "Rückseite"}</strong><span>{capturedSide ? capturedSideChanged ? "Geändert · erneut übernehmen" : "Übernommen ✓" : "Noch nicht übernommen"}</span></div>}
+        <div className="cappatex-stage-actions"><button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => goToStage(1)}>← Motiv bearbeiten</button>
+          {pilotOwner && <button type="button" className="button secondary" disabled={!previewReady || !geometry?.ok || Boolean(busy) || Boolean(galleryPhoto) || localRecoveryBlocked} onClick={() => captureSide.current?.capture()}>{side === "front" ? "Vorderseite" : "Rückseite"} {capturedSide ? "erneut übernehmen" : "übernehmen"}</button>}
+          <button type="button" className="button primary" disabled={Boolean(busy) || !image || !product || localRecoveryBlocked} onClick={() => goToStage(3)}>Druckseiten prüfen →</button></div>
+        <a className="cappatex-subtle-link" href="/cappatex/kontakt" target="_blank" rel="noopener noreferrer">Persönliche Designhilfe ↗</a>
+        </div>
+        <section className="cappatex-save-step" id="cappatex-save" hidden={stage !== 3} tabIndex={-1} aria-labelledby="cappatex-save-heading">
+        <div className="cappatex-step-heading"><div><h3 id="cappatex-save-heading">Dein Produkt prüfen.</h3><p>Gewünschte Druckseiten übernehmen und gemeinsam speichern.</p></div></div>
+        <div className="cappatex-review-product"><strong>{product?.name}</strong><span>{variant?.color} · {variant?.size}</span><button type="button" disabled={Boolean(busy)} onClick={() => goToStage(2)}>Produkt ändern</button></div>
+        {image && geometry && !geometry.ok && <p className="cappatex-error" role="alert">{geometry.reason} Öffne „Produkt ändern“, um die Platzierung zu korrigieren.</p>}
+        {legacyBlank && <p className="cappatex-profile-note">Ältere Anbieteransicht · Verkauf bis zur Bestätigung gesperrt.</p>}
+        {variant && <div className="cappatex-order-config">
             <label>Menge<select disabled={Boolean(busy)} value={quantity} onChange={e => { setQuantity(Number(e.target.value)); }}>{[1,2,3,4,5].map(n => <option key={n}>{n}</option>)}</select></label>
             <label>Lieferland<select disabled={Boolean(busy)} value={country} onChange={e => { setCountry(e.target.value === "LI" ? "LI" : "CH"); }}><option value="CH">Schweiz</option><option value="LI">Liechtenstein</option></select></label>
             <div><small>{variant.price ? "Artikelpreis · zzgl. Versand" : "Gestaltungsvorschau"}</small><strong>{variant.price ? money(Number(variant.price.amount) * quantity, variant.price.currencyCode) : `${quantity} Artikel ausgewählt`}</strong></div>
           </div>
-        </>}
-        {error && <p className="cappatex-error" role="alert">{error}</p>}
-        {sessionNotice && <p className="cappatex-action-hint" role="status">{sessionNotice}</p>}
-        {autosaveNotice && <p className="cappatex-action-hint" role="status">{autosaveNotice}</p>}
-        <p className="cappatex-action-hint">Dein Motiv sieht noch nicht so aus wie gewünscht? <a className="text-link" href="/cappatex/kontakt" target="_blank" rel="noopener noreferrer">Persönliche Designhilfe ↗</a></p>
-        <section className="cappatex-save-step" id="cappatex-save" aria-labelledby="cappatex-save-heading">
-        <div className="cappatex-step-heading"><span>3</span><div><h3 id="cappatex-save-heading">Prüfen & speichern</h3><p>Prüfe dein Motiv und die gewünschten Druckseiten.</p></div></div>
+        }
+        <div className="cappatex-review-edit" role="group" aria-label="Druckseite bearbeiten"><button type="button" disabled={Boolean(busy)} onClick={() => { selectSide("front"); goToStage(2); }}>Vorderseite bearbeiten</button>{baseVariant?.back && <button type="button" disabled={Boolean(busy)} onClick={() => { selectSide("back"); goToStage(2); }}>Rückseite gestalten</button>}</div>
         {pilotOwner && product && variant && !localRecoveryBlocked && <CappatexPreparationPanel key={`${product.id}:${product.profileVersion}:${variant.shopifyVariantId}`}
+          captureRef={captureSide}
           product={product} variant={variant} side={side} designId={designId} artwork={artwork} placement={placement}
           ready={previewReady && Boolean(geometry?.ok) && !busy} quantity={quantity} country={country}
           draft={currentDraft} onDraftChange={update => setDrafts(current => ({ ...current,
@@ -671,10 +719,8 @@ export default function CappatexDesigner() {
           onSaving={saving => setBusy(saving ? "preparation" : "")} />}
         <div className="cappatex-ready">
           {designId&&<Link className="text-link" href="/cappatex/sammlung">Deine gespeicherten CAPPATEX-Motive ansehen →</Link>}
-          <p className="cappatex-action-hint">Übernimm und speichere zuerst alle gewünschten Druckseiten. Öffne anschliessend deinen gespeicherten Stand,
-            um Motive, Positionen und Preis gemeinsam zu prüfen. Von dort geht es nach der Verkaufsfreigabe zu Shopify.</p>
-          <a className="text-link" href="#cappatex-save">Druckseiten übernehmen und speichern →</a>
-          <p>{product?.blockedReason || "Bestellungen bleiben bis zum abgeschlossenen Produkt-, Versand- und Checkout-Test gesperrt."}</p>
+          <p>Testphase · Bestellungen sind noch nicht freigegeben.</p>
+          <details className="cappatex-detail"><summary>Wie geht es danach weiter?</summary><p>Öffne deinen gespeicherten Stand. Nach der Verkaufsfreigabe kannst du von dort zu Shopify wechseln.</p><p>{product?.blockedReason || "Produkt, Versand und Checkout müssen vor dem Verkauf geprüft sein."}</p></details>
         </div>
         </section>
       </section>

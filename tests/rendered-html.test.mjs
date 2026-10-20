@@ -276,7 +276,7 @@ test("legal launch phase is visible and both checkout flows require versioned co
   assert.match(shop, /termsAccepted/);
   assert.match(cartDrawer, /\/recht\/agb/);
   assert.doesNotMatch(cappatex, /fetch\("\/api\/cappatex\/checkout"|termsAccepted|setCheckoutEnabled|setTerms/);
-  assert.match(cappatex, /href="#cappatex-save"/);
+  assert.match(cappatex, /Druckseiten prüfen/);
   assert.match(preparedReview, /JSON\.stringify\(\{ preparationId: id, termsAccepted: true \}\)/);
   assert.match(preparedReview, /Weiter zu Shopify/);
   assert.match(preparedReview, /\/recht\/agb/);

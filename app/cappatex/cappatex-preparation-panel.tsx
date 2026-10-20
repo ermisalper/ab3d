@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useState, type Ref } from "react";
 import type { CappatexDesignProduct } from "../cappatex-design-catalog";
 import type { ArtworkSize, Placement } from "../cappatex-print-profile";
 import type { PreparationInput, PreparationSummary, PrintSide } from "../cappatex-preparation";
@@ -8,6 +8,7 @@ import PreparationPreview, { preparationPreviewIdentity } from "../cappatex-prep
 import { parseSavedPreparationResponse } from "../cappatex-preparation-response";
 
 const sideName = (side: PrintSide) => side === "front" ? "Vorderseite" : "Rückseite";
+export type CaptureSideHandle = { capture: () => void };
 
 export function PreparedReceipt({ receipt, onPreviewReady }: { receipt: PreparationSummary; onPreviewReady?: (ready: boolean) => void }) {
   const [loaded, setLoaded] = useState<Record<string, boolean>>({});
@@ -29,11 +30,12 @@ export function PreparedReceipt({ receipt, onPreviewReady }: { receipt: Preparat
   </div>;
 }
 
-export default function CappatexPreparationPanel({ product, variant, side, designId, artwork, placement, ready, quantity, country, onSaving, draft, onDraftChange, onPersist }: {
+export default function CappatexPreparationPanel({ product, variant, side, designId, artwork, placement, ready, quantity, country, onSaving, draft, onDraftChange, onPersist, captureRef }: {
   product: CappatexDesignProduct; variant: CappatexDesignProduct["variants"][number]; side: PrintSide; designId: string;
   artwork: ArtworkSize; placement: Placement; ready: boolean; quantity: number; country: "CH" | "LI"; onSaving: (saving: boolean) => void;
   draft: CompositionDraft; onDraftChange: (update: (current: CompositionDraft) => CompositionDraft) => void;
   onPersist: (value: CompositionDraft) => void;
+  captureRef?: Ref<CaptureSideHandle>;
 }) {
   const { selections, receipt } = draft;
   const [saving, setSaving] = useState(false);
@@ -55,6 +57,7 @@ export default function CappatexPreparationPanel({ product, variant, side, desig
       working: { ...current.working, [side]: { designId, placement: { ...placement } } } }));
     setMessage(`${sideName(side)} übernommen. Änderungen im Designer werden erst durch erneutes Übernehmen eingetragen.`);
   }
+  useImperativeHandle(captureRef, () => ({ capture }));
   async function save() {
     if (!selections.length || saving) return;
     const data = { profileId: product.id, profileVersion: product.profileVersion, shopifyVariantId: variant.shopifyVariantId, quantity, country,
@@ -85,8 +88,8 @@ export default function CappatexPreparationPanel({ product, variant, side, desig
   }
   return <section className="cappatex-preparation" id="order-preparation" aria-labelledby="preparation-heading">
     <h3 id="preparation-heading">Druckseiten zusammenstellen</h3>
-    <p>Übernimm zuerst jede gewünschte Druckseite aus der Vorschau. Speichere danach die gesamte Zusammenstellung. Du kannst vorne und hinten unterschiedliche Motive verwenden.</p>
-    <p className="cappatex-preparation-note">Jede Produktvariante behält ihren eigenen Entwurf. Auf einer neuen Farbe oder Grösse prüfst und übernimmst du die Seiten erneut. Gespeicherte Stände bleiben unverändert.</p>
+    <p>Wähle vorne, hinten oder beide Seiten. Nur übernommene Seiten werden gespeichert.</p>
+    <details className="cappatex-detail"><summary>Was wird gespeichert?</summary><p className="cappatex-preparation-note">Jede Produktvariante behält ihren eigenen Entwurf. Auf einer neuen Farbe oder Grösse prüfst und übernimmst du die Seiten erneut. Gespeicherte Stände bleiben unverändert.</p></details>
     {draft.copyOf && <p className="cappatex-action-hint">Du bearbeitest eine neue Kopie. <a className="text-link" href={`/cappatex/vorbereitung/${draft.copyOf}`}>Der ursprüngliche Stand bleibt erhalten.</a></p>}
     <ul className="cappatex-side-status" aria-label="Übernommene Druckseiten">{availableSides.map(position => {
       const selected = selections.some(selection => selection.position === position);
