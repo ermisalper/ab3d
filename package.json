@@ -2,6 +2,7 @@
   "name": "ab3d-creator-platform",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22.15.0"
   },
@@ -9,7 +10,10 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "vinext build && node --test tests/*.test.mjs",
+    "test": "pnpm build && pnpm test:run",
+    "test:run": "node --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
@@ -32,6 +36,7 @@
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "linkedom": "0.18.13",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",

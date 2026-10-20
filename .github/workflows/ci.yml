@@ -2,24 +2,39 @@ name: AB3D CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/cappatex-production]
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  quality:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - name: Check out source
+        uses: actions/checkout@v4
         with:
-          version: 11.9.0
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - name: Set up pnpm from packageManager
+        uses: pnpm/action-setup@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check TypeScript
+        run: pnpm typecheck
+      - name: Run ESLint
+        run: pnpm lint
+      - name: Build production artifacts
+        run: pnpm build
+      - name: Run offline tests against the production artifacts
+        run: pnpm test:run
