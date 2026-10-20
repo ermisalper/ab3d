@@ -5,7 +5,15 @@ import { productionQuote } from "../../production-quote";
 import { productionInquiryDetails } from "../../production-inquiry-details";
 
 const TASK_ID = /^[a-zA-Z0-9-]{8,80}$/;
+const REQUEST_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const MAX_INQUIRY_BYTES = 12_000;
+const inquiryHeaders = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
+const inquiryReply = (body: unknown, status = 200) => Response.json(body, { status, headers: inquiryHeaders });
+type SavedInquiry = { id: string; status: string; estimatedTotalCents: number; currency: string; requestSha256: string | null };
+function savedInquiry(row: SavedInquiry) {
+  return inquiryReply({ ok: true, order: { id: row.id, status: row.status, estimatedTotalCents: row.estimatedTotalCents, currency: row.currency },
+    message: "Unverbindliche Anfrage gespeichert. AB3D prüft Modell, Herstellbarkeit und Richtpreis. Es wurde keine Zahlung und kein Fertigungsauftrag ausgelöst." });
+}
 
 async function inquiryBody(request: Request) {
   if (Number(request.headers.get("content-length") || 0) > MAX_INQUIRY_BYTES) throw new Error("inquiry_too_large");
@@ -30,9 +38,7 @@ async function inquiryBody(request: Request) {
 
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (!origin || !host) return request.headers.get("sec-fetch-site") === "same-origin";
-  try { return new URL(origin).host === host; } catch { return false; }
+  return Boolean(origin && origin === new URL(request.url).origin);
 }
 
 export async function GET(request: Request) {
@@ -64,10 +70,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!sameOrigin(request)) return Response.json({ error: "Unzulässige Anfrage." }, { status: 403 });
+  if (!sameOrigin(request)) return inquiryReply({ error: "Unzulässige Anfrage." }, 403);
   const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: "Bitte melde dich für die unverbindliche Anfrage an." }, { status: 401 });
+  if (!user) return inquiryReply({ error: "Bitte melde dich für die unverbindliche Anfrage an." }, 401);
   let body: {
+    requestId?: unknown;
     sourceTaskId?: unknown;
     templateId?: unknown;
     heightCm?: unknown;
@@ -80,40 +87,63 @@ export async function POST(request: Request) {
     const parsed: unknown = await inquiryBody(request);
     body = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
   } catch (caught) {
-    return Response.json({ error: caught instanceof Error && caught.message === "inquiry_too_large"
+    return inquiryReply({ error: caught instanceof Error && caught.message === "inquiry_too_large"
       ? "Die Anfrage ist zu gross." : "Bitte sende eine gültige Anfrage." },
-    { status: caught instanceof Error && caught.message === "inquiry_too_large" ? 413 : 400 });
+    caught instanceof Error && caught.message === "inquiry_too_large" ? 413 : 400);
   }
   const sourceTaskId = typeof body?.sourceTaskId === "string" ? body.sourceTaskId : "";
   // A browser-provided price, name or complexity never determines the stored estimate.
   const quote = productionQuote(body);
   if (!TASK_ID.test(sourceTaskId) || !quote) {
-    return Response.json({ error: "Bitte prüfe Modellvorlage, Grösse, Material, Finish und Menge." }, { status: 400 });
+    return inquiryReply({ error: "Bitte prüfe Modellvorlage, Grösse, Material, Finish und Menge." }, 400);
   }
   const requestDetails = productionInquiryDetails(body?.requestDetails);
-  if (!requestDetails) return Response.json({ error: "Bitte prüfe deine Kontaktangaben. Für Ort oder Postleitzahl bitte Schweiz oder Liechtenstein wählen; die Postleitzahl hat vier Ziffern." }, { status: 400 });
-
-  await ensureAccount(user.email, user.fullName);
-  const task = await getOwnedTask(sourceTaskId, user.email);
-  if (!task || task.status !== "SUCCEEDED" || task.kind !== "convert") {
-    return Response.json({ error: "Das geprüfte STL-Druckpaket ist noch nicht fertig." }, { status: 409 });
+  if (!requestDetails) return inquiryReply({ error: "Bitte prüfe deine Kontaktangaben. Für Ort oder Postleitzahl bitte Schweiz oder Liechtenstein wählen; die Postleitzahl hat vier Ziffern." }, 400);
+  let requestId: string | null = null;
+  if (body && Object.hasOwn(body, "requestId")) {
+    if (typeof body.requestId !== "string" || !REQUEST_ID.test(body.requestId))
+      return inquiryReply({ error: "Die Anfrage-ID ist ungültig. Bitte prüfe deinen Entwurf." }, 400);
+    requestId = body.requestId.toLowerCase();
   }
-
-  const id = `PRINT-${crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
-  const now = Date.now();
-  await env.DB.prepare(
-    `INSERT INTO production_orders
-      (id, email, status, source_task_id, source_task_type, template_name, height_mm,
-       material, finish, quantity, estimated_total_cents, currency, created_at, updated_at, request_details_json)
-     VALUES (?, ?, 'inquiry', ?, 'convert', ?, ?, ?, ?, ?, ?, 'CHF', ?, ?, ?)`,
-  ).bind(id, user.email, sourceTaskId, quote.templateName, quote.heightMm, quote.material, quote.finish, quote.quantity, quote.estimatedTotalCents, now, now,
-    Object.keys(requestDetails).length ? JSON.stringify(requestDetails) : null).run();
-
-  return Response.json({
-    ok: true,
-    order: { id, status: "inquiry", estimatedTotalCents: quote.estimatedTotalCents, currency: quote.currency },
-    message: "Unverbindliche Anfrage gespeichert. AB3D prüft Modell, Herstellbarkeit und Richtpreis. Es wurde keine Zahlung und kein Fertigungsauftrag ausgelöst.",
-  });
+  try {
+    // Hash the normalized request, never a browser price or today's estimate. A retry
+    // returns the saved estimate even after a later pricing or operational change.
+    const semantic = JSON.stringify({ schemaVersion: 1, sourceTaskId, templateId: body!.templateId,
+      heightMm: quote.heightMm, material: quote.material, finish: quote.finish, quantity: quote.quantity, requestDetails });
+    const hashBytes = requestId ? await crypto.subtle.digest("SHA-256", new TextEncoder().encode(semantic)) : null;
+    const requestSha256 = hashBytes ? Array.from(new Uint8Array(hashBytes), byte => byte.toString(16).padStart(2, "0")).join("") : null;
+    const existing = async () => requestId ? env.DB.prepare(
+      `SELECT id,status,estimated_total_cents AS estimatedTotalCents,currency,inquiry_request_sha256 AS requestSha256
+       FROM production_orders WHERE email=? AND inquiry_request_id=?`,
+    ).bind(user.email, requestId).first<SavedInquiry>() : null;
+    const replay = (row: SavedInquiry) => row.requestSha256 === requestSha256 ? savedInquiry(row)
+      : inquiryReply({ code: "inquiry_conflict", error: "Diese Anfrage-ID gehört zu einer anderen Zusammenstellung. Deine Änderungen bleiben erhalten; bitte bereite sie als neue Anfrage vor." }, 409);
+    const prior = await existing();
+    if (prior) return replay(prior);
+    await ensureAccount(user.email, user.fullName);
+    const task = await getOwnedTask(sourceTaskId, user.email);
+    if (!task || task.status !== "SUCCEEDED" || task.kind !== "convert")
+      return inquiryReply({ error: "Das geprüfte STL-Druckpaket ist noch nicht fertig." }, 409);
+    const id = `PRINT-${crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`, now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO production_orders
+        (id,email,status,source_task_id,source_task_type,template_name,height_mm,material,finish,quantity,
+         estimated_total_cents,currency,created_at,updated_at,request_details_json,inquiry_request_id,inquiry_request_sha256)
+       VALUES (?,?,'inquiry',?,'convert',?,?,?,?,?,?,'CHF',?,?,?,?,?)
+       ON CONFLICT(email,inquiry_request_id) WHERE inquiry_request_id IS NOT NULL DO NOTHING`,
+    ).bind(id, user.email, sourceTaskId, quote.templateName, quote.heightMm, quote.material, quote.finish, quote.quantity,
+      quote.estimatedTotalCents, now, now, Object.keys(requestDetails).length ? JSON.stringify(requestDetails) : null, requestId, requestSha256).run();
+    if (requestId) {
+      const stored = await existing();
+      if (!stored) throw new Error("Inquiry outcome unavailable");
+      return replay(stored);
+    }
+    return savedInquiry({ id, status: "inquiry", estimatedTotalCents: quote.estimatedTotalCents, currency: quote.currency, requestSha256: null });
+  } catch {
+    return inquiryReply({ code: "inquiry_unavailable", error: requestId
+      ? "Die Speicherung der Anfrage konnte nicht bestätigt werden. Deine Eingaben bleiben erhalten. Wiederhole denselben Versuch, damit keine zweite Anfrage entsteht."
+      : "Die Speicherung der Anfrage konnte nicht bestätigt werden. Deine Eingaben bleiben erhalten. Prüfe zuerst dein Konto, bevor du erneut anfragst." }, 503);
+  }
 }
 
 export async function PATCH(request: Request) {

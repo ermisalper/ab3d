@@ -181,6 +181,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const generationRef = useRef(0);
   const inquiryPendingRef = useRef(false);
+  const inquiryRequestIds = useRef(new Map<string, string>());
 
   const busy = ["uploading", "transforming", "generating", "refining", "resizing", "analyzing", "repairing", "converting"].includes(state);
   const creativeImage = mode === "image" && imageStrategy === "creative";
@@ -697,6 +698,12 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       setOrderError("Bitte prüfe deine Kontaktangaben. Für Ort oder Postleitzahl bitte das Land wählen; die Postleitzahl hat vier Ziffern.");
       return;
     }
+    const inquiry = { sourceTaskId: taskId, templateId: selectedTemplate.id, heightCm, material, finish, quantity, requestDetails };
+    const signature = JSON.stringify(inquiry);
+    // Reuse an uncertain attempt only for exactly the same normalized inquiry.
+    // Store before fetch; a connection failure must not create another request ID.
+    const requestId = inquiryRequestIds.current.get(signature) || crypto.randomUUID();
+    inquiryRequestIds.current.set(signature, requestId);
     inquiryPendingRef.current = true;
     setOrderBusy(true);
     setError("");
@@ -706,22 +713,16 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       const response = await fetch("/api/production-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceTaskId: taskId,
-          templateId: selectedTemplate.id,
-          heightCm,
-          material,
-          finish,
-          quantity,
-          requestDetails,
-        }),
+        body: JSON.stringify({ ...inquiry, requestId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Die unverbindliche Anfrage konnte nicht gespeichert werden.");
       setProductionOrderId(data.order.id);
       setOrderMessage(data.message);
     } catch (caught) {
-      setOrderError(caught instanceof Error ? caught.message : "Die unverbindliche Anfrage konnte nicht gespeichert werden. Deine Angaben bleiben hier erhalten.");
+      setOrderError(caught instanceof TypeError
+        ? "Die unverbindliche Anfrage konnte nicht bestätigt werden. Deine Angaben bleiben hier erhalten. Bitte prüfe zuerst den Status im Konto, bevor du sie erneut sendest."
+        : caught instanceof Error ? caught.message : "Die unverbindliche Anfrage konnte nicht gespeichert werden. Deine Angaben bleiben hier erhalten.");
     } finally {
       inquiryPendingRef.current = false;
       setOrderBusy(false);

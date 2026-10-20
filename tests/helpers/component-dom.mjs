@@ -9,6 +9,7 @@ const rootUrl = new URL("../../", import.meta.url);
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") return next(new URL("./next-link.mjs", import.meta.url).href, context);
+    if (specifier === "@google/model-viewer") return next(new URL("./model-viewer-runtime.mjs", import.meta.url).href, context);
     if (specifier.startsWith(".") && context.parentURL?.startsWith("file:")) {
       for (const extension of [".ts", ".tsx"]) {
         const candidate = new URL(`${specifier}${extension}`, context.parentURL);

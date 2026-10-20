@@ -194,12 +194,15 @@ export const productionOrders = sqliteTable(
     estimatedTotalCents: integer("estimated_total_cents").notNull(),
     currency: text("currency").notNull().default("CHF"),
     requestDetailsJson: text("request_details_json"),
+    inquiryRequestId: text("inquiry_request_id"),
+    inquiryRequestSha256: text("inquiry_request_sha256"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
     index("production_orders_email_created_idx").on(table.email, table.createdAt),
     index("production_orders_status_created_idx").on(table.status, table.createdAt),
+    uniqueIndex("production_orders_inquiry_request").on(table.email, table.inquiryRequestId).where(sql`${table.inquiryRequestId} IS NOT NULL`),
   ],
 );
 

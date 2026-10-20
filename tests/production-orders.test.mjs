@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 
 const user = "creator@example.test", operator = "operator@example.test", other = "other@example.test";
 const origin = "https://ab3d.example.test", sourceId = "converted-offline-0001";
-const runtime = { env: {}, actor: user };
+const runtime = { env: {}, actor: user, quoteAdjustment: 0 };
 globalThis.__productionOrdersOffline = runtime;
 const hooks = registerHooks({
   resolve(specifier, context, next) {
@@ -18,6 +18,13 @@ const hooks = registerHooks({
     return next(specifier, context);
   },
   load(url, context, next) {
+    if (url.endsWith("/app/production-quote.ts")) {
+      // Retain the real calculation and allow only its resulting estimate to change
+      // between retries, as it could after a future pricing revision.
+      const source = readFileSync(new URL(url), "utf8").replace("export function productionQuote(", "function baseProductionQuote(")
+        + "\nexport function productionQuote(input){ const quote=baseProductionQuote(input); return quote ? {...quote, estimatedTotalCents: quote.estimatedTotalCents + globalThis.__productionOrdersOffline.quoteAdjustment} : null; }";
+      return { ...next(url, context), source, shortCircuit: true };
+    }
     const source = {
       "production-fixture:cloudflare:workers": "export const env = globalThis.__productionOrdersOffline.env;",
       "production-fixture:next/headers": "export async function headers(){return new Headers(globalThis.__productionOrdersOffline.actor?{'oai-authenticated-user-email':globalThis.__productionOrdersOffline.actor}:{});}",
@@ -33,6 +40,7 @@ const { productionInquiryDetails } = await import("../app/production-inquiry-det
 class D1 {
   constructor() {
     this.db = new DatabaseSync(":memory:");
+    this.writes = 0; this.inquiryInserts = 0; this.failInquiryBefore = false; this.failInquiryAfter = false;
     this.db.exec("PRAGMA foreign_keys=ON");
     for (const name of readdirSync(new URL("../drizzle/", import.meta.url)).filter(name => name.endsWith(".sql")).sort()) this.db.exec(readFileSync(new URL(`../drizzle/${name}`, import.meta.url), "utf8"));
   }
@@ -42,7 +50,14 @@ class D1 {
       bind: (...values) => statement(values),
       first: async () => { const row = db.prepare(query).get(...args); return row ? { ...row } : null; },
       all: async () => ({ success: true, results: db.prepare(query).all(...args).map(row => ({ ...row })) }),
-      run: async () => ({ success: true, meta: { changes: Number(db.prepare(query).run(...args).changes) } }),
+      run: async () => {
+        const inquiry = /INSERT\s+INTO\s+production_orders/i.test(query);
+        this.writes++; if (inquiry) this.inquiryInserts++;
+        if (inquiry && this.failInquiryBefore) { this.failInquiryBefore = false; throw new Error("Sensitive fixture database failure before insert hidden@example.test"); }
+        const changes = Number(db.prepare(query).run(...args).changes);
+        if (inquiry && this.failInquiryAfter) { this.failInquiryAfter = false; throw new Error("Sensitive fixture database failure after commit private/model.stl"); }
+        return { success: true, meta: { changes } };
+      },
     });
     return statement();
   }
@@ -50,7 +65,7 @@ class D1 {
 const priorFetch = globalThis.fetch, priorOwners = process.env.AB3D_OWNER_EMAILS, priorUnlimited = process.env.AB3D_UNLIMITED_EMAILS;
 let database;
 beforeEach(() => {
-  database = new D1(); runtime.env.DB = database; runtime.actor = user;
+  database = new D1(); runtime.env.DB = database; runtime.actor = user; runtime.quoteAdjustment = 0;
   process.env.AB3D_OWNER_EMAILS = operator; process.env.AB3D_UNLIMITED_EMAILS = "";
   globalThis.fetch = async () => { throw new Error("No live network or provider request is allowed in production inquiry tests"); };
   for (const email of [user, operator, other]) database.db.prepare("INSERT INTO accounts(email,token_balance,plan,subscription_status,created_at,updated_at) VALUES (?,20,'free','inactive',0,0)").run(email);
@@ -71,6 +86,7 @@ const request = (method, body, requestOrigin = origin) => new Request(`${origin}
   method, headers: { origin: requestOrigin, host: "ab3d.example.test", "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
 const post = extra => POST(request("POST", { ...valid, ...extra }));
+const inquiryRequestId = "11111111-2222-4333-8444-555555555555";
 const patch = (id, status) => PATCH(request("PATCH", { id, status }));
 const rows = () => database.db.prepare("SELECT * FROM production_orders ORDER BY created_at,id").all().map(row => ({ ...row }));
 function legacy(id = "PRINT-LEGACY0001", status = "awaiting_payment", email = user) {
@@ -265,4 +281,117 @@ test("the studio uses the shared quote and labels submission as a nonbinding inq
   assert.match(studio, /Unverbindlich bei AB3D anfragen/);
   assert.match(studio, /keine Zahlung oder Produktion/);
   assert.match(dashboard, /inquiry: "Unverbindliche Anfrage/);
+});
+
+test("keyed inquiry retries return the original ID and frozen estimate without another write, even after the pricing formula changes", async () => {
+  const first = await post({ requestId: inquiryRequestId }), saved = await first.json();
+  assert.equal(first.status, 200); assert.equal(saved.order.estimatedTotalCents, 4500);
+  const writes = database.writes;
+  runtime.quoteAdjustment = 12_345;
+  const repeated = await post({ requestId: inquiryRequestId.toUpperCase(), estimatedTotal: 1, templateName: "Ignored", complexity: 9 });
+  assert.equal(repeated.status, 200); assert.equal(repeated.headers.get("cache-control"), "private, no-store");
+  assert.equal(repeated.headers.get("x-content-type-options"), "nosniff");
+  assert.deepEqual((await repeated.json()).order, saved.order);
+  assert.equal(database.writes, writes); assert.equal(database.inquiryInserts, 1); assert.equal(rows().length, 1);
+  assert.equal(rows()[0].inquiry_request_id, inquiryRequestId); assert.match(rows()[0].inquiry_request_sha256, /^[a-f0-9]{64}$/);
+  assert.equal(rows()[0].status, "inquiry"); assert.equal(database.db.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n, 0);
+});
+
+test("equivalent normalized contacts and empty optional fields preserve the same inquiry identity", async () => {
+  const first = await (await post({ requestId: inquiryRequestId, requestDetails: { name: " Léa ", country: " CH ", postalCode: " 8000 ", customerNote: " Test\r\nZeile " } })).json();
+  const writes = database.writes;
+  const response = await post({ requestId: inquiryRequestId, requestDetails: { customerNote: "Test\nZeile", phone: " ", postalCode: "8000", country: "CH", name: "Léa" } });
+  assert.equal(response.status, 200); assert.equal((await response.json()).order.id, first.order.id); assert.equal(database.writes, writes);
+  const otherKey = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const empty = await (await post({ requestId: otherKey })).json();
+  const emptyRetry = await post({ requestId: otherKey, requestDetails: { phone: " ", name: "" } });
+  assert.equal(emptyRetry.status, 200); assert.equal((await emptyRetry.json()).order.id, empty.order.id); assert.equal(rows().length, 2);
+});
+
+test("a reused inquiry key with changed quantity, model selection or contact semantics is rejected without mutation", async () => {
+  await post({ requestId: inquiryRequestId, requestDetails: { customerNote: "Erster Wunsch" } });
+  const before = rows(), writes = database.writes;
+  for (const change of [{ quantity: 2 }, { material: "PETG" }, { heightCm: 21 }, { finish: "Premium" },
+    { templateId: "chibi" }, { requestDetails: { customerNote: "Anderer Wunsch" } }, { requestDetails: { name: "Anderer Name" } }]) {
+    const response = await post({ requestId: inquiryRequestId, requestDetails: { customerNote: "Erster Wunsch" }, ...change });
+    assert.equal(response.status, 409); assert.equal((await response.json()).code, "inquiry_conflict");
+  }
+  assert.deepEqual(rows(), before); assert.equal(database.writes, writes);
+});
+
+test("parallel requests with the same account and inquiry key create exactly one row", async () => {
+  const results = await Promise.all([post({ requestId: inquiryRequestId }), post({ requestId: inquiryRequestId }), post({ requestId: inquiryRequestId })]);
+  assert.ok(results.every(response => response.status === 200));
+  const ids = await Promise.all(results.map(async response => (await response.json()).order.id));
+  assert.equal(new Set(ids).size, 1); assert.equal(rows().length, 1); assert.equal(rows()[0].status, "inquiry");
+  const changed = await Promise.all([post({ requestId: inquiryRequestId }), post({ requestId: inquiryRequestId, quantity: 2 })]);
+  assert.deepEqual(changed.map(response => response.status).sort(), [200, 409]); assert.equal(rows().length, 1);
+  const freshKey = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const race = await Promise.all([post({ requestId: freshKey, quantity: 1 }), post({ requestId: freshKey, quantity: 2 })]);
+  assert.deepEqual(race.map(response => response.status).sort(), [200, 409]);
+  assert.equal(rows().filter(row => row.inquiry_request_id === freshKey).length, 1);
+});
+
+test("idempotency keys are private to the authenticated account and never bypass task ownership", async () => {
+  const own = await (await post({ requestId: inquiryRequestId })).json();
+  runtime.actor = other;
+  assert.equal((await post({ requestId: inquiryRequestId })).status, 409, "Another user's task never becomes usable through a known request key");
+  addTask("other-converted-0001", other);
+  const theirs = await post({ requestId: inquiryRequestId, sourceTaskId: "other-converted-0001", email: user });
+  assert.equal(theirs.status, 200); assert.notEqual((await theirs.json()).order.id, own.order.id);
+  assert.equal(rows().length, 2); assert.deepEqual(new Set(rows().map(row => row.email)), new Set([user, other]));
+  for (const actor of [user, other]) {
+    runtime.actor = actor;
+    const listing = await (await GET(new Request(`${origin}/api/production-orders`))).json();
+    assert.equal(listing.orders.length, 1); assert.equal(listing.orders[0].email, actor);
+    assert.doesNotMatch(JSON.stringify(listing), /inquiry_request_|requestSha256|requestId/);
+  }
+});
+
+test("invalid keyed request IDs and same-host cross-scheme origins fail before any database mutation", async () => {
+  for (const requestId of [null, 0, {}, "", "11111111-2222-1333-8444-555555555555", "11111111-2222-4333-7444-555555555555", "../escape", "x".repeat(200)])
+    assert.equal((await post({ requestId })).status, 400);
+  assert.equal((await POST(request("POST", valid, "http://ab3d.example.test"))).status, 403);
+  const noOrigin = new Request(`${origin}/api/production-orders`, { method: "POST", headers: { "content-type": "application/json", "sec-fetch-site": "same-origin" }, body: JSON.stringify(valid) });
+  assert.equal((await POST(noOrigin)).status, 403);
+  assert.equal(database.writes, 0); assert.equal(rows().length, 0);
+});
+
+test("a lost database response after insert remains safely retryable with the same key and no duplicate inquiry", async () => {
+  database.failInquiryAfter = true;
+  let response = await post({ requestId: inquiryRequestId });
+  assert.equal(response.status, 503); assert.equal((await response.clone().json()).code, "inquiry_unavailable");
+  assert.doesNotMatch(await response.text(), /Sensitive|fixture|private\/model|after commit|INSERT/);
+  assert.equal(rows().length, 1); const original = rows()[0], writes = database.writes;
+  response = await post({ requestId: inquiryRequestId }); assert.equal(response.status, 200);
+  assert.equal((await response.json()).order.id, original.id); assert.equal(rows().length, 1); assert.equal(database.writes, writes);
+  database.failInquiryBefore = true;
+  const another = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  response = await post({ requestId: another }); assert.equal(response.status, 503); assert.equal(rows().length, 1);
+  response = await post({ requestId: another }); assert.equal(response.status, 200); assert.equal(rows().length, 2);
+});
+
+test("inquiry idempotency migration preserves legacy requests, permits legacy null keys and prevents duplicate keyed requests per account", () => {
+  const migrationFiles = readdirSync(new URL("../drizzle/", import.meta.url)).filter(name => name.endsWith(".sql")).sort();
+  const newest = migrationFiles.find(name => name.startsWith("0015_")); assert.ok(newest);
+  const old = new DatabaseSync(":memory:");
+  try {
+    old.exec("PRAGMA foreign_keys=ON");
+    for (const name of migrationFiles.filter(name => name < newest)) old.exec(readFileSync(new URL(`../drizzle/${name}`, import.meta.url), "utf8"));
+    for (const email of [user, other]) old.prepare("INSERT INTO accounts(email,token_balance,plan,subscription_status,created_at,updated_at) VALUES (?,20,'free','inactive',0,0)").run(email);
+    old.prepare("INSERT INTO generation_tasks(task_id,email,kind,token_cost,status,refunded,created_at,updated_at) VALUES (?,?,'convert',0,'SUCCEEDED',0,0,0)").run(sourceId, user);
+    const insert = old.prepare("INSERT INTO production_orders(id,email,status,source_task_id,source_task_type,template_name,height_mm,material,finish,quantity,estimated_total_cents,currency,created_at,updated_at) VALUES (?,?,'inquiry',?,'convert','Legacy',200,'PLA','Roh',1,12345,'CHF',0,0)");
+    insert.run("PRINT-LEGACY0001", user, sourceId);
+    old.exec(readFileSync(new URL(`../drizzle/${newest}`, import.meta.url), "utf8"));
+    const legacyRow = old.prepare("SELECT * FROM production_orders").get();
+    assert.equal(legacyRow.status, "inquiry"); assert.equal(legacyRow.estimated_total_cents, 12345);
+    assert.equal(legacyRow.inquiry_request_id, null); assert.equal(legacyRow.inquiry_request_sha256, null);
+    insert.run("PRINT-LEGACY0002", user, sourceId);
+    const update = old.prepare("UPDATE production_orders SET inquiry_request_id=?,inquiry_request_sha256=? WHERE id=?");
+    update.run(inquiryRequestId, "a".repeat(64), "PRINT-LEGACY0001");
+    assert.throws(() => update.run(inquiryRequestId, "b".repeat(64), "PRINT-LEGACY0002"), /UNIQUE/);
+    old.prepare("UPDATE production_orders SET email=? WHERE id=?").run(other, "PRINT-LEGACY0002");
+    update.run(inquiryRequestId, "b".repeat(64), "PRINT-LEGACY0002");
+    assert.equal(old.prepare("SELECT COUNT(*) AS n FROM production_orders").get().n, 2); assert.equal(old.prepare("PRAGMA foreign_key_check").all().length, 0);
+  } finally { old.close(); }
 });
