@@ -19,17 +19,37 @@ Bildern druckbare 3D-Modelle erzeugen.
 - Anmeldung mit ChatGPT
 - persistente Nutzerkonten und Token-Ledger in Cloudflare D1
 - automatische Token-Rückerstattung bei fehlgeschlagenen Generierungen
-- Abo-Anfragen für Studio und Pro
-- B2B- und individuelle Fertigungsanfragen
+- Abo-Anfragen für 3D Studio, CAPPATEX und Complete
+- individuelle, unverbindliche Fertigungsanfragen mit geschützter Betreiberprüfung
+- interne Angebots- und Fertigungsblatt-Entwürfe mit versionierter CHF-Kalkulation
 
 ## Lokale Entwicklung
 
-Voraussetzungen: Node.js 22+ und pnpm.
+Voraussetzungen: Node.js ab 22.15.0 und pnpm 11.9.0 (in `packageManager` festgelegt).
+Die CI verwendet Node.js 24.
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
+
+### Wiederholbarer Qualitätscheck
+
+```bash
+pnpm check
+```
+
+Der Check führt TypeScript-Prüfung, ESLint, genau einen Produktionsbuild und
+anschliessend die Offline-Tests aus. `pnpm test` baut ebenfalls genau einmal
+und führt dann die Tests aus. Nach einem bereits abgeschlossenen Build kann
+`pnpm test:run` die Tests ohne erneuten Build ausführen; einzelne Tests prüfen
+absichtlich die erzeugten Produktionsdateien in `dist/`.
+
+Der GitHub-Workflow `.github/workflows/ci.yml` prüft Pushes auf `main` und
+`codex/cappatex-production` sowie Pull Requests. Er installiert mit dem
+vorhandenen Lockfile und benötigt keine Anbieter-Secrets. Diese Checks
+erzeugen keine echten Generierungen, Zahlungen oder Bestellungen und führen
+weder Deployment noch Produktionsmigrationen aus.
 
 Für lokale KI-Aufrufe wird die ignorierte `.env.local` dieses AB3D-Projekts benötigt:
 
@@ -121,6 +141,10 @@ gesonderte Bestätigung des Betreibers.
 Die D1-Migrationen befinden sich in `drizzle/`. Schemaänderungen werden mit
 `pnpm db:generate` erzeugt und vor dem Deployment geprüft.
 
+Migration `0014_third_expediter.sql` für interne Angebotsentwürfe ist nur
+vorbereitet und lokal getestet. Eine Anwendung auf die Produktionsdatenbank
+oder Bereitstellung dieses Entwicklungsstands ist nicht freigegeben.
+
 ## Veröffentlichung
 
 Produktionsversionen werden über OpenAI Sites gebaut und veröffentlicht. Die
@@ -140,11 +164,14 @@ kein Kundenabo; nach bestätigter Zahlung erhält AB3D die zugehörige Produktio
 Betreiberkonten für Produktionsfreigaben werden serverseitig über
 `AB3D_OWNER_EMAILS` festgelegt.
 
-Kollektion-Bestellungen werden bis dahin als verbindliche Produktionsanfragen
-gespeichert. Produktpreise, Varianten und Versand werden serverseitig erneut
-berechnet; der Browser kann die zu zahlende Summe nicht vorgeben.
+Anfragen zu eigenen 3D-Modellen sind unverbindlich. Interne Prüfung und
+Angebotsentwurf bestätigen weder Zahlung noch Produktionsfreigabe. Physische
+Shop-Checkouts und digitale Tokenkäufe besitzen getrennte Zahlungsnachweise;
+Browserangaben können keine Preise oder Tokengutschriften festlegen.
 
 ## Sicherheit
 
-Siehe [SECURITY.md](SECURITY.md). Kundenbilder werden nicht dauerhaft im Shop
-gespeichert, sondern nur für den jeweiligen Auftrag an Meshy übertragen.
+Siehe [SECURITY.md](SECURITY.md). CAPPATEX speichert Originalmotive und private
+Gestaltungen kontogebunden für die Wiederaufnahme und Druckprüfung. Eine
+öffentliche Galerie benötigt eine gesonderte Einwilligung und Prüfung.
+Offene Betreiberschritte stehen in [NEXT-MANUAL-STEPS.md](docs/NEXT-MANUAL-STEPS.md).
