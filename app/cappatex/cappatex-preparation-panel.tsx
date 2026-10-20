@@ -71,19 +71,22 @@ export default function CappatexPreparationPanel({ product, variant, side, desig
     try {
       const response = await fetch("/api/cappatex/preparations", { method: "POST", headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(30_000), body: JSON.stringify(body) });
-      const result = await response.json();
+      const result = await response.json().catch(() => { throw new Error("Die Speicherantwort ist nicht lesbar. Der Speicherstatus bleibt unklar. Bitte prüfe dieselbe Speicherung erneut."); });
       if (response.status === 202) { setMessage(typeof result?.error === "string" ? result.error : "Speicherstatus noch offen. Bitte mit derselben Auswahl erneut prüfen."); return; }
       // Keep the request ID after an ambiguous server/network failure; only a confirmed
       // failed reservation permits a new attempt. A completed save must never be duplicated.
-      if (!response.ok) { if (result?.code === "failed") onDraftChange(current => ({ ...current, requestId: "", pendingSignature: null }));
-        throw new Error(result?.error || "Speichern fehlgeschlagen."); }
+      if (!response.ok) { if ([409, 422].includes(response.status) && result?.code === "failed") onDraftChange(current => ({ ...current, requestId: "", pendingSignature: null }));
+        throw new Error(typeof result?.error === "string" ? result.error : "Speichern konnte nicht bestätigt werden. Bitte prüfe dieselbe Speicherung erneut."); }
+      if (![200, 201].includes(response.status)) throw new Error("Der Speicherstatus ist noch nicht bestätigt. Bitte prüfe dieselbe Speicherung erneut.");
       const saved = parseSavedPreparationResponse(result, body);
       onDraftChange(current => ({ ...current, receipt: saved, savedSignature: signature }));
       onPersist({ ...draft, requestId, pendingSignature: signature, receipt: saved, savedSignature: signature });
       const url = new URL(window.location.href); url.searchParams.set("preparationId", saved.id); url.hash = "order-preparation";
       window.history.replaceState(window.history.state, "", url);
       setMessage("Alle ausgewählten Druckseiten sind unveränderlich gespeichert. Es wurde keine Bestellung ausgelöst.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Speicherstatus unklar. Bitte mit derselben Auswahl erneut prüfen."); }
+    } catch (error) { setMessage(error instanceof TypeError ? "Die Verbindung ist unterbrochen. Der Speicherstatus bleibt unklar. Bitte prüfe dieselbe Speicherung erneut."
+      : error instanceof Error && error.name === "TimeoutError" ? "Die Speicherung hat zu lange gedauert. Der Speicherstatus bleibt unklar. Bitte prüfe dieselbe Speicherung erneut."
+      : error instanceof Error ? error.message : "Speicherstatus unklar. Bitte mit derselben Auswahl erneut prüfen."); }
     finally { setSaving(false); onSaving(false); }
   }
   return <section className="cappatex-preparation" id="order-preparation" aria-labelledby="preparation-heading">
