@@ -35,7 +35,7 @@ export async function ensureAccount(email: string, displayName?: string | null):
   await env.DB.prepare(
     `INSERT INTO accounts
       (email, display_name, token_balance, plan, subscription_status, created_at, updated_at)
-     VALUES (?, ?, 4, 'free', 'inactive', ?, ?)
+     VALUES (?, ?, 0, 'free', 'inactive', ?, ?)
      ON CONFLICT(email) DO UPDATE SET
        display_name = COALESCE(excluded.display_name, accounts.display_name),
        updated_at = excluded.updated_at`,

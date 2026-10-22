@@ -15,6 +15,7 @@ import {
 import { buildDesignPlan, buildServerMeshPrompt } from "../../design-planner";
 import { meshGeometry, printSize } from "../../meshy-policy";
 import { meshCreationIntent, linkMeshTask, failCreation, archiveMeshTask, importLegacyCreations } from "../../gallery-storage";
+import { reserveAiUsage } from "../../../db/ai-usage";
 
 const MESHY_API = "https://api.meshy.ai/openapi";
 const TASK_ID = /^[a-zA-Z0-9-]{8,80}$/;
@@ -165,12 +166,29 @@ async function beginChargedTask(options: {
   galleryChoice?: unknown;
   galleryRole?: "input"|"preview"|"result"|"version";
 }) {
+  // Reject unfunded requests before reserving shared provider capacity. The
+  // debit below remains atomic if another request spends the balance first.
+  const tokenCost = hasUnlimitedTokens(options.email) ? 0 : options.amount;
+  if (tokenCost > await getTokenBalance(options.email)) {
+    return { ok: false as const, response: Response.json({
+      error: "Du hast nicht genügend Design-Tokens. Dein vorhandenes Guthaben findest du im Konto.",
+      code: "INSUFFICIENT_TOKENS",
+    }, { status: 402 }) };
+  }
+  getApiKey();
   const role=options.galleryRole||"version";
   let creationId:string|null;
   try { creationId=await meshCreationIntent(options.email,options.parentTaskId,options.galleryChoice); }
   catch(error) { return {ok:false as const,response:Response.json({code:"gallery_choice_required",error:error instanceof Error&&error.message==="gallery_choice_required"
     ?"Bitte wähle vor der Erstellung, ob dein Ergebnis privat bleiben oder in der Galerie erscheinen soll.":"Die Sammlung ist noch nicht bereit. Es wurde keine Generierung gestartet."},{status:error instanceof Error&&error.message==="gallery_choice_required"?409:503})}; }
-  const tokenCost = hasUnlimitedTokens(options.email) ? 0 : options.amount;
+  const admission = await reserveAiUsage(options.email, "meshy");
+  if (!admission.allowed) {
+    if(creationId&&!options.parentTaskId)await failCreation(creationId,options.email);
+    return { ok: false as const, response: Response.json({ code: admission.code, error: admission.error }, {
+      status: admission.status, headers: { "Cache-Control": "no-store",
+        ...(admission.retryAfterSeconds ? { "Retry-After": String(admission.retryAfterSeconds) } : {}) },
+    }) };
+  }
   const charge = await chargeOrReply(options.email, options.amount, options.reason);
   if (!charge.ok) {if(creationId&&!options.parentTaskId)await failCreation(creationId,options.email);return { ok: false as const, response: charge.response };}
 
@@ -265,6 +283,11 @@ export async function POST(request: Request) {
       if (!source.ok) return Response.json({ error: source.error }, { status: source.status });
 
       if (body.action === "analyze") {
+        const admission = await reserveAiUsage(user.email, "meshy");
+        if (!admission.allowed) return Response.json({ code: admission.code, error: admission.error }, {
+          status: admission.status, headers: { "Cache-Control": "no-store",
+            ...(admission.retryAfterSeconds ? { "Retry-After": String(admission.retryAfterSeconds) } : {}) },
+        });
         const result = await meshyFetch("/v1/print/analyze", {
           method: "POST",
           body: JSON.stringify({ model_url: source.modelUrl, ...size }),

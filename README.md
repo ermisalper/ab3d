@@ -1,8 +1,9 @@
 # AB3D Creator Platform
 
 AB3D verbindet einen kuratierten Schweizer Design-Shop mit einem KI-gestützten
-3D-Studio. Angemeldete Nutzer erhalten Design-Tokens und können aus Text oder
-Bildern druckbare 3D-Modelle erzeugen.
+3D-Studio. Angemeldete Nutzer können mit vorhandenem Token-Guthaben aus Text
+oder Bildern druckbare 3D-Modelle erzeugen. Neue Konten erhalten keinen
+automatischen Startbonus; bestehende Guthaben bleiben erhalten.
 
 ## Funktionen
 
@@ -66,6 +67,34 @@ Produktplaner verwenden kostenfreie Shopinformationen beziehungsweise Produktreg
 solange `OPENAI_ASSISTANT_ENABLED` nicht ausdrücklich `true` ist. Erst mit diesem
 separaten Kostenschalter, gesetztem `OPENAI_API_KEY` und angemeldetem Nutzer wird
 die Responses API verwendet. Die CAPPATEX-Schalter ersetzen diese Freigabe nicht.
+
+### Schutz vor mehrfachen Gratis-Konten
+
+Neue Konten beginnen mit **0 Tokens**. Bestehende Guthaben, Pläne und die
+ausdrückliche Betreiber-Ausnahme vom Tokenabzug werden nicht verändert.
+Kostenlose Beispiele und die regelbasierte Designhilfe bleiben zugänglich.
+Ein aktives Abo ist für die Nutzung eines vorhandenen Token-Guthabens nicht
+zusätzlich erforderlich. Tokenkäufe bleiben bis zur eigenen Shopabnahme gesperrt.
+
+Vor kostenpflichtigen Meshy-, CAPPATEX-, Assistenten- und Planeraufrufen wird
+eine gemeinsame D1-Reservierung gespeichert: standardmässig höchstens **12
+Anfragen pro Konto in zehn Minuten**, **30 pro Konto und UTC-Tag** und **100
+insgesamt pro UTC-Tag**. Auch Betreiberaufrufe zählen mit. Die optionalen
+Serverwerte `AI_ACCOUNT_10_MINUTE_LIMIT`, `AI_ACCOUNT_DAILY_LIMIT` und
+`AI_PROVIDER_DAILY_LIMIT` erlauben ganze Zahlen von 0 bis 100000; 0 sperrt.
+Ungültige Werte oder eine nicht verfügbare Prüfung sperren Anbieteraufrufe.
+Statusabfragen und die kostenlose regelbasierte Hilfe bleiben nutzbar.
+Live-Assistent und Live-Planer benötigen vorhandenes Guthaben oder die
+ausdrückliche Token-Ausnahme; dabei wird kein neuer Tokenpreis eingeführt.
+
+Die Grenzen zählen zugelassene Versuche, einschliesslich fehlgeschlagener und
+unklarer Antworten. Sie sind **kein CHF-Kostenlimit**. Es gibt weder automatische
+Wiederholungen noch Rücksetzungen einer verbrauchten Anfrage-Reservierung.
+Gespeichert werden nur zufällige ID, Dienst, Zeit und ein SHA-256 der normalisierten
+Konto-E-Mail; keine Prompts, Bilder oder IP-Adressen. Der Hash ist pseudonym,
+nicht anonym. Verschiedene E-Mails werden dadurch nicht als eine Person erkannt.
+Migration `0016_powerful_tenebrous.sql` ist dafür erforderlich und wird in diesem
+Arbeitsschritt nur lokal getestet, nicht in Produktion angewendet.
 
 ## CAPPATEX: OpenAI, Shopify und Printify
 

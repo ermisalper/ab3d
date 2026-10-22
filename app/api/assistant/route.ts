@@ -1,11 +1,10 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY } from "../../contact-details";
+import { ensureAccount, hasUnlimitedTokens } from "../../../db/account";
+import { reserveAiUsage } from "../../../db/ai-usage";
 
 const MAX_MESSAGE_LENGTH = 500;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const RATE_WINDOW_MS = 10 * 60 * 1000;
-const RATE_LIMIT = 12;
-const requestWindows = new Map<string, { count: number; resetAt: number }>();
 
 const facts = `
 AB3D ist ein Schweizer Studio für 3D-gedruckte Wohnobjekte und personalisierte Designs.
@@ -15,7 +14,7 @@ Direktes Bild-zu-3D kostet 2 Tokens. Kreative Bildinterpretation plus Bild-zu-3D
 Die physische Skalierung auf eine exakte Höhe von 5 bis 80 cm kostet 1 Token.
 PLA ist die Standardwahl für Wohndeko; PETG ist robuster und besser für feuchtere Umgebungen.
 Der angezeigte Preis ist ein Richtpreis. AB3D bestätigt Machbarkeit und Endpreis vor der Fertigung.
-Neue Konten erhalten Start-Tokens. Studio und Pro sind als Abo-Anfragen im Konto verfügbar.
+Die Anmeldung ist kostenlos; neue Konten erhalten kein automatisches Gratisguthaben. Eigene KI-Generierungen benötigen vorhandene oder gekaufte Tokens; Tokenkäufe bleiben bis zur Shopfreigabe deaktiviert. 3D Studio, CAPPATEX und Complete sind als Abo-Anfragen im Konto verfügbar.
 Kontakt: ${CONTACT_EMAIL}. WhatsApp: ${CONTACT_PHONE_DISPLAY}. Persönlicher Kontakt zu Berk über /kontakt und /cappatex/kontakt. Produktion und Versandzeiten werden bei der Anfrage bestätigt.
 `;
 
@@ -80,15 +79,16 @@ export async function POST(request: Request) {
       }, { headers: { "Cache-Control": "no-store" } });
     }
 
-    const identifier = await safetyIdentifier(user.email);
-    const now = Date.now();
-    const window = requestWindows.get(identifier);
-    if (window && window.resetAt > now && window.count >= RATE_LIMIT) {
-      return Response.json({ error: "Bitte warte kurz, bevor du weitere Fragen stellst." }, { status: 429 });
+    const account = await ensureAccount(user.email, user.fullName);
+    if (!hasUnlimitedTokens(user.email) && account.tokenBalance < 1) {
+      return Response.json({ answer: fallbackAnswer(message), mode: "guide" }, { headers: { "Cache-Control": "no-store" } });
     }
-    requestWindows.set(identifier, window && window.resetAt > now
-      ? { ...window, count: window.count + 1 }
-      : { count: 1, resetAt: now + RATE_WINDOW_MS });
+    const admission = await reserveAiUsage(user.email, "assistant");
+    if (!admission.allowed) return Response.json({ answer: fallbackAnswer(message), mode: "guide", note: admission.error }, {
+      headers: { "Cache-Control": "no-store",
+        ...(admission.retryAfterSeconds ? { "Retry-After": String(admission.retryAfterSeconds) } : {}) },
+    });
+    const identifier = await safetyIdentifier(user.email);
 
     const response = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",

@@ -10,6 +10,17 @@
 
 ## KI-Generierung
 
+- Neue Konten erhalten 0 automatische Tokens. Bestehende Guthaben und explizite
+  Token-Ausnahmen bleiben erhalten; Konto-E-Mails werden nicht zusammengeführt.
+- Kostenpflichtige KI-Anfragen aller vier Dienste benötigen vor dem Anbieteraufruf
+  eine atomare, gemeinsame D1-Reservierung. Kontogrenzen und gemeinsames UTC-Tageslimit
+  gelten auch für Betreiber. Fehlende Migration, unklare Datenbankantwort oder ungültige
+  Grenzwerte sperren den Aufruf, bevor Tokens abgezogen werden.
+- Die Reservierungen zählen Versuche, keine CHF-Kosten. Sie bleiben auch nach
+  Anbieterfehlern erhalten und lösen weder Wiederholung noch Tokenkorrektur aus.
+  Gespeichert werden pseudonyme Konto-Hashes, Dienst und Zeitpunkt; keine Roh-E-Mails,
+  Prompts, IP-Adressen oder Gerätefingerabdrücke. Dies erkennt keine Person hinter
+  unterschiedlichen Konten. Vorhandene Guthaben werden nicht rückwirkend entzogen.
 - Jeder kostenpflichtige Meshy-Auftrag erfordert eine serverseitig bestätigte
   Anmeldung und ausreichende AB3D Design-Tokens.
 - Task-IDs werden einem Konto zugeordnet; fremde Tasks dürfen weder gelesen
@@ -31,8 +42,10 @@
 - Der OpenAI-Schlüssel bleibt serverseitig und wird nie an den Browser
   übertragen.
 - Ohne OpenAI-Schlüssel arbeitet der Assistent mit kuratiertem Shopwissen.
-- Live-KI ist nur für angemeldete Nutzer aktiv, begrenzt die Anfragerate und
-  erhält keine Zahlungs- oder API-Zugangsdaten.
+- Live-KI benötigt Anmeldung und vorhandenes Guthaben oder explizite Token-Ausnahme,
+  zählt zu den gemeinsamen Anfragegrenzen und erhält keine Zahlungs- oder
+  API-Zugangsdaten. Ohne diese Voraussetzungen antwortet die kostenlose regelbasierte
+  Hilfe. Es wird kein Token für diese Hilfsantworten abgezogen.
 
 ## Bestellanfragen
 

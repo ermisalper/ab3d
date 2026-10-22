@@ -15,9 +15,9 @@ export const creatorPlans: CreatorPlan[] = [
     name: "Explorer",
     price: "CHF 0",
     cadence: "einmalig",
-    tokens: "4 Start-Tokens",
+    tokens: "Tokens separat erhältlich",
     audience: "Beide Studios kennenlernen",
-    features: ["3D- und Motivvorschauen testen", "Physische Produkte bestellen", "Kein STL- oder HD-Dateiexport"],
+    features: ["Beispiele kostenlos ansehen", "Eigene KI-Designs mit Tokens erstellen", "Kein STL- oder HD-Dateiexport"],
   },
   {
     id: "3d-studio",

@@ -1,8 +1,54 @@
 # Verkaufsvorbereitung für AB3D und CAPPATEX
 
-Stand 20.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-production`. Die Site bleibt owner-private. Dieser Schritt ist keine Verkaufsfreigabe; ältere Prüfprotokolle behalten ihren damaligen Stand.
+Stand 22.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-production`. Die Site bleibt owner-private. Dieser Schritt ist keine Verkaufsfreigabe; ältere Prüfprotokolle behalten ihren damaligen Stand.
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
+
+## Schutz vor mehrfachen Gratis-Konten · 22.10.2026 · nur Quellstand
+
+Auf ausdrücklichen Betreiberwunsch werden neue Konten mit 0 statt 4 automatischen
+Tokens angelegt. Bestehende Guthaben, Zahlungen, Pläne und explizite Ausnahmen
+vom Tokenabzug bleiben unverändert. Aktuelle Explorer-/Studio-/Assistententexte
+versprechen keinen Startbonus mehr; kostenlose Beispiele und regelbasierte Hilfe
+bleiben nutzbar. Vorhandenes Guthaben benötigt kein zusätzliches Abo.
+
+Eine zentrale atomare D1-Reservierung begrenzt kostenpflichtige Meshy-, CAPPATEX-,
+Assistenten- und Planeraufrufe gemeinsam. Standard: 12/Konto/10 Minuten,
+30/Konto/UTC-Tag, 100/gesamt/UTC-Tag, auch für Betreiber. Ungültige Grenzwerte,
+fehlende Tabelle oder unbestätigte Datenbankantwort sperren Anbieteraufrufe.
+Prüfung nach Guthaben-/Zugangsprüfung und vor Tokenabzug; Statusabfragen zählen
+nicht mit. Live-Textassistent/-Planer benötigen positives vorhandenes Guthaben
+oder die explizite Token-Ausnahme, sonst antwortet die kostenlose regelbasierte Hilfe.
+Fehlerhafte oder unklare Anbieterantworten geben die Anfrage-Reservierung nicht
+automatisch zurück. Die Grenzen zählen Versuche und garantieren kein CHF-Budget.
+
+Die neue Tabelle enthält nur UUID, Konto-Hash, Dienst und Zeit, keine Roh-E-Mails,
+Prompts, Bilder, IP-Adressen oder Gerätefingerabdrücke. Der Konto-Hash verbindet
+keine unterschiedlichen E-Mail-Adressen mit einer Person. Das Entfernen des
+automatischen Bonus verhindert neue Gratisguthaben durch erneute Anmeldung;
+historische Restguthaben bleiben bewusst erhalten. Keine CAPTCHA- oder Identitätsprüfung
+wurde eingerichtet und keine externe Anbieter-Budgetkonfiguration geprüft.
+
+Migration `0016_powerful_tenebrous.sql` ergänzt die Tabelle und ändert den
+Datenbankdefault auf 0 über Kopie ausschliesslich der nicht referenzierten
+Guthabenspalte. Kein Löschen der referenzierten Kontotabelle, kein Abschalten von
+Fremdschlüsseln. Sie ist nur vorbereitet; Produktionsmigration und Deployment
+bleiben ausdrücklich aus. Neue Standardwerte werden ausschliesslich in Code und
+`.env.example` dokumentiert, keine Hosting-Variablen oder Geheimnisse geändert.
+
+**Lokal geprüft:** `pnpm check` vollständig erfolgreich: TypeScript, ESLint,
+genau ein Produktionsbuild und **697/697 Tests**, keine übersprungenen Tests.
+Die tatsächlichen Routen werden mit lokalem SQLite und simulierten Anbietern
+geprüft: kein Anbieteraufruf/Tokenabzug bei abgewiesener Reservierung, kein
+Quotenverbrauch durch neue unfinanzierte Konten, gemeinsame Betreibergrenzen,
+weiter nutzbare Statusabfragen und kostenlose Hilfsantworten. Vier unabhängige
+SQLite-Verbindungen überschreiten weder 12 gemeinsame Kontozulassungen noch 100
+globale Zulassungen. Migration mit bestehenden Konten und acht Kindtabellen
+sowie Unterbrechungen vor/nach dem Spaltenwechsel geprüft: Bestände und
+Fremdschlüssel bleiben erhalten bzw. vollständig rücksetzbar. Zusätzliche
+unabhängige Codeprüfung ohne wesentlichen Befund. Quellscan über 403 Dateien
+ohne Treffer vorhandener lokaler Secretwerte; Diffprüfung erfolgreich.
+Keine Browser-, Anbieter-, Zahlungs- oder Live-Abnahme dieses Schritts.
 
 ## Weitere Absicherung nach Commit 566ef06 · ausschliesslich lokal
 

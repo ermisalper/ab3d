@@ -7,6 +7,7 @@ import { createArtworkPreview } from "../../cappatex-preview";
 import { RESERVE_DESIGN, DEBIT_DESIGN, LOG_DESIGN, REFUND_DESIGN, LOG_REFUND, FINISH_FAILURE } from "../../../db/cappatex-generation";
 import { parseGalleryChoice } from "../../gallery-policy";
 import { reserveCreation, readyArtworkCreation, failCreation } from "../../gallery-storage";
+import { reserveAiUsage } from "../../../db/ai-usage";
 
 const CANVASES: Record<string, string> = { square: "2048x2048", portrait: "2048x3072", landscape: "3072x2048" };
 const STYLES = new Set(["Minimal", "Illustrativ", "Retro", "Streetwear"]);
@@ -154,6 +155,11 @@ export async function POST(request: Request) {
     if (!access.pilotOwner && !hasUnlimitedTokens(user.email) && account.tokenBalance < 1) {
       return clientError(402, "insufficient_tokens", "Für eine CAPPATEX Motivvorschau brauchst du 1 Design-Token.");
     }
+    const admission = await reserveAiUsage(user.email, "cappatex");
+    if (!admission.allowed) return Response.json({ code: admission.code, error: admission.error }, {
+      status: admission.status, headers: { "Cache-Control": "no-store",
+        ...(admission.retryAfterSeconds ? { "Retry-After": String(admission.retryAfterSeconds) } : {}) },
+    });
     const exempt = access.pilotOwner || hasUnlimitedTokens(user.email);
     const results = await env.DB.batch([
       env.DB.prepare(RESERVE_DESIGN)

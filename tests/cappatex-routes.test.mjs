@@ -238,7 +238,8 @@ const configured = { CAPPATEX_CHECKOUT_ENABLED: "true", CAPPATEX_FULFILLMENT_ENA
   CAPPATEX_AUTO_PRODUCTION_ENABLED: "false", PRINTIFY_SHOP_ID: profile.shopId,
   PRINTIFY_API_TOKEN: "local-fixture-not-a-real-token", PRINTIFY_CATALOG_API_TOKEN: "", SHOPIFY_WEBHOOK_SECRET: WEBHOOK_SECRET,
   SHOPIFY_STORE_DOMAIN: STORE_DOMAIN, SHOPIFY_API_VERSION: "2026-07", SHOPIFY_STOREFRONT_ACCESS_TOKEN: "local-fixture-only",
-  AB3D_OWNER_EMAILS: "", AB3D_UNLIMITED_EMAILS: "" };
+  AB3D_OWNER_EMAILS: "", AB3D_UNLIMITED_EMAILS: "", AI_ACCOUNT_10_MINUTE_LIMIT: "12",
+  AI_ACCOUNT_DAILY_LIMIT: "30", AI_PROVIDER_DAILY_LIMIT: "100" };
 const previousEnv = Object.fromEntries(Object.keys(configured).map(key => [key, process.env[key]]));
 const previousFetch = globalThis.fetch, previousNow = Date.now;
 let fixture;
@@ -672,6 +673,45 @@ function allowOfflineGeneration() {
 }
 
 describe("offline real CAPPATEX generation storage gates", { concurrency: false }, () => {
+  for (const issue of ["limit", "missing migration", "unknown write"]) test(`AI admission ${issue} prevents image dispatch and token debit`, async () => {
+    process.env.CAPPATEX_GENERATION_ENABLED = "true";
+    process.env.CAPPATEX_GENERATION_AUDIENCE = "subscribers";
+    if(issue === "limit") process.env.AI_PROVIDER_DAILY_LIMIT = "0";
+    if(issue === "missing migration") fixture.db.sqlite.exec("DROP TABLE ai_usage_admissions");
+    if(issue === "unknown write") {
+      const prepare=fixture.db.prepare.bind(fixture.db);
+      fixture.db.prepare=sql=>{
+        const statement=prepare(sql);
+        return sql.startsWith("INSERT INTO ai_usage_admissions") ? {bind:(...args)=>({run:async()=>{
+          await statement.bind(...args).run();return {success:true,meta:{}};
+        }})} : statement;
+      };
+    }
+    const response = await callGeneration(), body = await response.json();
+    assert.equal(response.status,issue === "limit" ? 429 : 503);
+    assert.match(body.code,/^ai_usage_/);
+    assertNoTokensOrNetwork();
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM cappatex_designs").get().n,0);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM gallery_entries").get().n,0);
+    if(issue === "limit") assert.ok(Number(response.headers.get("retry-after")) > 0);
+  });
+
+  test("zero-balance customer is rejected before consuming shared AI capacity", async () => {
+    process.env.CAPPATEX_GENERATION_ENABLED = "true";
+    process.env.CAPPATEX_GENERATION_AUDIENCE = "subscribers";
+    fixture.db.sqlite.prepare("UPDATE accounts SET token_balance=0 WHERE email=?").run(EMAIL);
+    const response=await callGeneration();
+    assert.equal(response.status,402);assert.equal(fixture.requests.length,0);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n,0);
+    assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n,0);
+  });
+
+  test("pilot owner cannot bypass the shared provider request limit", async () => {
+    process.env.CAPPATEX_GENERATION_ENABLED = "true";process.env.AI_PROVIDER_DAILY_LIMIT = "0";
+    const response=await callGeneration();
+    assert.equal(response.status,429);assertNoTokensOrNetwork();
+  });
+
   for (const column of ["artwork_width", "preview_key"]) {
     test(`missing ${column} prevents an image request before a reservation or debit`, async () => {
       process.env.CAPPATEX_GENERATION_ENABLED = "true";

@@ -53,6 +53,7 @@ class OfflineD1 {
   }
 }
 const oldFetch=globalThis.fetch, oldEnv={...process.env};
+const quotaSettings = ["AI_ACCOUNT_10_MINUTE_LIMIT", "AI_ACCOUNT_DAILY_LIMIT", "AI_PROVIDER_DAILY_LIMIT"];
 const origin="https://ab3d.example.test", email="meshy-owner@example.test";
 const image="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
 let database;
@@ -60,6 +61,7 @@ beforeEach(()=>{
   database=new OfflineD1();fixture.env.DB=database;fixture.actor=email;fixture.requests=[];fixture.resultStatus=200;
   process.env.MESHY_API_KEY="offline-placeholder-never-a-real-key";
   process.env.AB3D_UNLIMITED_EMAILS="";process.env.AB3D_OWNER_EMAILS="";
+  for (const key of quotaSettings) delete process.env[key];
   database.sql.prepare("INSERT INTO accounts(email,token_balance,plan,subscription_status,created_at,updated_at) VALUES (?,20,'3d-studio','active',0,0)").run(email);
   globalThis.fetch=async (url,init={})=>{
     assert.ok(String(url).startsWith("https://api.meshy.ai/openapi/"),"Only offline Meshy fixtures are allowed");
@@ -74,7 +76,7 @@ beforeEach(()=>{
 });
 afterEach(()=>{
   database.sql.close();globalThis.fetch=oldFetch;
-  for(const k of ["MESHY_API_KEY","AB3D_UNLIMITED_EMAILS","AB3D_OWNER_EMAILS"]){
+  for(const k of ["MESHY_API_KEY","AB3D_UNLIMITED_EMAILS","AB3D_OWNER_EMAILS",...quotaSettings]){
     if(oldEnv[k]===undefined)delete process.env[k];else process.env[k]=oldEnv[k];
   }
 });
@@ -144,6 +146,63 @@ test("upstream rejection refunds the unstarted charge and is never retried",asyn
   fixture.resultStatus=429;
   const r=await post({action:"create",type:"image",quality:"quality",imageDatas:[image]});assert.equal(r.status,429);
   assert.equal(balance(),20);assert.equal(posts().length,1);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n,1,"Provider failure does not release request capacity");
+});
+
+test("unfunded generation cannot consume global AI capacity", async()=>{
+  database.sql.prepare("UPDATE accounts SET token_balance=0 WHERE email=?").run(email);
+  const r=await post({action:"create",type:"image",imageDatas:[image]});
+  assert.equal(r.status,402);assert.equal(posts().length,0);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n,0);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n,0);
+});
+
+for (const issue of ["limit", "missing migration", "unknown write"]) test(`AI admission ${issue} blocks Meshy before debit or provider dispatch`, async()=>{
+  if(issue==="limit")process.env.AI_PROVIDER_DAILY_LIMIT="0";
+  if(issue==="missing migration")database.sql.exec("DROP TABLE ai_usage_admissions");
+  if(issue==="unknown write"){
+    const prepare=database.prepare.bind(database);
+    database.prepare=query=>{
+      const statement=prepare(query);
+      return query.startsWith("INSERT INTO ai_usage_admissions") ? {bind:(...args)=>({run:async()=>{
+        await statement.bind(...args).run();return {success:true,meta:{}};
+      }})} : statement;
+    };
+  }
+  const r=await post({action:"create",type:"image",imageDatas:[image]}),body=await r.json();
+  assert.equal(r.status,issue==="limit"?429:503);
+  assert.match(body.code,/^ai_usage_/);assert.equal(posts().length,0);assert.equal(balance(),20);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n,0);
+  if(issue==="limit")assert.ok(Number(r.headers.get("retry-after"))>0);
+});
+
+test("missing Meshy configuration cannot spend tokens or reserve AI capacity", async()=>{
+  delete process.env.MESHY_API_KEY;
+  const r=await post({action:"create",type:"image",imageDatas:[image]});
+  assert.equal(r.status,500);assert.equal(posts().length,0);assert.equal(balance(),20);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n,0);
+});
+
+test("token-exempt operators are still subject to AI request limits", async()=>{
+  process.env.AB3D_UNLIMITED_EMAILS=email;process.env.AI_PROVIDER_DAILY_LIMIT="0";
+  database.sql.prepare("UPDATE accounts SET token_balance=0 WHERE email=?").run(email);
+  assert.equal((await post({action:"create",type:"image",imageDatas:[image]})).status,429);
+  assert.equal(posts().length,0);assert.equal(balance(),0);
+});
+
+test("zero-token analysis is capped while existing task polling remains available", async()=>{
+  source("owned-model-1234","resize");process.env.AI_PROVIDER_DAILY_LIMIT="0";
+  const denied=await post({action:"analyze",sourceTaskId:"owned-model-1234",sourceTaskType:"resize",heightCm:18});
+  assert.equal(denied.status,429);assert.equal(posts().length,0);assert.equal(balance(),20);
+  // A pending response avoids fixture asset downloads; polling itself is real.
+  globalThis.fetch=async(url,init={})=>{
+    assert.equal(init.method,undefined);fixture.requests.push({url:String(url),method:"GET"});
+    return Response.json({status:"IN_PROGRESS",progress:25});
+  };
+  const polled=await GET(new Request(`${origin}/api/meshy?taskId=owned-model-1234&type=resize`));
+  assert.equal(polled.status,200);assert.equal((await polled.json()).progress,25);
+  assert.equal(posts().length,0);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n,0);
 });
 
 for(const action of ["analyze","repair"])for(const heightCm of [2,18,80])test(`${action} includes FDM and the actual ${heightCm} cm print size`,async()=>{

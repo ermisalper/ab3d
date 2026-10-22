@@ -1,10 +1,9 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { buildDesignPlan } from "../../design-planner";
+import { ensureAccount, hasUnlimitedTokens } from "../../../db/account";
+import { reserveAiUsage } from "../../../db/ai-usage";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const RATE_WINDOW_MS = 10 * 60 * 1000;
-const RATE_LIMIT = 8;
-const requestWindows = new Map<string, { count: number; resetAt: number }>();
 
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
@@ -56,15 +55,16 @@ export async function POST(request: Request) {
       return Response.json({ plan, mode: "product-rules" }, { headers: { "Cache-Control": "no-store" } });
     }
 
-    const identifier = await safetyIdentifier(user.email);
-    const now = Date.now();
-    const window = requestWindows.get(identifier);
-    if (window && window.resetAt > now && window.count >= RATE_LIMIT) {
+    const account = await ensureAccount(user.email, user.fullName);
+    if (!hasUnlimitedTokens(user.email) && account.tokenBalance < 1) {
       return Response.json({ plan, mode: "product-rules" }, { headers: { "Cache-Control": "no-store" } });
     }
-    requestWindows.set(identifier, window && window.resetAt > now
-      ? { ...window, count: window.count + 1 }
-      : { count: 1, resetAt: now + RATE_WINDOW_MS });
+    const admission = await reserveAiUsage(user.email, "planner");
+    if (!admission.allowed) return Response.json({ plan, mode: "product-rules", note: admission.error }, {
+      headers: { "Cache-Control": "no-store",
+        ...(admission.retryAfterSeconds ? { "Retry-After": String(admission.retryAfterSeconds) } : {}) },
+    });
+    const identifier = await safetyIdentifier(user.email);
 
     const response = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",

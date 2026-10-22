@@ -12,10 +12,10 @@ gesonderte Freigabe. Sie aktivieren durch diese Dokumentation keinen Verkauf.
 
 ## 2. Spätere Migration und Bereitstellung gesondert genehmigen
 
-- **Fehlt:** Produktionsanwendung der vorbereiteten Migrationen `0014_third_expediter.sql` und `0015_brief_onslaught.sql` sowie Bereitstellung des geprüften Entwicklungsstands.
+- **Fehlt:** Produktionsanwendung der vorbereiteten Migrationen `0014_third_expediter.sql`, `0015_brief_onslaught.sql` und `0016_powerful_tenebrous.sql` sowie Bereitstellung des geprüften Entwicklungsstands.
 - **Wo:** Bestehende D1-/Sites-Verwaltung, nach Prüfung des Branches `codex/cappatex-production`.
-- **Benötigt:** Explizite Freigabe, Datenbanksicherung und abgestimmter Rücksetzungsweg. Vorher vorhandene Tabellen und Migrationsstand prüfen; keine SQL-Datei blind erneut ausführen.
-- **Erfolgreich:** Zwei neue interne Angebotstabellen und Versionsindex sowie zwei optionale Anfrage-ID-/Hashspalten mit Eindeutigkeitsindex vorhanden; alte Anfragen unverändert. Betreiber können Entwürfe speichern und Kunden erhalten keinen Zugriff. Eine wiederholte Studio-Anfrage mit derselben ID erzeugt genau einen Datensatz. Neue Site-Version und zugehöriger Git-Commit sind dokumentiert. Bis dahin sind die neuen Funktionen nur lokal implementiert.
+- **Benötigt:** Explizite Freigabe, Datenbanksicherung und abgestimmter Rücksetzungsweg. Vorher vorhandene Tabellen und Migrationsstand prüfen; keine SQL-Datei blind erneut ausführen. Die gemeinsame KI-Anfragegrenze vor Bereitstellung prüfen: Standard 12/Konto/10 Minuten, 30/Konto/UTC-Tag und 100/gesamt/UTC-Tag; optionale Serverwerte dürfen nur ganzzahlig 0–100000 sein, 0 sperrt. Diese Werte begrenzen Anfragen, kein CHF-Budget. Keine neuen Schlüssel erforderlich.
+- **Erfolgreich:** Zwei neue interne Angebotstabellen und Versionsindex, zwei optionale Anfrage-ID-/Hashspalten mit Eindeutigkeitsindex sowie `ai_usage_admissions` mit beiden Zeitindizes vorhanden; alte Anfragen, Kontoguthaben und Zuordnungen unverändert. Neue Konten starten auch beim Datenbankdefault mit 0 Tokens. Betreiber können Entwürfe speichern und Kunden erhalten keinen Zugriff. Eine wiederholte Studio-Anfrage mit derselben ID erzeugt genau einen Datensatz. Eine erlaubte simulierte Grenzprüfung bestätigt den zentralen KI-Stopp ohne kostenpflichtigen Anbieteraufruf. Neue Site-Version und zugehöriger Git-Commit sind dokumentiert. Bis dahin sind die neuen Funktionen nur lokal implementiert.
 
 ## 3. AB3D-Kalkulation und Fertigungsweg bestätigen
 

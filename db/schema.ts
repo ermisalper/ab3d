@@ -4,13 +4,22 @@ import { sql } from "drizzle-orm";
 export const accounts = sqliteTable("accounts", {
   email: text("email").primaryKey(),
   displayName: text("display_name"),
-  tokenBalance: integer("token_balance").notNull().default(2),
+  tokenBalance: integer("token_balance").notNull().default(0),
   plan: text("plan").notNull().default("free"),
   subscriptionStatus: text("subscription_status").notNull().default("inactive"),
   requestedPlan: text("requested_plan"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+// Pseudonymous request admissions shared by every paid AI service. No prompts or IPs.
+export const aiUsageAdmissions = sqliteTable("ai_usage_admissions", {
+  id: text("id").primaryKey(),
+  accountHash: text("account_hash").notNull(),
+  service: text("service").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (table) => [index("ai_usage_admissions_account_time_idx").on(table.accountHash, table.createdAt),
+  index("ai_usage_admissions_time_idx").on(table.createdAt)]);
 
 export const tokenLedger = sqliteTable(
   "token_ledger",
