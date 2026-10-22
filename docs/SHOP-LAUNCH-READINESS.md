@@ -4,6 +4,77 @@ Stand 22.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-prod
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
 
+## Konto und Generierungsabläufe absichern · 22.10.2026 · nur Quellstand
+
+Fortsetzung auf sauberem `cc37032f41c8f44502c317d9b96472e90e984357` desselben
+Arbeitsbranches. Der vorherige [GitHub-CI-Lauf 39816182706](https://github.com/ermisalper/ab3d/actions/runs/39816182706)
+ist inzwischen mit `success` abgeschlossen. Dieser Nachweis gilt für den vorherigen
+Stand; die folgenden Änderungen werden separat lokal geprüft und auf GitHub gesichert.
+Kein Deployment, keine Produktionsmigration, keine Anbieter-/Browserabfrage und
+keine Änderung an Schaltern, Preisen, Zugangsdaten, Verkäufen oder Produktion.
+
+**3D-Studio:** Vor dem ersten asynchronen Verbindungstest wird ein synchroner
+Laufwächter gesetzt. Dadurch erzeugt ein Doppelklick bei langsamer Verbindung
+keine zwei Generierungsabläufe. Stoppen, Modellwechsel und Verlassen machen alte
+Antworten ungültig; nach jeder Antwort wird der Lauf erneut geprüft, bevor Daten
+übernommen oder weitere kostenpflichtige Schritte gestartet werden. Verspätete
+Druckaufbereitungen überschreiben kein neues Modell. Ein gestoppter Browserlauf
+storniert keinen angenommenen Anbieterauftrag; der Hinweis verweist vor einem
+erneuten Start auf die eigene Sammlung. Keine neue automatische Erstattungsregel.
+
+Der Verbindungstest benötigt den tatsächlichen HTTP200-Dienstnachweis; jeder
+Startbeleg zusätzlich eine gültige Task-ID. HTML, HTTP202 oder unvollständige
+Antworten bestätigen keinen Start. Serverseitig bleiben unlesbare Meshy-Annahmen,
+fehlende/ungültige Task-IDs, HTTP5xx, Transportfehler nach POST und gescheiterte
+lokale Zuordnung nach Annahme ausdrücklich unbestätigt (`provider_submission_uncertain`,
+HTTP503). Keine erfundene ID, automatische Wiederholung oder Gutschrift aus einem
+unklaren Ausgang. Die bisherige Behandlung nachgewiesener Eingabe-/Autorisierungs-/
+Guthaben-/Ratenablehnungen bleibt erhalten. Eine angenommene, aber lokal nicht
+zuordenbare Aufgabe benötigt später manuellen Abgleich im vorhandenen Anbieterkonto;
+dies ist keine neu implementierte automatische Wiederherstellung.
+
+**Konto und Abo-Anfragen:** Eine weitere Anfrage ersetzt nicht mehr den Status
+eines aktiven oder laufenden Testabos durch „pending“. Bereits gesetzte andere
+Abostatus, Plan, Guthaben und Ledger bleiben ebenfalls erhalten. Derselbe offene
+Planwunsch je Konto wird mit atomarem `INSERT … SELECT … WHERE NOT EXISTS`
+zusammengeführt. Es wird weder bezahlt noch ein Abo aktiviert. Fremde Herkunft,
+unbekannte Pläne und Browserfelder für Preis, Guthaben oder Status werden
+abgewiesen. Eine unklare Transaktionsantwort ist keine Speicherbestätigung;
+ein ausdrücklicher Wiederholungsversuch erzeugt keinen zweiten offenen Wunsch.
+
+Die tatsächliche Konto-Komponente erhält pro E-Mail einen eigenen Lebenszyklus.
+Verspätete Konto-, Betreiber-, Bestell- und Schreibantworten des vorherigen Kontos
+werden verworfen. Synchrone Klicksperren und `finally` verhindern doppelte
+Schreibanfragen und hängende Bedienelemente nach Verbindungsfehlern. Nur HTTP200
+mit passender Abo-Anfragebestätigung gilt als gespeichert. Ungeprüfte Daten werden
+als solche angezeigt; ein fehlgeschlagenes Aktualisieren erfindet kein Nullguthaben
+oder eine leere Liste. Der bisherige Plan und der getrennte Planwunsch bleiben erkennbar.
+
+**Anfragegrenzen:** Ein gemeinsamer kleiner Streamleser begrenzt die tatsächlich
+gelesenen Bytes vor JSON-Verarbeitung. Fehlende oder falsch kleine Content-Length
+umgehen die bisherigen Grössengrenzen nicht mehr. Ungültiges UTF-8, JSON und
+falsch typisierte notwendige Eingaben werden vor KI-Aufrufen abgewiesen.
+Vorhandene legitime Formate und Grössengrenzen bleiben erhalten. Der Produktplaner
+behandelt auch `constructor`/`__proto__` als unbekannte Vorlagen, statt Eigenschaften
+des Objektprototyps als Produktregeln zu verwenden.
+
+**Lokal geprüft:** `pnpm check` vollständig erfolgreich: TypeScript, ESLint,
+genau ein Produktionsbuild und **843/843 Tests**, keine übersprungenen Tests.
+Gegenüber 697 sind 146 gezielte Regressionen hinzugekommen: 17 tatsächliche
+3D-Studio-Komponentenfälle, 12 Konto-Komponentenfälle, 9 Konto-/SQLite-Routenfälle
+und 108 JSON-/KI-Routen-/Anbieterannahmefälle. Vier Studio-Race-Fehler und elf
+ungültige Antwortfälle wurden vor den jeweiligen Korrekturen reproduziert.
+Neue Tests prüfen tatsächliche Handler und React-Komponenten, lokale SQLite-Daten
+und simulierte Anbieter. Keine unabhängige Nachbildung der Anwendungslogik.
+Zusätzliche unabhängige Codeprüfung ohne wesentlichen Befund; dabei 183 gezielte
+Offline-Tests ebenfalls erfolgreich. Quellscan über 408 Dateien ohne Treffer
+vorhandener lokaler Secretwerte; Diffprüfung erfolgreich. Keine neue Migration
+oder Abhängigkeit erforderlich.
+Quellcommits: `2b13301` (Anfragegrenzen und unklare Anbieterannahmen), `6effa9e`
+(3D-Studio) und `69c233b` (Konto-/Abo-Anfragen). Ein Push ist kein Deployment.
+Browserabnahme und externe Anbieter-/Zahlungsabnahme bleiben unverändert offen;
+notwendige Betreiberhandlungen stehen in [NEXT-MANUAL-STEPS.md](NEXT-MANUAL-STEPS.md).
+
 ## Schutz vor mehrfachen Gratis-Konten · 22.10.2026 · nur Quellstand
 
 Auf ausdrücklichen Betreiberwunsch werden neue Konten mit 0 statt 4 automatischen

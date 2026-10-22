@@ -33,6 +33,18 @@
   Uploadformate wie SVG oder HTML werden nicht akzeptiert.
 - Modell- und Bild-URLs aus KI-Antworten werden im Browser auf verschlüsselte
   Meshy-Domains begrenzt.
+- KI- und Abo-Anfragen begrenzen die tatsächlich gelesenen JSON-Bytes, auch ohne
+  vertrauenswürdige Content-Length. Ungültiges UTF-8, fehlerhaftes JSON und falsche
+  erforderliche Feldtypen werden vor Anbieteraufrufen zurückgewiesen.
+- Im 3D-Studio sperrt ein synchroner Laufwächter doppelte Starts. Antworten eines
+  gestoppten oder verlassenen Laufs dürfen weder das neue Modell überschreiben noch
+  kostenpflichtige Folgeschritte auslösen. Eine gestoppte Ansicht storniert keinen
+  bereits beim Anbieter gestarteten Auftrag.
+- Verbindungstest und Startbeleg werden nach dem tatsächlichen Antwortvertrag geprüft.
+  Unlesbare oder unvollständige Meshy-Annahmen, Transportfehler nach Versand sowie
+  Anbieter-Serverfehler werden als unbestätigt gemeldet: kein erfundener Task, keine
+  automatische Wiederholung und keine aus diesem unklaren Ausgang abgeleitete Gutschrift.
+  Auch eine gescheiterte lokale Zuordnung nach Anbieterannahme verlangt zuerst Abgleich.
 - Bildinterpretation und Folgegenerierung prüfen das notwendige Gesamtguthaben,
   damit kein kostenpflichtiger Zwischenschritt ohne nutzbares 3D-Ergebnis
   gestartet wird.
@@ -59,6 +71,18 @@
   bindet sie eindeutig an Konto und normalisierte Anfrage; dieselbe ID mit
   geändertem Inhalt wird abgewiesen. Automatische Wiederholungen sind nicht
   vorgesehen. Ältere Anfragen ohne Wiederholungs-ID bleiben lesbar.
+
+## Konto und Abo-Anfragen
+
+- Eine Abo-Anfrage ist keine Zahlung oder Abo-Aktivierung. Bestehende aktive,
+  laufende Test- und andere bereits gesetzte Abostatus bleiben bei einer Anfrage
+  erhalten. Derselbe noch offene Wunsch desselben Kontos wird nicht doppelt angelegt.
+- Der Abo-Endpunkt prüft die Herkunft und erlaubt ausschliesslich eine bekannte
+  Plan-ID; Token-, Preis-, Konto- und Statusfelder aus dem Browser werden abgewiesen.
+  Wunsch und Anfrage werden in einer Datenbanktransaktion gespeichert.
+- Kontoansichten trennen Daten und laufende Anfragen nach angemeldeter E-Mail.
+  Fehlende oder unbestätigte Antworten erscheinen nicht als Nullguthaben, leere
+  Bestellhistorie oder erfolgreiche Speicherung. Keine automatischen Schreibwiederholungen.
 
 ## Interne Bearbeitung und Angebotsentwürfe
 
