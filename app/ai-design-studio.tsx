@@ -192,6 +192,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const generationRef = useRef(0);
+  const pendingRunRef = useRef<number | null>(null);
   const inquiryPendingRef = useRef(false);
   const inquiryRequestIds = useRef(new Map<string, string>());
 
@@ -237,6 +238,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
 
   useEffect(() => () => {
     generationRef.current += 1;
+    pendingRunRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -249,6 +251,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
 
   const resetResult = () => {
     generationRef.current += 1;
+    pendingRunRef.current = null;
     setState("idle");
     setProgress(0);
     setStatusText("Bereit für deine Idee");
@@ -331,10 +334,11 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
 
   const stopWatching = () => {
     generationRef.current += 1;
+    pendingRunRef.current = null;
     setState("idle");
     setProgress(0);
     setStartedAt(0);
-    setStatusText("Überwachung gestoppt – du kannst einen neuen Auftrag starten");
+    setStatusText("Ansicht angehalten – gestartete Aufträge laufen weiter. Prüfe deine Sammlung, bevor du neu startest.");
     setError("");
   };
 
@@ -386,11 +390,36 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
     }
   };
 
+  const assertCurrentRun = (runId: number) => {
+    if (generationRef.current !== runId) throw new Error("Generierung abgebrochen.");
+  };
+
+  // A stopped view does not cancel an accepted provider task. It must, however,
+  // ignore late responses before updating this model or starting another step.
+  const readRunJson = async (response: Response, runId: number) => {
+    assertCurrentRun(runId);
+    const data = await response.json().catch(() => null);
+    assertCurrentRun(runId);
+    if (response.status !== 200 || !data || typeof data !== "object" || Array.isArray(data) || typeof data.error === "string") {
+      throw new Error(!response.ok && typeof data?.error === "string" ? data.error
+        : "Die Antwort der Design Engine konnte nicht bestätigt werden. Prüfe deine Sammlung und dein Guthaben, bevor du erneut startest.");
+    }
+    return data;
+  };
+
+  const readTaskStart = async (response: Response, runId: number) => {
+    const data = await readRunJson(response, runId);
+    if (typeof data.taskId !== "string" || !/^[a-zA-Z0-9-]{8,80}$/.test(data.taskId)) {
+      throw new Error("Der Designauftrag konnte nicht bestätigt werden. Prüfe deine Sammlung und dein Guthaben, bevor du erneut startest.");
+    }
+    return data;
+  };
+
   const pollTask = async (id: string, taskType: TaskType, runId: number): Promise<MeshyTask> => {
     for (let attempt = 0; attempt < 144; attempt += 1) {
       if (generationRef.current !== runId) throw new Error("Generierung abgebrochen.");
       const response = await fetch(`/api/meshy?taskId=${encodeURIComponent(id)}&type=${taskType}`, { cache: "no-store" });
-      const task = (await readJson(response)) as MeshyTask;
+      const task = (await readRunJson(response, runId)) as MeshyTask;
       if (typeof task.tokenBalance === "number") setTokenBalance(task.tokenBalance);
       setProgress(Math.max(2, Math.min(100, Number(task.progress || 0))));
       if (task.status === "SUCCEEDED") return task;
@@ -420,6 +449,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
   };
 
   const generate = async () => {
+    if (pendingRunRef.current !== null) return;
     if(!galleryChoiceValid(galleryChoice,"ab3d")){setError("Bitte entscheide vor der Erstellung, ob dein Ergebnis privat bleiben oder in der Galerie erscheinen soll.");return;}
     if (!signedIn) {
       window.location.href = "/signin-with-chatgpt?return_to=%2F%23studio";
@@ -439,25 +469,24 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       return;
     }
 
-    try {
-      await readJson(await fetch("/api/meshy?health=1", { cache: "no-store" }));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Die AB3D Design Engine ist momentan nicht erreichbar.");
-      return;
-    }
-
     const runId = generationRef.current + 1;
     generationRef.current = runId;
+    pendingRunRef.current = runId;
     setState(mode === "image" ? "uploading" : "generating");
+    setStatusText("Verbindung zur Design Engine wird geprüft …");
     setProgress(2);
     setStartedAt(Date.now());
     setElapsedSeconds(0);
     setError("");
-    setModelUrls({});
-    setThumbnail("");
-    setScaledHeight(null);
 
     try {
+      const health = await readRunJson(await fetch("/api/meshy?health=1", { cache: "no-store" }), runId);
+      if (health.ok !== true || health.service !== "ab3d-design-engine") {
+        throw new Error("Die Verbindung zur Design Engine konnte nicht bestätigt werden. Es wurde kein Designauftrag gestartet.");
+      }
+      setModelUrls({});
+      setThumbnail("");
+      setScaledHeight(null);
       let completed: MeshyTask;
       let finalTaskId: string;
       let finalTaskType: ModelTaskType;
@@ -472,7 +501,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "creative-prototype", templateId: selectedTemplate.id, imageData,galleryChoice }),
         });
-        const prototype = await readJson(prototypeResponse);
+        const prototype = await readTaskStart(prototypeResponse, runId);
         if (typeof prototype.tokenBalance === "number") setTokenBalance(prototype.tokenBalance);
         setTaskId(prototype.taskId);
         const prototypeResult = await pollTask(prototype.taskId, prototypeType, runId);
@@ -493,7 +522,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             candidateId: prototypeResult.candidate_ids?.[0],
           }),
         });
-        const built = await readJson(buildResponse);
+        const built = await readTaskStart(buildResponse, runId);
         if (typeof built.tokenBalance === "number") setTokenBalance(built.tokenBalance);
         setTaskId(built.taskId);
         completed = await pollTask(built.taskId, buildType, runId);
@@ -519,7 +548,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "transform-image", imageData, prompt: transformation.slice(0, 800),galleryChoice }),
           });
-          const transformed = await readJson(transformResponse);
+          const transformed = await readTaskStart(transformResponse, runId);
           if (typeof transformed.tokenBalance === "number") setTokenBalance(transformed.tokenBalance);
           setTaskId(transformed.taskId);
           const transformedTask = await pollTask(transformed.taskId, "image-transform", runId);
@@ -558,7 +587,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             willRefine: mode === "text" && textured,
           }),
         });
-        const created = await readJson(createResponse);
+        const created = await readTaskStart(createResponse, runId);
         if (typeof created.tokenBalance === "number") setTokenBalance(created.tokenBalance);
         setTaskId(created.taskId);
         const createdType = (created.type || mode) as TaskType;
@@ -575,7 +604,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "refine", previewTaskId: created.taskId, texturePrompt: finalPrompt }),
           });
-          const refined = await readJson(refineResponse);
+          const refined = await readTaskStart(refineResponse, runId);
           if (typeof refined.tokenBalance === "number") setTokenBalance(refined.tokenBalance);
           setTaskId(refined.taskId);
           finalTaskId = refined.taskId;
@@ -599,13 +628,16 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       setState("error");
       setError(caught instanceof Error ? caught.message : "Die Generierung ist fehlgeschlagen.");
       setStatusText("Generierung nicht abgeschlossen");
+    } finally {
+      if (pendingRunRef.current === runId) pendingRunRef.current = null;
     }
   };
 
   const preparePrintFiles = async () => {
-    if (!modelTaskId) return;
+    if (!modelTaskId || pendingRunRef.current !== null) return;
     const runId = generationRef.current + 1;
     generationRef.current = runId;
+    pendingRunRef.current = runId;
     setState("resizing");
     setProgress(2);
     setError("");
@@ -619,7 +651,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "resize", sourceTaskId: modelTaskId, sourceTaskType: modelTaskType, heightCm }),
       });
-      const created = await readJson(response);
+      const created = await readTaskStart(response, runId);
       if (typeof created.tokenBalance === "number") setTokenBalance(created.tokenBalance);
       setTaskId(created.taskId);
       const resized = await pollTask(created.taskId, "resize", runId);
@@ -638,7 +670,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "analyze", sourceTaskId: created.taskId, sourceTaskType: "resize", heightCm }),
       });
-      const analyzeCreated = await readJson(analyzeResponse);
+      const analyzeCreated = await readTaskStart(analyzeResponse, runId);
       let analyzed = await pollTask(analyzeCreated.taskId, "print-analyze", runId);
       if (!analyzed.printability) throw new Error("Die Design Engine hat keinen Druckbarkeitsbericht geliefert.");
       setPrintability(analyzed.printability);
@@ -657,7 +689,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "repair", sourceTaskId: productionSourceId, sourceTaskType: productionSourceType, heightCm }),
         });
-        const repairCreated = await readJson(repairResponse);
+        const repairCreated = await readTaskStart(repairResponse, runId);
         if (typeof repairCreated.tokenBalance === "number") setTokenBalance(repairCreated.tokenBalance);
         const repaired = await pollTask(repairCreated.taskId, "print-repair", runId);
         if (!repaired.model_urls?.glb) throw new Error("Die Druckreparatur hat keine Modelldatei geliefert.");
@@ -671,7 +703,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "analyze", sourceTaskId: productionSourceId, sourceTaskType: productionSourceType, heightCm }),
         });
-        const check = await readJson(checkResponse);
+        const check = await readTaskStart(checkResponse, runId);
         analyzed = await pollTask(check.taskId, "print-analyze", runId);
         setPrintability(analyzed.printability || null);
       }
@@ -685,7 +717,7 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "convert", sourceTaskId: productionSourceId, sourceTaskType: productionSourceType }),
       });
-      const convertCreated = await readJson(convertResponse);
+      const convertCreated = await readTaskStart(convertResponse, runId);
       if (typeof convertCreated.tokenBalance === "number") setTokenBalance(convertCreated.tokenBalance);
       setTaskId(convertCreated.taskId);
       const converted = await pollTask(convertCreated.taskId, "convert", runId);
@@ -697,9 +729,12 @@ export default function AIDesignStudio({ signedIn }: { signedIn: boolean }) {
       setState("complete");
       setStatusText(`Druckpaket in ${heightCm} cm ist bereit`);
     } catch (caught) {
+      if (generationRef.current !== runId) return;
       setState("complete");
       setError(caught instanceof Error ? caught.message : "Das Druckpaket konnte nicht fertiggestellt werden.");
       setStatusText("3D-Modell bleibt verfügbar – Druckpaket nicht abgeschlossen");
+    } finally {
+      if (pendingRunRef.current === runId) pendingRunRef.current = null;
     }
   };
 

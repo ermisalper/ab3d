@@ -18,14 +18,16 @@ const taskIds = { create: "synthetic-created", resize: "synthetic-resized", anal
 const inquiryId = "PRINT-ABCDE00001";
 const receipt = (id = inquiryId, message = "Unverbindliche Anfrage gespeichert; keine Zahlung oder Produktion") => ({ ok: true,
   order: { id, status: "inquiry", estimatedTotalCents: 4500, currency: "CHF" }, message });
+const healthReceipt = () => json({ ok: true, service: "ab3d-design-engine" });
 
-function fixture({ inquiry = async () => json(receipt()), report = printability } = {}) {
+function fixture({ inquiry = async () => json(receipt()), report = printability,
+  health = async () => healthReceipt(), taskResponse, startResponse } = {}) {
   const calls = [], inquiries = [], tasks = new Map(); let generation = 0;
   return { calls, inquiries, fetch: async (url, init = {}) => {
     calls.push({ url, method: init.method || "GET", ...(init.body ? { body: JSON.parse(init.body) } : {}) });
     if (url === "/api/account") return json({ account: { email: "customer@example.test", tokenBalance: 100, unlimited: false, capabilities: { canDownload3d: false } } });
     if (url === "/api/design-agent") { assert.equal(init.method, "POST"); return json({ plan }); }
-    if (url === "/api/meshy?health=1") return json({ configured: true });
+    if (url === "/api/meshy?health=1") return health();
     if (url === "/api/production-orders") {
       assert.equal(init.method, "POST"); const body = JSON.parse(init.body); inquiries.push(body); return inquiry(body, inquiries.length);
     }
@@ -35,11 +37,19 @@ function fixture({ inquiry = async () => json(receipt()), report = printability 
       if (body.action === "create") generation++;
       const taskId = `${taskIds[body.action]}${generation > 1 ? `-${generation}` : ""}`;
       tasks.set(taskId, body.action);
+      if (startResponse) {
+        const response = await startResponse(body.action, taskId);
+        if (response) return response;
+      }
       return json({ taskId, type: body.action === "create" ? "text" : body.action, tokenBalance: 99 });
     }
     assert.ok(typeof url === "string" && url.startsWith("/api/meshy?taskId="), `Unexpected offline fetch: ${url}`);
     const query = new URL(url, "https://ab3d.example.test").searchParams, id = query.get("taskId");
     assert.ok(tasks.has(id));
+    if (taskResponse) {
+      const response = await taskResponse(tasks.get(id), id);
+      if (response) return response;
+    }
     return json({ id, status: "SUCCEEDED", progress: 100,
       model_urls: { glb: "https://assets.meshy.ai/synthetic/model.glb", ...(tasks.get(id) === "convert" ? { stl: "https://assets.meshy.ai/synthetic/model.stl", "3mf": "https://assets.meshy.ai/synthetic/model.3mf" } : {}) },
       ...(tasks.get(id) === "analyze" ? { printability: report } : {}), collectionSaved: true });
@@ -48,15 +58,19 @@ function fixture({ inquiry = async () => json(receipt()), report = printability 
 
 // Drive public controls of the actual studio, not a state-injected request form.
 // Every planner/engine response is local; the fetch stub has no network fallback.
-async function prepareInquiry(ui) {
+async function prepareGeneration(ui, { quality = false, start = true } = {}) {
   await ui.change(ui.container.querySelector("#customer-idea"), "Ein runder Stiftehalter");
   await ui.click(ui.button(/Idee mit KI planen/));
   await until(() => assert.ok(ui.button("Diesen Aufbau verwenden")));
   await ui.click(ui.button("Diesen Aufbau verwenden"));
-  await ui.click(ui.button(/Schnelle Vorschau/));
+  if (!quality) await ui.click(ui.button(/Schnelle Vorschau/));
   await ui.check(ui.container.querySelector('input[name="gallery-ab3d"]'));
   const generate = ui.container.querySelector(".generate-button"); assert.equal(generate.disabled, false);
-  await ui.click(generate);
+  if (start) await ui.click(generate);
+}
+
+async function prepareInquiry(ui) {
+  await prepareGeneration(ui);
   await until(() => assert.ok(ui.button(/Druckpaket für 20 cm vorbereiten/)));
   await ui.click(ui.button(/Druckpaket für 20 cm vorbereiten/));
   await until(() => assert.ok(ui.container.querySelector('[name="inquiry-name"]')));
@@ -242,4 +256,113 @@ test("actual AB3D studio blocks queued size and production-option changes while 
     assert.equal(ui.button(`Anfrage gespeichert · ${inquiryId}`).disabled, true);
     assert.match(ui.text(), /Zielhöhe 20 cm/);
   } finally { pending.resolve(json(receipt())); await ui.close(); }
+});
+
+test("actual AB3D studio admits only one generation while the health check is pending", async () => {
+  const pending = deferred(), mock = fixture({ health: async () => { await pending.promise; return healthReceipt(); } });
+  const ui = await mount(AIDesignStudio, { signedIn: true }, mock);
+  try {
+    await prepareGeneration(ui, { start: false });
+    const generate = ui.container.querySelector(".generate-button");
+    // Both clicks reach the actual handler before React commits disabled=true.
+    await import("react").then(({ act }) => act(async () => {
+      generate.dispatchEvent(new window.Event("click", { bubbles: true }));
+      generate.dispatchEvent(new window.Event("click", { bubbles: true }));
+    }));
+    await import("react").then(({ act }) => act(async () => pending.resolve()));
+    await until(() => assert.ok(ui.container.querySelector('model-viewer[src*="synthetic-created"]')));
+    assert.equal(mock.calls.filter(call => call.url === "/api/meshy?health=1").length, 1);
+    assert.equal(mock.calls.filter(call => call.body?.action === "create").length, 1);
+  } finally { pending.resolve(); await ui.close(); }
+});
+
+for (const endView of ["stop", "unmount"]) test(`actual AB3D studio starts no generation after ${endView} during the health check`, async () => {
+  const pending = deferred(), mock = fixture({ health: async () => { await pending.promise; return healthReceipt(); } });
+  const ui = await mount(AIDesignStudio, { signedIn: true }, mock); let closed = false;
+  try {
+    await prepareGeneration(ui);
+    if (endView === "stop") await ui.click(ui.button("Überwachung stoppen"));
+    else { await ui.close(); closed = true; }
+    await import("react").then(({ act }) => act(async () => pending.resolve()));
+    await flush();
+    assert.equal(mock.calls.filter(call => call.method === "POST" && call.url === "/api/meshy").length, 0);
+    if (!closed) assert.match(ui.text(), /gestartete Aufträge laufen weiter/);
+  } finally { pending.resolve(); if (!closed) await ui.close(); }
+});
+
+test("actual AB3D studio does not start paid refinement after stopping a pending geometry poll", async () => {
+  const pending = deferred(), mock = fixture({ taskResponse: async action => action === "create" ? pending.promise : undefined });
+  const ui = await mount(AIDesignStudio, { signedIn: true }, mock);
+  try {
+    await prepareGeneration(ui, { quality: true });
+    await until(() => assert.ok(mock.calls.some(call => call.url.startsWith("/api/meshy?taskId="))));
+    await ui.click(ui.button("Überwachung stoppen"));
+    await import("react").then(({ act }) => act(async () => pending.resolve(json({ id: taskIds.create, status: "SUCCEEDED", progress: 100,
+      model_urls: { glb: "https://assets.meshy.ai/synthetic/late.glb" } }))));
+    await flush();
+    assert.equal(mock.calls.filter(call => call.method === "POST" && call.url === "/api/meshy").length, 1);
+    assert.doesNotMatch(ui.text(), /Geometrie fertig – Material und Farbe werden erzeugt|Dein finales 3D-Design ist fertig/);
+    assert.equal(ui.container.querySelector("model-viewer"), null);
+  } finally { pending.resolve(json({ status: "PENDING" })); await ui.close(); }
+});
+
+for (const lateResult of ["success", "network failure"]) test(`actual AB3D studio ignores an old print preparation ${lateResult} after a new model`, async () => {
+  const pending = deferred(), mock = fixture({ taskResponse: async (action, id) => action === "resize" && id === taskIds.resize ? pending.promise : undefined });
+  const ui = await mount(AIDesignStudio, { signedIn: true }, mock);
+  try {
+    await prepareGeneration(ui);
+    await until(() => assert.ok(ui.button(/Druckpaket für 20 cm vorbereiten/)));
+    await ui.click(ui.button(/Druckpaket für 20 cm vorbereiten/));
+    await until(() => assert.ok(mock.calls.some(call => call.url.includes(`taskId=${taskIds.resize}`))));
+    await ui.click(ui.button(/Foto verwenden$/));
+    await ui.click(ui.button(/Idee eingeben$/));
+    await prepareGeneration(ui);
+    await until(() => assert.ok(ui.container.querySelector('model-viewer[src*="synthetic-created-2"]')));
+    await import("react").then(({ act }) => act(async () => {
+      if (lateResult === "network failure") pending.reject(new TypeError("Failed to fetch"));
+      else pending.resolve(json({ id: taskIds.resize, status: "SUCCEEDED", progress: 100,
+        model_urls: { glb: "https://assets.meshy.ai/synthetic/late-resized.glb" } }));
+    }));
+    await flush();
+    assert.ok(ui.container.querySelector('model-viewer[src*="synthetic-created-2"]'));
+    assert.equal(mock.calls.some(call => call.body?.action === "analyze"), false);
+    assert.doesNotMatch(ui.text(), /Druckpaket nicht abgeschlossen|Failed to fetch/);
+  } finally { pending.resolve(json({ status: "PENDING" })); await ui.close(); }
+});
+
+for (const [label, reply] of [
+  ["HTML200", () => new Response("<html>Gateway reply</html>", { status: 200, headers: { "Content-Type": "text/html" } })],
+  ["HTTP202", () => json({ ok: true, service: "ab3d-design-engine" }, 202)],
+  ["missing confirmation", () => json({ configured: true })],
+  ["wrong service", () => json({ ok: true, service: "unconfirmed-engine" })],
+  ["null JSON", () => json(null)],
+]) test(`actual AB3D studio starts no paid task after an unconfirmed health reply: ${label}`, async () => {
+  const mock = fixture({ health: async () => reply() }), ui = await mount(AIDesignStudio, { signedIn: true }, mock);
+  try {
+    await prepareGeneration(ui);
+    await flush();
+    assert.equal(mock.calls.filter(call => call.method === "POST" && call.url === "/api/meshy").length, 0);
+    assert.match(ui.text(), /nicht bestätigt|nicht bestätigt werden|nicht erreichbar/);
+    assert.doesNotMatch(ui.text(), /Gateway reply|Unexpected token/);
+  } finally { await ui.close(); }
+});
+
+for (const [label, reply] of [
+  ["HTML200", () => new Response("<html>Gateway reply</html>", { status: 200, headers: { "Content-Type": "text/html" } })],
+  ["HTTP202", taskId => json({ taskId, type: "text" }, 202)],
+  ["missing task ID", () => json({ type: "text" })],
+  ["invalid task ID", () => json({ taskId: "bad/id", type: "text" })],
+  ["numeric task ID", () => json({ taskId: 123456789, type: "text" })],
+  ["array JSON", () => json([])],
+]) test(`actual AB3D studio never polls or refines an unconfirmed task start: ${label}`, async () => {
+  const mock = fixture({ startResponse: async (_action, taskId) => reply(taskId) });
+  const ui = await mount(AIDesignStudio, { signedIn: true }, mock);
+  try {
+    await prepareGeneration(ui, { quality: true });
+    await flush();
+    assert.equal(mock.calls.filter(call => call.url.startsWith("/api/meshy?taskId=")).length, 0);
+    assert.equal(mock.calls.filter(call => call.method === "POST" && call.url === "/api/meshy").length, 1);
+    assert.match(ui.text(), /nicht bestätigt|nicht bestätigt werden/);
+    assert.doesNotMatch(ui.text(), /Dein finales 3D-Design ist fertig|Gateway reply|Unexpected token/);
+  } finally { await ui.close(); }
 });
