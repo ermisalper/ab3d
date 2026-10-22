@@ -391,11 +391,11 @@ function buildManufacturingPlan(templateId: string, answers: Record<string, stri
 }
 
 export function getDesignQuestions(templateId: string, answers: Record<string, string> = {}) {
-  return templateId === "free-design" ? getFreeDesignQuestions(answers) : (blueprints[templateId] || genericBlueprint).questions;
+  return templateId === "free-design" ? getFreeDesignQuestions(answers) : (Object.hasOwn(blueprints, templateId) ? blueprints[templateId] : genericBlueprint).questions;
 }
 
 export function buildDesignPlan(templateId: string, ideaInput: string, answerInput: Record<string, string> = {}): DesignPlan {
-  const blueprint = templateId === "free-design" ? resolveFreeBlueprint(answerInput.product_purpose) : (blueprints[templateId] || genericBlueprint);
+  const blueprint = templateId === "free-design" ? resolveFreeBlueprint(answerInput.product_purpose) : (Object.hasOwn(blueprints, templateId) ? blueprints[templateId] : genericBlueprint);
   const questions = getDesignQuestions(templateId, answerInput);
   const idea = ideaInput.trim().slice(0, 240);
   const sentenceIdea = idea.replace(/[.!?]+$/u, "");

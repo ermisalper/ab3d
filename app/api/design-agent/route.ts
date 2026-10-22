@@ -2,6 +2,7 @@ import { getChatGPTUser } from "../../chatgpt-auth";
 import { buildDesignPlan } from "../../design-planner";
 import { ensureAccount, hasUnlimitedTokens } from "../../../db/account";
 import { reserveAiUsage } from "../../../db/ai-usage";
+import { isJsonObject, readRequestJson, RequestJsonError } from "../../request-json";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 
@@ -29,18 +30,14 @@ function extractOutputText(data: { output?: Array<{ content?: Array<{ type?: str
 export async function POST(request: Request) {
   try {
     if (!sameOrigin(request)) return Response.json({ error: "Unzulässige Anfrage." }, { status: 403 });
-    if (Number(request.headers.get("content-length") || 0) > 12_000) {
-      return Response.json({ error: "Der Produktwunsch ist zu umfangreich." }, { status: 413 });
+    const body = await readRequestJson(request, 12_000);
+    if (!isJsonObject(body) || typeof body.templateId !== "string" || typeof body.idea !== "string"
+      || (body.answers !== undefined && (!isJsonObject(body.answers) || Object.values(body.answers).some(value => typeof value !== "string")))) {
+      return Response.json({ error: "Die Produktangaben sind ungültig. Bitte prüfe Idee und Auswahl." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }
-
-    const body = await request.json() as {
-      templateId?: string;
-      idea?: string;
-      answers?: Record<string, string>;
-    };
-    const templateId = String(body.templateId || "").slice(0, 40);
-    const idea = String(body.idea || "").trim().slice(0, 240);
-    const answers = body.answers && typeof body.answers === "object" ? body.answers : {};
+    const templateId = body.templateId.slice(0, 40);
+    const idea = body.idea.trim().slice(0, 240);
+    const answers = (body.answers || {}) as Record<string, string>;
     if (!templateId || idea.length < 6) {
       return Response.json({ error: "Beschreibe deine Produktidee bitte in mindestens sechs Zeichen." }, { status: 400 });
     }
@@ -110,7 +107,11 @@ export async function POST(request: Request) {
       },
       mode: "ai",
     }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestJsonError) return Response.json({ code: error.code,
+      error: error.status === 413 ? "Der Produktwunsch ist zu umfangreich." : "Die Anfrage ist ungültig. Bitte prüfe deine Produktidee." }, {
+      status: error.status, headers: { "Cache-Control": "no-store" },
+    });
     return Response.json({ error: "Der Produktplaner konnte die Idee nicht verarbeiten. Bitte versuche es erneut." }, { status: 500 });
   }
 }

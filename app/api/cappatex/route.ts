@@ -8,6 +8,7 @@ import { RESERVE_DESIGN, DEBIT_DESIGN, LOG_DESIGN, REFUND_DESIGN, LOG_REFUND, FI
 import { parseGalleryChoice } from "../../gallery-policy";
 import { reserveCreation, readyArtworkCreation, failCreation } from "../../gallery-storage";
 import { reserveAiUsage } from "../../../db/ai-usage";
+import { isJsonObject, readRequestJson, RequestJsonError } from "../../request-json";
 
 const CANVASES: Record<string, string> = { square: "2048x2048", portrait: "2048x3072", landscape: "3072x2048" };
 const STYLES = new Set(["Minimal", "Illustrativ", "Retro", "Streetwear"]);
@@ -89,23 +90,23 @@ async function callOpenAI(apiKey: string, prompt: string, size: string) {
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return clientError(403, "invalid_origin", "Unzulässige Anfrage.");
-  if (Number(request.headers.get("content-length") || 0) > MAX_REQUEST_BYTES) {
-    return clientError(413, "request_too_large", "Die Anfrage ist zu gross.");
-  }
-
   const user = await getChatGPTUser();
   if (!user) return clientError(401, "sign_in_required", "Bitte melde dich an, bevor du ein Motiv generierst.");
 
-  const body = await request.json().catch(() => null) as {
-    prompt?: unknown;
-    canvas?: unknown;
-    style?: unknown;
-    confirmGeneration?: unknown;
-    galleryChoice?: unknown;
-  } | null;
-  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-  const canvas = typeof body?.canvas === "string" ? body.canvas : "";
-  const style = typeof body?.style === "string" ? body.style : "";
+  let body: unknown;
+  try { body = await readRequestJson(request, MAX_REQUEST_BYTES); }
+  catch (error) {
+    if (error instanceof RequestJsonError) return clientError(error.status, error.code,
+      error.status === 413 ? "Die Anfrage ist zu gross." : "Die Anfrage ist ungültig. Bitte prüfe deine Motivangaben.");
+    return clientError(400, "invalid_request", "Die Anfrage konnte nicht gelesen werden. Bitte versuche es erneut.");
+  }
+  if (!isJsonObject(body) || typeof body.prompt !== "string" || typeof body.canvas !== "string" || typeof body.style !== "string"
+    || (body.confirmGeneration !== undefined && typeof body.confirmGeneration !== "boolean")) {
+    return clientError(400, "invalid_request", "Die Motivangaben sind ungültig. Bitte prüfe Beschreibung, Bildformat und Stil.");
+  }
+  const prompt = body.prompt.trim();
+  const canvas = body.canvas;
+  const style = body.style;
 
   if (prompt.length < 12 || prompt.length > 500) {
     return clientError(400, "invalid_prompt", "Bitte beschreibe dein Motiv mit 12 bis 500 Zeichen.");

@@ -149,6 +149,62 @@ test("upstream rejection refunds the unstarted charge and is never retried",asyn
   assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n,1,"Provider failure does not release request capacity");
 });
 
+const unconfirmedSubmissions = [
+  ["unreadable successful response", () => new Response("<html>upstream</html>", { status: 200 })],
+  ["null successful response", () => Response.json(null)],
+  ["missing task ID", () => Response.json({ accepted: true })],
+  ["non-string task ID", () => Response.json({ result: { task: "fixture-task-12345678" } })],
+  ["invalid task ID", () => Response.json({ result: "invalid/fixture-task" })],
+  ["overlong task ID", () => Response.json({ result: "x".repeat(81) })],
+  ["provider server error", () => Response.json({ result: "fixture-task-12345678" }, { status: 500 })],
+  ["transport interruption", () => { throw new Error("private transport fixture detail"); }],
+];
+for (const action of ["create", "analyze"]) for (const [reason, response] of unconfirmedSubmissions) test(`${action}: ${reason} remains unconfirmed without a retry, invented task or refund`, async () => {
+  if (action === "analyze") source("owned-model-1234", "resize");
+  const fixtureFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    if (init.method !== "POST") return fixtureFetch(url, init);
+    fixture.requests.push({ url: String(url), method: "POST", body: JSON.parse(init.body) });
+    return response();
+  };
+  const result = await post(action === "create" ? { action, type: "image", imageDatas: [image] }
+    : { action, sourceTaskId: "owned-model-1234", sourceTaskType: "resize", heightCm: 18 });
+  assert.equal(result.status, 503);
+  const body = await result.json();
+  assert.equal(body.code, "provider_submission_uncertain");
+  assert.match(body.error, /nicht erneut/);
+  assert.equal(body.taskId, undefined);
+  assert.equal(JSON.stringify(body).includes("private transport"), false);
+  assert.equal(posts().length, 1);
+  assert.equal(balance(), action === "create" ? 19 : 20);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n, 1);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM generation_tasks WHERE task_id != 'owned-model-1234'").get().n, 0);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM token_ledger WHERE delta > 0").get().n, 0);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM gallery_task_links").get().n, 0);
+});
+
+for (const [action, table] of [["create", "generation_tasks"], ["create", "gallery_task_links"], ["analyze", "generation_tasks"]]) {
+  test(`${action}: local ${table} persistence failure after provider acceptance cannot invite another paid submission`, async () => {
+    if (action === "analyze") source("owned-model-1234", "resize");
+    database.sql.exec(`CREATE TRIGGER fixture_persistence_failure BEFORE INSERT ON ${table}
+      BEGIN SELECT RAISE(ABORT, 'private local fixture write failure'); END`);
+    const result = await post(action === "create" ? { action, type: "image", imageDatas: [image] }
+      : { action, sourceTaskId: "owned-model-1234", sourceTaskType: "resize", heightCm: 18 });
+    assert.equal(result.status, 503);
+    const body = await result.json();
+    assert.equal(body.code, "provider_submission_uncertain");
+    assert.match(body.error, /nicht erneut/);
+    assert.equal(JSON.stringify(body).includes("private local"), false);
+    assert.equal(posts().length, 1);
+    assert.equal(balance(), action === "create" ? 19 : 20);
+    assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n, 1);
+    assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM token_ledger WHERE delta > 0").get().n, 0);
+    assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM generation_tasks WHERE task_id != 'owned-model-1234'").get().n,
+      table === "gallery_task_links" ? 1 : 0, "Only a confirmed ID stored before the later link failure may remain");
+    assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM gallery_task_links").get().n, 0);
+  });
+}
+
 test("unfunded generation cannot consume global AI capacity", async()=>{
   database.sql.prepare("UPDATE accounts SET token_balance=0 WHERE email=?").run(email);
   const r=await post({action:"create",type:"image",imageDatas:[image]});

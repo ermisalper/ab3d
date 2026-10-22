@@ -16,6 +16,7 @@ import { buildDesignPlan, buildServerMeshPrompt } from "../../design-planner";
 import { meshGeometry, printSize } from "../../meshy-policy";
 import { meshCreationIntent, linkMeshTask, failCreation, archiveMeshTask, importLegacyCreations } from "../../gallery-storage";
 import { reserveAiUsage } from "../../../db/ai-usage";
+import { isJsonObject, readRequestJson, RequestJsonError } from "../../request-json";
 
 const MESHY_API = "https://api.meshy.ai/openapi";
 const TASK_ID = /^[a-zA-Z0-9-]{8,80}$/;
@@ -63,6 +64,29 @@ function creativeTaskType(templateId: CreativeTemplateId, stage: "prototype" | "
   return `creative-${templateId}-${stage}` as TaskType;
 }
 
+function validMeshyRequest(value: unknown) {
+  if (!isJsonObject(value)) return false;
+  const strings = ["action", "type", "prompt", "texturePrompt", "imageData", "inputTaskId", "prototypeTaskId", "candidateId",
+    "templateId", "quality", "previewTaskId", "modelTaskId", "sourceTaskId", "sourceTaskType", "sourceFormat"];
+  if (strings.some(key => value[key] !== undefined && typeof value[key] !== "string")) return false;
+  if (["printReady", "willRefine"].some(key => value[key] !== undefined && typeof value[key] !== "boolean")) return false;
+  if (value.heightCm !== undefined && (typeof value.heightCm !== "number" || !Number.isFinite(value.heightCm))) return false;
+  if (value.imageDatas !== undefined && (!Array.isArray(value.imageDatas) || value.imageDatas.length > 4
+    || value.imageDatas.some(image => typeof image !== "string"))) return false;
+  if (value.designPlan !== undefined) {
+    if (!isJsonObject(value.designPlan)) return false;
+    const plan = value.designPlan;
+    if (["templateId", "idea", "planVersion"].some(key => plan[key] !== undefined && typeof plan[key] !== "string")) return false;
+    if (plan.answers !== undefined && (!isJsonObject(plan.answers) || Object.values(plan.answers).some(answer => typeof answer !== "string"))) return false;
+  }
+  if (value.visualDirection !== undefined) {
+    if (!isJsonObject(value.visualDirection)) return false;
+    const visual = value.visualDirection;
+    if (["style", "surface", "colorMood"].some(key => visual[key] !== undefined && typeof visual[key] !== "string")) return false;
+  }
+  return true;
+}
+
 function getApiKey() {
   const key = process.env.MESHY_API_KEY;
   if (!key) throw new Error("MESHY_API_KEY_NOT_CONFIGURED");
@@ -80,16 +104,37 @@ function sameOrigin(request: Request) {
   }
 }
 
+function uncertainSubmission() {
+  return { ok: false as const, status: 503, code: "provider_submission_uncertain" as const,
+    error: "Die Annahme deines Designauftrags konnte nicht bestätigt werden. Bitte starte ihn nicht erneut. AB3D muss den Status zuerst prüfen." };
+}
+
+function uncertainSubmissionReply() {
+  const { status, code, error } = uncertainSubmission();
+  return Response.json({ code, error }, { status, headers: { "Cache-Control": "no-store" } });
+}
+
 async function meshyFetch(path: string, init?: RequestInit) {
-  const response = await fetch(`${MESHY_API}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${getApiKey()}`,
-      ...(init?.body ? { "Content-Type": "application/json; charset=utf-8" } : {}),
-      ...init?.headers,
-    },
-  });
-  const data = await response.json().catch(() => ({ message: "Die Design Engine lieferte keine lesbare Antwort." }));
+  const submitting = init?.method?.toUpperCase() === "POST";
+  // Configuration errors happen before dispatch and are not an uncertain submission.
+  const apiKey = getApiKey();
+  let response: Response;
+  try {
+    response = await fetch(`${MESHY_API}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        ...(init?.body ? { "Content-Type": "application/json; charset=utf-8" } : {}),
+        ...init?.headers,
+      },
+    });
+  } catch (error) {
+    if (submitting) return uncertainSubmission();
+    throw error;
+  }
+  const data = await response.json().catch(() => submitting ? null : { message: "Die Design Engine lieferte keine lesbare Antwort." });
+  if (submitting && (response.status >= 500 || (response.ok && (!isJsonObject(data)
+    || typeof data.result !== "string" || !TASK_ID.test(data.result))))) return uncertainSubmission();
   if (!response.ok) {
     const detail = String(data?.message || data?.detail || data?.error || "Der Designauftrag ist fehlgeschlagen.")
       .replace(/meshy/gi, "AB3D Design Engine");
@@ -99,7 +144,7 @@ async function meshyFetch(path: string, init?: RequestInit) {
       402: "Für diese Generierung ist momentan kein Verarbeitungsguthaben verfügbar.",
       429: "Die Design Engine ist momentan ausgelastet. Bitte versuche es in einigen Minuten erneut.",
     };
-    return { ok: false as const, status: response.status, error: messages[response.status] || String(detail) };
+    return { ok: false as const, status: response.status, code: undefined, error: messages[response.status] || String(detail) };
   }
   return { ok: true as const, data };
 }
@@ -197,6 +242,7 @@ async function beginChargedTask(options: {
     body: JSON.stringify(options.payload),
   });
   if (!result.ok) {
+    if (result.code === "provider_submission_uncertain") return { ok: false as const, response: uncertainSubmissionReply() };
     if(creationId&&!options.parentTaskId)await failCreation(creationId,options.email);
     if (tokenCost > 0) await refundUnstartedCharge(options.email, tokenCost, options.refundReason);
     return {
@@ -208,9 +254,11 @@ async function beginChargedTask(options: {
     };
   }
 
-  await recordTask(result.data.result, options.email, options.kind, tokenCost, options.parentTaskId);
-  const apiType=options.kind==="text-preview"||options.kind==="text-refine"?"text":options.kind;
-  await linkMeshTask(creationId,options.email,result.data.result,apiType,role);
+  try {
+    await recordTask(result.data.result, options.email, options.kind, tokenCost, options.parentTaskId);
+    const apiType=options.kind==="text-preview"||options.kind==="text-refine"?"text":options.kind;
+    await linkMeshTask(creationId,options.email,result.data.result,apiType,role);
+  } catch { return { ok: false as const, response: uncertainSubmissionReply() }; }
   return {
     ok: true as const,
     taskId: result.data.result as string,
@@ -228,12 +276,11 @@ export async function POST(request: Request) {
       return Response.json({ error: "Das 3D Design Studio ist im 3D-Studio- oder Complete-Abo enthalten." }, { status: 403 });
     }
 
-    const contentLength = Number(request.headers.get("content-length") || 0);
-    if (contentLength > MAX_IMAGE_PAYLOAD_LENGTH + 60_000) {
-      return Response.json({ error: "Die Bildauswahl ist zu gross." }, { status: 413 });
-    }
-
-    const body = await request.json() as {
+    const input = await readRequestJson(request, MAX_IMAGE_PAYLOAD_LENGTH + 60_000);
+    if (!validMeshyRequest(input)) return Response.json({ error: "Die Designangaben sind ungültig. Bitte prüfe deine Eingabe." }, {
+      status: 400, headers: { "Cache-Control": "no-store" },
+    });
+    const body = input as {
       action?: "create" | "refine" | "transform-image" | "creative-prototype" | "creative-build" | "resize" | "analyze" | "repair" | "convert";
       type?: "text" | "image";
       prompt?: string;
@@ -292,8 +339,10 @@ export async function POST(request: Request) {
           method: "POST",
           body: JSON.stringify({ model_url: source.modelUrl, ...size }),
         });
-        if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
-        await recordTask(result.data.result, user.email, "print-analyze", 0, body.sourceTaskId);
+        if (!result.ok) return result.code === "provider_submission_uncertain" ? uncertainSubmissionReply()
+          : Response.json({ error: result.error }, { status: result.status });
+        try { await recordTask(result.data.result, user.email, "print-analyze", 0, body.sourceTaskId); }
+        catch { return uncertainSubmissionReply(); }
         return Response.json({ taskId: result.data.result, type: "print-analyze", tokenBalance: await getTokenBalance(user.email) });
       }
 
@@ -349,7 +398,7 @@ export async function POST(request: Request) {
       if (!parent || parent.status !== "SUCCEEDED" || parent.kind !== creativeTaskType(body.templateId, "prototype")) {
         return Response.json({ error: "Der Spezialentwurf ist noch nicht fertig oder gehört nicht zu deinem Konto." }, { status: 403 });
       }
-      if (body.templateId === "keycap" && (!body.candidateId || body.candidateId.length > 200)) {
+      if (body.templateId === "keycap" && (!body.candidateId?.trim() || body.candidateId.length > 200)) {
         return Response.json({ error: "Die Keycap-Vorschau enthält keine gültige Auswahl." }, { status: 400 });
       }
       const taskType = creativeTaskType(body.templateId, "build");
@@ -577,6 +626,10 @@ export async function POST(request: Request) {
     if (!task.ok) return task.response;
     return Response.json({ taskId: task.taskId, type: taskType, tokenBalance: task.tokenBalance });
   } catch (error) {
+    if (error instanceof RequestJsonError) return Response.json({ code: error.code,
+      error: error.status === 413 ? "Die Bildauswahl ist zu gross." : "Die Anfrage ist ungültig. Bitte prüfe deine Designangaben." }, {
+      status: error.status, headers: { "Cache-Control": "no-store" },
+    });
     const message = error instanceof Error && error.message === "MESHY_API_KEY_NOT_CONFIGURED"
       ? "Der KI-Generator ist noch nicht aktiviert."
       : "Der KI-Dienst konnte nicht erreicht werden. Bitte versuche es erneut.";

@@ -2,6 +2,7 @@ import { getChatGPTUser } from "../../chatgpt-auth";
 import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY } from "../../contact-details";
 import { ensureAccount, hasUnlimitedTokens } from "../../../db/account";
 import { reserveAiUsage } from "../../../db/ai-usage";
+import { isJsonObject, readRequestJson, RequestJsonError } from "../../request-json";
 
 const MAX_MESSAGE_LENGTH = 500;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -60,11 +61,11 @@ async function safetyIdentifier(value: string) {
 export async function POST(request: Request) {
   try {
     if (!sameOrigin(request)) return Response.json({ error: "Unzulässige Anfrage." }, { status: 403 });
-    if (Number(request.headers.get("content-length") || 0) > 4_000) {
-      return Response.json({ error: "Die Anfrage ist zu gross." }, { status: 413 });
+    const body = await readRequestJson(request, 4_000);
+    if (!isJsonObject(body) || typeof body.message !== "string") {
+      return Response.json({ error: "Bitte stelle eine kurze Frage mit höchstens 500 Zeichen." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }
-    const body = await request.json() as { message?: string };
-    const message = body.message?.trim() || "";
+    const message = body.message.trim();
     if (!message || message.length > MAX_MESSAGE_LENGTH) {
       return Response.json({ error: "Bitte stelle eine kurze Frage mit höchstens 500 Zeichen." }, { status: 400 });
     }
@@ -115,7 +116,11 @@ export async function POST(request: Request) {
       { answer: extractOutputText(data) || fallbackAnswer(message), mode: "ai" },
       { headers: { "Cache-Control": "no-store" } },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestJsonError) return Response.json({ code: error.code,
+      error: error.status === 413 ? "Die Anfrage ist zu gross." : "Die Anfrage ist ungültig. Bitte stelle deine Frage erneut." }, {
+      status: error.status, headers: { "Cache-Control": "no-store" },
+    });
     return Response.json({ answer: `Ich bin gerade nur eingeschränkt erreichbar. Schreib Berk über „Kontakt“ oder an ${CONTACT_EMAIL}.`, mode: "guide" });
   }
 }
