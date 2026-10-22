@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { creatorPlans, planName, tokenRules } from "../creator-plans";
 import TokenShop from "./token-shop";
 
 type Account = {
+  email: string;
   tokenBalance: number;
   plan: string;
   subscriptionStatus: string;
@@ -66,17 +67,41 @@ const productionStatuses: Record<string, string> = {
 function parseOrderItems(value: string) {
   try {
     const parsed = JSON.parse(value) as unknown;
-    if (Array.isArray(parsed)) return parsed as Array<{ name: string; quantity: number }>;
-    if (parsed && typeof parsed === "object" && "items" in parsed && Array.isArray(parsed.items)) {
-      return parsed.items as Array<{ name: string; quantity: number }>;
-    }
-    return [];
+    const items = Array.isArray(parsed) ? parsed : record(parsed) && Array.isArray(parsed.items) ? parsed.items : [];
+    return items.filter((item): item is { name: string; quantity: number } => record(item)
+      && typeof item.name === "string" && Number.isSafeInteger(item.quantity) && Number(item.quantity) > 0);
   } catch {
     return [];
   }
 }
 
-export default function AccountDashboard({ user }: { user: { displayName: string; email: string } }) {
+type User = { displayName: string; email: string };
+const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
+const readableError = (data: unknown, fallback: string) => record(data) && typeof data.error === "string" && data.error.length <= 1000 ? data.error : fallback;
+const amount = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0;
+const orderRows = (value: unknown): value is Order[] => Array.isArray(value) && value.length <= 100 && value.every(row => record(row)
+  && typeof row.id === "string" && typeof row.status === "string" && typeof row.itemsJson === "string"
+  && typeof row.currency === "string" && /^[A-Z]{3}$/.test(row.currency) && amount(row.totalCents) && amount(row.createdAt));
+const productionRows = (value: unknown): value is ProductionOrder[] => Array.isArray(value) && value.length <= 100 && value.every(row => record(row)
+  && ["id", "email", "status", "sourceTaskId", "templateName", "material", "finish"].every(key => typeof row[key] === "string")
+  && typeof row.currency === "string" && /^[A-Z]{3}$/.test(row.currency) && amount(row.estimatedTotalCents) && amount(row.createdAt)
+  && amount(row.heightMm) && Number(row.heightMm) > 0 && amount(row.quantity) && Number(row.quantity) > 0);
+function checkedAccount(data: unknown, email: string): Account | null {
+  if (!record(data) || !record(data.account)) return null;
+  const account = data.account;
+  if (account.email !== email || !Number.isSafeInteger(account.tokenBalance) || Number(account.tokenBalance) < 0
+    || typeof account.plan !== "string" || !account.plan || typeof account.subscriptionStatus !== "string"
+    || !(account.requestedPlan === null || typeof account.requestedPlan === "string")
+    || typeof account.unlimited !== "boolean" || typeof account.isOwner !== "boolean" || !record(account.capabilities)
+    || !["canUse3d", "canUseCappatex", "canDownload3d", "canDownloadHd"].every(key => typeof (account.capabilities as Record<string, unknown>)[key] === "boolean")) return null;
+  return account as unknown as Account;
+}
+
+export default function AccountDashboard({ user }: { user: User }) {
+  return <OwnedAccountDashboard key={user.email} user={user} />;
+}
+
+function OwnedAccountDashboard({ user }: { user: User }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -84,75 +109,110 @@ export default function AccountDashboard({ user }: { user: { displayName: string
   const [busyOrder, setBusyOrder] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
   const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([]);
+  const [accountError, setAccountError] = useState("");
+  const [productionLoading, setProductionLoading] = useState(true);
+  const [productionError, setProductionError] = useState("");
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState("");
+  const lifetime = useRef<AbortController | null>(null);
+  const accountRevision = useRef(0), productionRevision = useRef(0);
+  const planPending = useRef(false), statusPending = useRef(false);
+  const current = (controller: AbortController) => lifetime.current === controller && !controller.signal.aborted;
+  const signal = (controller: AbortController) => AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]);
 
   const loadProductionOrders = async (owner = account?.isOwner || false) => {
-    const response = await fetch(`/api/production-orders${owner ? "?scope=production" : ""}`, { cache: "no-store" });
-    if (response.ok) {
-      const data = await response.json();
-      setProductionOrders(data.orders || []);
+    const controller = lifetime.current, revision = ++productionRevision.current;
+    if (!controller || !current(controller)) return false;
+    setProductionLoading(true); setProductionError("");
+    try {
+      const response = await fetch(`/api/production-orders${owner ? "?scope=production" : ""}`, { cache: "no-store", signal: signal(controller) });
+      const data: unknown = await response.json();
+      if (response.status !== 200 || !record(data) || !productionRows(data.orders)) throw new Error("unverified_orders");
+      if (!current(controller) || revision !== productionRevision.current) return false;
+      setProductionOrders(data.orders); return true;
+    } catch {
+      if (current(controller) && revision === productionRevision.current) setProductionError("Deine 3D-Anfragen konnten nicht aktualisiert werden. Bitte lade den Kontostatus erneut.");
+      return false;
+    } finally {
+      if (current(controller) && revision === productionRevision.current) setProductionLoading(false);
     }
   };
 
   const loadAccount = async () => {
-    const response = await fetch("/api/account", { cache: "no-store" });
-    const data = await response.json();
-    if (response.ok) {
-      setAccount(data.account);
-      await loadProductionOrders(Boolean(data.account.isOwner));
-    } else {
-      setMessage(data.error || "Konto konnte nicht geladen werden.");
+    const controller = lifetime.current, revision = ++accountRevision.current;
+    if (!controller || !current(controller)) return false;
+    setLoading(true); setAccountError("");
+    try {
+      const response = await fetch("/api/account", { cache: "no-store", signal: signal(controller) });
+      const data: unknown = await response.json(), verified = checkedAccount(data, user.email);
+      if (response.status !== 200 || !verified) throw new Error("unverified_account");
+      if (!current(controller) || revision !== accountRevision.current) return false;
+      setAccount(verified);
+      void loadProductionOrders(verified.isOwner);
+      return true;
+    } catch {
+      if (current(controller) && revision === accountRevision.current) {
+        setAccountError("Dein Kontostatus und Guthaben konnten nicht aktualisiert werden. Frühere Angaben sind möglicherweise nicht mehr aktuell.");
+        if (!account) { setProductionLoading(false); setProductionError("Deine 3D-Anfragen können erst nach bestätigtem Kontozugriff geladen werden."); }
+      }
+      return false;
+    } finally {
+      if (current(controller) && revision === accountRevision.current) setLoading(false);
     }
-    setLoading(false);
-    return response.ok;
   };
 
   useEffect(() => {
-    void fetch("/api/account", { cache: "no-store" })
-      .then(async (response) => ({ response, data: await response.json() }))
-      .then(async ({ response, data }) => {
-        if (!response.ok) throw new Error(data.error || "Konto konnte nicht geladen werden.");
-        setAccount(data.account);
-        await loadProductionOrders(Boolean(data.account.isOwner));
-        setLoading(false);
+    const controller = new AbortController(); lifetime.current = controller;
+    void loadAccount();
+    void fetch("/api/orders", { cache: "no-store", signal: signal(controller) })
+      .then(async response => {
+        const data: unknown = await response.json();
+        if (response.status !== 200 || !record(data) || !orderRows(data.orders)) throw new Error("unverified_orders");
+        if (current(controller)) setOrders(data.orders);
       })
-      .catch((error) => {
-        setMessage(error instanceof Error ? error.message : "Konto konnte nicht geladen werden.");
-        setLoading(false);
-      });
-    void fetch("/api/orders", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : { orders: [] })
-      .then((data) => setOrders(data.orders || []))
-      .catch(() => undefined);
-  // The dashboard loads once for the authenticated session; mutations refresh it explicitly.
+      .catch(() => { if (current(controller)) setOrdersError("Deine Shop-Bestellungen konnten nicht geladen werden. Bitte lade die Seite erneut."); })
+      .finally(() => { if (current(controller)) setOrdersLoading(false); });
+    return () => controller.abort();
+  // The email key owns this lifecycle; mutations refresh it explicitly.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const requestPlan = async (plan: string) => {
-    setBusyPlan(plan);
-    setMessage("");
-    const response = await fetch("/api/account", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan }),
-    });
-    const data = await response.json();
-    setMessage(data.message || data.error);
-    await loadAccount();
-    setBusyPlan("");
+    const controller = lifetime.current;
+    if (!controller || !current(controller) || planPending.current) return;
+    planPending.current = true; setBusyPlan(plan); setMessage("");
+    const unconfirmed = "Die Abo-Anfrage konnte nicht bestätigt werden. Bitte lade den Kontostatus neu, bevor du sie erneut anfragst.";
+    try {
+      const response = await fetch("/api/account", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }), signal: signal(controller) });
+      const data: unknown = await response.json();
+      if (!current(controller)) return;
+      if (response.status !== 200 || !record(data) || data.ok !== true || !record(data.request)
+        || data.request.plan !== plan || data.request.status !== "pending" || typeof data.message !== "string") {
+        setMessage(readableError(data, unconfirmed)); return;
+      }
+      setMessage(data.message);
+      await loadAccount();
+    } catch { if (current(controller)) setMessage(unconfirmed); }
+    finally { planPending.current = false; if (current(controller)) setBusyPlan(""); }
   };
 
   const updateProductionStatus = async (id: string, status: string) => {
-    setBusyOrder(id);
-    setMessage("");
-    const response = await fetch("/api/production-orders", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    });
-    const data = await response.json();
-    setMessage(data.message || data.error);
-    if (response.ok) await loadProductionOrders(true);
-    setBusyOrder("");
+    const controller = lifetime.current;
+    if (!controller || !current(controller) || statusPending.current || !account?.isOwner) return;
+    statusPending.current = true; setBusyOrder(id); setMessage("");
+    const unconfirmed = "Die Statusänderung konnte nicht bestätigt werden. Bitte lade den Kontostatus neu, bevor du sie erneut ausführst.";
+    try {
+      const response = await fetch("/api/production-orders", { method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }), signal: signal(controller) });
+      const data: unknown = await response.json();
+      if (!current(controller)) return;
+      if (response.status !== 200 || !record(data) || data.ok !== true || typeof data.message !== "string") {
+        setMessage(readableError(data, unconfirmed)); return;
+      }
+      setMessage(data.message); await loadProductionOrders(true);
+    } catch { if (current(controller)) setMessage(unconfirmed); }
+    finally { statusPending.current = false; if (current(controller)) setBusyOrder(""); }
   };
 
   const canDownloadProductionFile = (order: ProductionOrder) => {
@@ -172,17 +232,20 @@ export default function AccountDashboard({ user }: { user: { displayName: string
       <section className="token-overview">
         <div>
           <span>Verfügbare Design-Tokens</span>
-          <b>{loading ? "—" : account?.unlimited ? "∞" : account?.tokenBalance ?? 0}</b>
+          <b>{loading ? "—" : account?.unlimited ? "∞" : account?.tokenBalance ?? "Ungeprüft"}</b>
           <small>{account?.unlimited ? "Launch-Pass aktiv · aktuell kein Token-Abzug." : "Vor jedem Auftrag siehst du den exakten Tokenpreis."}</small>
           <a className="token-topup-link" href="#tokens-kaufen">Tokens nachkaufen →</a>
         </div>
         <div>
           <span>Aktueller Plan</span>
-          <b className="plan-name">{account ? planName(account.plan) : "Explorer"}</b>
-          <small>Status: {account?.subscriptionStatus === "active" ? "Aktiv" : account?.subscriptionStatus === "pending" ? "Angefragt" : "Kostenlos"}</small>
+          <b className="plan-name">{account ? planName(account.plan) : "Ungeprüft"}</b>
+          <small>Status: {!account ? "Ungeprüft" : account.subscriptionStatus === "active" ? "Aktiv" : account.subscriptionStatus === "trialing" ? "Testphase" : account.subscriptionStatus === "pending" ? "Angefragt" : "Kostenlos"}</small>
+          {account?.requestedPlan && <small>Separat angefragt: {planName(account.requestedPlan)} · Prüfung ausstehend</small>}
         </div>
         <Link className="button primary" href="/#studio">Neues 3D-Design</Link>
       </section>
+      {accountError && <p className="account-message" role="alert">{accountError}</p>}
+      <button type="button" disabled={loading || Boolean(busyPlan) || Boolean(busyOrder)} onClick={() => void loadAccount()}>Kontostatus neu laden</button>
 
       <TokenShop email={user.email} onRefreshBalance={loadAccount} />
 
@@ -200,6 +263,7 @@ export default function AccountDashboard({ user }: { user: { displayName: string
           <p>Neue Anfragen sind unverbindlich: AB3D prüft Modell, Herstellbarkeit und Richtpreis. Sie lösen keine Zahlung oder Produktion aus. Frühere Fertigungsaufträge behalten ihren bisherigen Status.</p>
         </div>
         {account?.isOwner && <p><Link className="button secondary" href="/betrieb">Alle AB3D-Anfragen prüfen →</Link></p>}
+        {productionError && <p role="alert">{productionError}</p>}
         {productionOrders.length ? (
           <div className="production-order-list">
             {productionOrders.map((order) => (
@@ -222,16 +286,16 @@ export default function AccountDashboard({ user }: { user: { displayName: string
                   )}
                   {account?.isOwner && (
                     <div className="production-status-buttons">
-                      {order.status === "awaiting_payment" && <button disabled={busyOrder === order.id} onClick={() => updateProductionStatus(order.id, "paid")}>Zahlung bestätigen</button>}
-                      {order.status === "paid" && <button disabled={busyOrder === order.id} onClick={() => updateProductionStatus(order.id, "production")}>Produktion starten</button>}
-                      {order.status === "production" && <button disabled={busyOrder === order.id} onClick={() => updateProductionStatus(order.id, "shipped")}>Als versendet markieren</button>}
+                      {order.status === "awaiting_payment" && <button disabled={Boolean(busyOrder)} onClick={() => updateProductionStatus(order.id, "paid")}>Zahlung bestätigen</button>}
+                      {order.status === "paid" && <button disabled={Boolean(busyOrder)} onClick={() => updateProductionStatus(order.id, "production")}>Produktion starten</button>}
+                      {order.status === "production" && <button disabled={Boolean(busyOrder)} onClick={() => updateProductionStatus(order.id, "shipped")}>Als versendet markieren</button>}
                     </div>
                   )}
                 </div>
               </article>
             ))}
           </div>
-        ) : <div className="no-orders">Noch keine individuelle 3D-Anfrage. <Link href="/#studio">3D-Design erstellen →</Link></div>}
+        ) : productionLoading ? <p role="status">Deine 3D-Anfragen werden geladen …</p> : !productionError && <div className="no-orders">Noch keine individuelle 3D-Anfrage. <Link href="/#studio">3D-Design erstellen →</Link></div>}
       </section>
 
       <section className="order-history">
@@ -239,6 +303,7 @@ export default function AccountDashboard({ user }: { user: { displayName: string
           <div><p className="eyebrow">Shop-Bestellungen</p><h2>Deine Objekte.</h2></div>
           <p>Deine auf AB3D gestarteten Checkouts und die von Shopify bestätigten Bestellungen.</p>
         </div>
+        {ordersError && <p role="alert">{ordersError}</p>}
         {orders.length ? (
           <div className="order-list">
             {orders.map((order) => {
@@ -251,7 +316,7 @@ export default function AccountDashboard({ user }: { user: { displayName: string
               );
             })}
           </div>
-        ) : <div className="no-orders">Noch keine Shop-Bestellung gespeichert. <Link href="/#kollektion">Kollektion entdecken →</Link></div>}
+        ) : ordersLoading ? <p role="status">Deine Shop-Bestellungen werden geladen …</p> : !ordersError && <div className="no-orders">Noch keine Shop-Bestellung gespeichert. <Link href="/#kollektion">Kollektion entdecken →</Link></div>}
       </section>
 
       <section className="plans-section" id="plaene">
@@ -271,7 +336,7 @@ export default function AccountDashboard({ user }: { user: { displayName: string
               {plan.id === "free" ? (
                 <button disabled>Explorer ist inklusive</button>
               ) : (
-                <button onClick={() => requestPlan(plan.id)} disabled={Boolean(busyPlan)}>
+                <button onClick={() => requestPlan(plan.id)} disabled={!account || loading || Boolean(busyPlan)}>
                   {busyPlan === plan.id ? "Wird gespeichert …" : account?.requestedPlan === plan.id ? "Angefragt ✓" : `${plan.name} anfragen`}
                 </button>
               )}
