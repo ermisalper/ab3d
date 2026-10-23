@@ -3,6 +3,12 @@
 Diese Schritte benötigen später eine Betreiberentscheidung, Anmeldung oder
 gesonderte Freigabe. Sie aktivieren durch diese Dokumentation keinen Verkauf.
 
+Für die gemeinsame Abnahme zuerst Browser-/Kontozugang klären, danach die
+Produkt-, Preis-, Versand-, Rechts- und Zahlungsnachweise prüfen. Bereitstellung
+und Migration brauchen eine getrennte Freigabe; ein kostenpflichtiger Ende-zu-Ende-Test
+folgt erst mit den dafür notwendigen eigenen Freigaben. Individuelle
+AB3D-Fertigungsanfragen zusätzlich separat nach Punkt 3 und 4 abnehmen.
+
 ## 1. Browserabnahme und Kontozugang
 
 - **Fehlt:** Aktuelle Sicht- und Bedienungsprüfung auf Desktop sowie 320/390 Pixeln und aktuelle Kontoabnahme.
@@ -70,5 +76,5 @@ gesonderte Freigabe. Sie aktivieren durch diese Dokumentation keinen Verkauf.
 
 - **Fehlt:** Externe Abnahme des vollständigen erlaubten Kaufwegs und physischer Druckqualität.
 - **Wo:** Bestehendes privates Testsystem mit Shopify/Printify und anschliessend tatsächlicher Druckkontrolle.
-- **Benötigt:** Separate Freigaben für jede kostenpflichtige KI-Generierung, Testzahlung/-bestellung, Druck und Produktion; vorher alle offenen Produkt-, Preis-, Versand-, Etiketten- und Webhook-Nachweise abschliessen. Für eine als unbestätigt gemeldete KI-Annahme zuerst Status im vorhandenen Anbieterkonto und Kontoguthaben abgleichen; keine erneute kostenpflichtige Neuanlage oder Guthabenkorrektur aus einem unbekannten Ausgang ableiten. Öffentlicher Verkauf und Produktion bleiben eigenständige spätere Entscheidungen.
+- **Benötigt:** Separate Freigaben für jede kostenpflichtige KI-Generierung, Testzahlung/-bestellung, Druck und Produktion; vorher alle offenen Produkt-, Preis-, Versand-, Etiketten- und Webhook-Nachweise abschliessen. Für eine als unbestätigt gemeldete KI-Annahme zuerst Status im vorhandenen Anbieterkonto und Kontoguthaben abgleichen; bei unbestätigter Tokenbuchung zusätzlich Saldo und Ledger prüfen. Keine erneute kostenpflichtige Neuanlage oder Guthabenkorrektur aus einem unbekannten Ausgang ableiten. Öffentlicher Verkauf und Produktion bleiben eigenständige spätere Entscheidungen.
 - **Erfolgreich:** Vorderseite, Rückseite und beide Seiten stimmen von Vorschau bis unveränderter Produktionsdatei und realem Artikel überein; Preis, Versand und eindeutige Bestellzuordnung bestätigt. Ein unklarer KI-Auftrag ist vor einem erneuten Start eindeutig abgeglichen. Keine Sperre allein aufgrund bestandener Offline-Tests aufheben.

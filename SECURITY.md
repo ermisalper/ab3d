@@ -26,11 +26,21 @@
 - Task-IDs werden einem Konto zugeordnet; fremde Tasks dürfen weder gelesen
   noch verfeinert werden.
 - Fehlgeschlagene Generierungen werden einmalig zurückerstattet.
+- Tokenabbuchung und Ledger werden in einer D1-Transaktion gespeichert. Die
+  vorhandene Erstattung nach bekanntem Taskfehler speichert Marker, Buchung und
+  Gutschrift gemeinsam; ein SQL-Schreibfehler verbraucht die Erstattungsberechtigung
+  nicht. Unbestätigte Buchungsbelege lösen weder einen KI-Start noch automatische
+  Guthabenkorrekturen oder Wiederholungen aus.
 - Uploads werden nach Typ, Dateisignatur, dekodierten Abmessungen und Grösse
   geprüft. CAPPATEX-Originalmotive und private Gestaltungen werden geschützt
   kontogebunden gespeichert; öffentliche Galerien sind davon getrennt.
 - Dateisignatur, Grösse und MIME-Typ werden serverseitig geprüft; aktive
   Uploadformate wie SVG oder HTML werden nicht akzeptiert.
+- CAPPATEX übernimmt generierte und hochgeladene Motive nur nach bestätigtem
+  HTTP200 mit gültiger eigener Motiv-ID, PNG-Format, originalen/Vorschau-Abmessungen
+  und formal gültigem SHA-256. Dies ersetzt keine serverseitige Datei-Hashprüfung.
+  Galerieänderungen benötigen zusätzlich `ok=true`; HTTP202 oder fehlende Belege
+  werden nicht als gespeicherte Veröffentlichung oder Rücknahme dargestellt.
 - Modell- und Bild-URLs aus KI-Antworten werden im Browser auf verschlüsselte
   Meshy-Domains begrenzt.
 - KI- und Abo-Anfragen begrenzen die tatsächlich gelesenen JSON-Bytes, auch ohne

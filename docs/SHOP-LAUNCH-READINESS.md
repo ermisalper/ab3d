@@ -1,8 +1,79 @@
 # Verkaufsvorbereitung für AB3D und CAPPATEX
 
-Stand 22.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-production`. Die Site bleibt owner-private. Dieser Schritt ist keine Verkaufsfreigabe; ältere Prüfprotokolle behalten ihren damaligen Stand.
+Stand 23.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-production`. Die Site bleibt owner-private. Dieser Schritt ist keine Verkaufsfreigabe; ältere Prüfprotokolle behalten ihren damaligen Stand.
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
+
+## Weitere Vorbereitung der gemeinsamen Abnahme · 23.10.2026 · nur Quellstand
+
+Fortsetzung auf sauberem `54b3a3da9cc942ebb537c388757dc6a9a2eda833` des bestehenden
+Arbeitsbranches. Die vorherigen 843 Tests und der [GitHub-CI-Lauf 39840435619](https://github.com/ermisalper/ab3d/actions/runs/39840435619)
+sind erfolgreich abgeschlossen. Keine neuen Produktgruppen, Preise, Anbieter,
+Konten oder Freigaben. Keine kostenpflichtigen Vorgänge, Browserprüfung,
+Produktionsmigration oder Bereitstellung dieser Ergänzungen.
+
+**Tokenbuchungen:** Zwei bestehende Fehler wurden mit echten Wallet-Funktionen,
+lokaler SQLite und absichtlich scheiternden Ledger-Triggern reproduziert:
+Abbuchen konnte den Saldo von 10 auf 8 senken, ohne die Buchung zu speichern;
+Erstatten konnte `refunded=1` setzen, obwohl die Gutschrift zurückgerollt wurde.
+Nun werden Abbuchung und Ledger gemeinsam in einem D1-Batch gespeichert;
+Refundmarker, Ledger und Gutschrift bilden ebenfalls einen gemeinsamen Batch.
+Konditionierte Folgeschritte gehören genau zum vorherigen Schreibvorgang.
+SQL-Fehler rollen die Gruppe zurück. Nach einem behobenen Fehler kann derselbe
+bereits erstattungsfähige Task ausdrücklich erneut geprüft werden; parallele
+Statusabfragen erzeugen höchstens eine Gutschrift. Bestehende Erstattungsregeln,
+Nullkosten und Betreiberbefreiung bleiben erhalten. Keine Migration nötig.
+
+Nur bestätigte D1-Ergebnisse gelten als Buchungsnachweis. Widersprüchliche oder
+verlorene Bestätigungen und nachträgliche Saldolesefehler werden als unbestätigt
+gemeldet. Meshy startet dann keinen Anbieter-POST. Ein tatsächlich bereits
+committeter, aber unbestätigter Debit wird nicht automatisch rückgängig gemacht;
+Guthaben/Ledger müssen gegebenenfalls manuell abgeglichen werden. Dies ist keine
+neue Wiederherstellungs- oder Korrekturregel.
+
+**CAPPATEX und Galerie:** Generierung und Upload übernehmen nur HTTP200 mit
+vollständigem eigenem Motivbeleg: gültige ID und privater Bildpfad, PNG-Format,
+Original-/Vorschau-Abmessungen und SHA-256 als korrekt formatierte Zeichenkette.
+Fehlende Vorschauwerte werden nicht aus anderen Feldern ergänzt. HTTP202,
+HTML, fehlender Hash und falsch typisierte Werte bestätigen kein fertiges Motiv.
+Eingaben, hochgeladene Auswahl und Datenschutzentscheidung bleiben bei Fehlern
+erhalten. Galerieänderungen benötigen HTTP200 mit `ok=true`; unbestätigte
+Veröffentlichungen/Rücknahmen lösen keinen Erfolgsrefresh aus. Die Hashprüfung
+des Antwortformats ist keine neue Behauptung einer clientseitigen Byteprüfung.
+
+**AB3D-Shopcheckout:** Der bestehende Streamleser begrenzt nun auch hier die
+tatsächlich gelesenen JSON-Bytes auf 20.000. Fehlende oder falsch kleine
+Content-Length umgeht diese Grenze nicht. Ungültiges UTF-8, JSON, Nullartikel
+und falsch typisierte Mengen werden kontrolliert vor Katalog-/Datenbankzugriffen
+abgewiesen. Gültige Warenkorb-, SKU-, Varianten-, AGB- und Sitzungsregeln bleiben
+erhalten. Token- und CAPPATEX-Webhooks wurden zusätzlich lesend geprüft; kein
+weiterer kleiner wesentlicher Befund. Keine unnötige Änderung ihrer bestehenden
+HMAC-, Idempotenz- und Zahlungsartentrennung.
+
+Zusätzlich wurden sämtliche vorhandenen Migrationen mit der bereits installierten
+lokalen Miniflare-D1-Laufzeit ausgeführt. Vor 0016 eingefügte synthetische Altbestände
+(aktives Abo, 37 Tokens, Ledger und Task) bleiben erhalten, Fremdschlüsselprüfung
+ohne Befund. Mit tatsächlichen Wallet-Funktionen wurden dort Debit, vollständiger
+Rollback bei Ledgerfehlern, unverbrauchter Refundmarker, sechs parallele Refunds
+genau einmal und unzureichendes Guthaben erfolgreich geprüft. Keine produktive
+D1-Verbindung, keine Hosting-Konfiguration und keine persistente Testdatenbank.
+Grundlage: [D1-Batch-Transaktionen](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)
+und [SQLite changes()](https://www.sqlite.org/lang_corefunc.html#changes).
+
+**Abschlussprüfung:** `pnpm check` vollständig erfolgreich: TypeScript, ESLint,
+genau ein Produktionsbuild und **921/921 Tests**, keine übersprungenen Tests.
+78 gezielte neue Regressionen: 31 Wallet-/SQLite-Fälle, zwei zusätzliche
+Meshy-Debitfehlerfälle, 21 tatsächliche CAPPATEX-/Galerie-Komponentenfälle und
+24 Shopcheckout-Routenfälle. Die Ausgangsfehler wurden vor den Korrekturen
+reproduziert. Quellscan über 411 Dateien ohne Treffer vorhandener lokaler
+Secretwerte; Diffprüfung erfolgreich. Unabhängige lesende Abschlussprüfung
+ohne wesentlichen Befund. Bestehendes Lockfile unverändert, keine neue Abhängigkeit
+oder Migration. Logs und lokale D1-Einmalprüfung ausschliesslich im ignorierten
+`outputs/`. Browser-, Anbieter-, Zahlungs- und Druckabnahme bleiben offen.
+Quellcommits: `a8ebe9a` (atomare Tokenbuchungen), `ba5cd97` (CAPPATEX-/Galeriebelege)
+und `029583d` (AB3D-Shopcheckout-Eingaben). Ein Push ist keine Bereitstellung.
+
+Offene Betreiberhandlungen bleiben gesammelt in [NEXT-MANUAL-STEPS.md](NEXT-MANUAL-STEPS.md).
 
 ## Konto und Generierungsabläufe absichern · 22.10.2026 · nur Quellstand
 
