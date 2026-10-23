@@ -57,18 +57,20 @@ export async function chargeTokens(
 ): Promise<number> {
   if (hasUnlimitedTokens(email)) return getTokenBalance(email);
   const now = Date.now();
-  const updated = await env.DB.prepare(
-    `UPDATE accounts
-     SET token_balance = token_balance - ?, updated_at = ?
-     WHERE email = ? AND token_balance >= ?`,
-  ).bind(amount, now, email, amount).run();
-  if (!updated.meta.changes) throw new Error("INSUFFICIENT_TOKENS");
-
-  await env.DB.prepare(
-    "INSERT INTO token_ledger (email, delta, reason, created_at) VALUES (?, ?, ?, ?)",
-  ).bind(email, -amount, reason, now).run();
-
-  return getTokenBalance(email);
+  let changes: number[];
+  try {
+    // Both statements run in one D1 transaction. The ledger is written only
+    // when this batch's balance update succeeded, never on insufficient funds.
+    changes = walletChanges(await env.DB.batch([
+      env.DB.prepare(`UPDATE accounts SET token_balance = token_balance - ?, updated_at = ?
+        WHERE email = ? AND token_balance >= ?`).bind(amount, now, email, amount),
+      env.DB.prepare(`INSERT INTO token_ledger (email, delta, reason, created_at)
+        SELECT ?, ?, ?, ? WHERE changes() = 1`).bind(email, -amount, reason, now),
+    ]), 2);
+  } catch { throw new Error("TOKEN_ACCOUNT_UNCONFIRMED"); }
+  if (changes.every(change => change === 0)) throw new Error("INSUFFICIENT_TOKENS");
+  if (!changes.every(change => change === 1)) throw new Error("TOKEN_ACCOUNT_UNCONFIRMED");
+  return confirmedWalletBalance(email);
 }
 
 export async function refundTokens(
@@ -78,16 +80,32 @@ export async function refundTokens(
   reason: string,
 ): Promise<number> {
   const now = Date.now();
-  const marked = await env.DB.prepare(
-    "UPDATE generation_tasks SET refunded = 1, status = 'FAILED', updated_at = ? WHERE task_id = ? AND email = ? AND refunded = 0",
-  ).bind(now, taskId, email).run();
-  if (marked.meta.changes) {
-    await env.DB.batch([
-      env.DB.prepare("UPDATE accounts SET token_balance = token_balance + ?, updated_at = ? WHERE email = ?").bind(amount, now, email),
-      env.DB.prepare("INSERT INTO token_ledger (email, delta, reason, task_id, created_at) VALUES (?, ?, ?, ?, ?)").bind(email, amount, reason, taskId, now),
-    ]);
-  }
-  return getTokenBalance(email);
+  let changes: number[];
+  try {
+    // Retain the existing refund rule, but commit the once-only marker, ledger
+    // and credit together. A failure must not consume the refund eligibility.
+    changes = walletChanges(await env.DB.batch([
+      env.DB.prepare(`UPDATE generation_tasks SET refunded = 1, status = 'FAILED', updated_at = ?
+        WHERE task_id = ? AND email = ? AND refunded = 0`).bind(now, taskId, email),
+      env.DB.prepare(`INSERT INTO token_ledger (email, delta, reason, task_id, created_at)
+        SELECT ?, ?, ?, ?, ? WHERE changes() = 1`).bind(email, amount, reason, taskId, now),
+      env.DB.prepare(`UPDATE accounts SET token_balance = token_balance + ?, updated_at = ?
+        WHERE email = ? AND changes() = 1`).bind(amount, now, email),
+    ]), 3);
+  } catch { throw new Error("TOKEN_ACCOUNT_UNCONFIRMED"); }
+  if (!changes.every(change => change === 0) && !changes.every(change => change === 1)) throw new Error("TOKEN_ACCOUNT_UNCONFIRMED");
+  return confirmedWalletBalance(email);
+}
+
+function walletChanges(results: unknown, count: number): number[] {
+  if (!Array.isArray(results) || results.length !== count || results.some(result => !result
+    || result.success !== true || !result.meta || ![0, 1].includes(result.meta.changes))) throw new Error("TOKEN_ACCOUNT_UNCONFIRMED");
+  return results.map(result => result.meta.changes as number);
+}
+
+async function confirmedWalletBalance(email: string) {
+  try { return await getTokenBalance(email); }
+  catch { throw new Error("TOKEN_ACCOUNT_UNCONFIRMED"); }
 }
 
 export async function getTokenBalance(email: string): Promise<number> {

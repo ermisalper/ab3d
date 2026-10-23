@@ -149,6 +149,29 @@ test("upstream rejection refunds the unstarted charge and is never retried",asyn
   assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n,1,"Provider failure does not release request capacity");
 });
 
+test("a failed debit ledger transaction keeps the wallet intact and prevents provider dispatch",async()=>{
+  database.sql.exec("CREATE TRIGGER fail_debit_ledger BEFORE INSERT ON token_ledger BEGIN SELECT RAISE(ABORT,'synthetic private detail'); END");
+  const response=await post({action:"create",type:"image",imageDatas:[image]}),body=await response.json();
+  assert.equal(response.status,503);assert.equal(body.code,"token_account_unconfirmed");
+  assert.doesNotMatch(JSON.stringify(body),/synthetic private detail|INSERT|token_ledger/);
+  assert.equal(balance(),20);assert.equal(posts().length,0);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM token_ledger").get().n,0);
+});
+
+test("an unconfirmed debit acknowledgement cannot dispatch or automatically compensate a provider attempt",async()=>{
+  const originalBatch=database.batch.bind(database);
+  database.batch=async statements=>{
+    const result=await originalBatch(statements);
+    return result.length===2&&result[0].meta.changes===1&&result[1].meta.changes===1
+      ? [{success:false},{success:false}] : result;
+  };
+  const response=await post({action:"create",type:"image",imageDatas:[image]});
+  assert.equal(response.status,503);assert.equal((await response.json()).code,"token_account_unconfirmed");
+  assert.equal(posts().length,0);assert.equal(balance(),19);
+  assert.deepEqual(database.sql.prepare("SELECT delta FROM token_ledger").all().map(row=>row.delta),[-1]);
+  assert.equal(database.sql.prepare("SELECT COUNT(*) AS n FROM ai_usage_admissions").get().n,1);
+});
+
 const unconfirmedSubmissions = [
   ["unreadable successful response", () => new Response("<html>upstream</html>", { status: 200 })],
   ["null successful response", () => Response.json(null)],

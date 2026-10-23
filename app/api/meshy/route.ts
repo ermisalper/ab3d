@@ -186,6 +186,11 @@ async function chargeOrReply(email: string, amount: number, reason: string) {
   try {
     return { ok: true as const, balance: await chargeTokens(email, amount, reason) };
   } catch (error) {
+    if (error instanceof Error && error.message === "TOKEN_ACCOUNT_UNCONFIRMED") {
+      return { ok: false as const, response: Response.json({ code: "token_account_unconfirmed",
+        error: "Die Tokenbuchung konnte nicht bestätigt werden. Es wurde kein KI-Aufruf gestartet. Bitte prüfe dein Konto, bevor du erneut startest." },
+      { status: 503, headers: { "Cache-Control": "no-store" } }) };
+    }
     if (error instanceof Error && error.message === "INSUFFICIENT_TOKENS") {
       return {
         ok: false as const,

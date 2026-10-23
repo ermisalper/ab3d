@@ -40,9 +40,18 @@ class D1 {
         const row = this.db.prepare(query).get(...args);
         return row ? { ...row } : null;
       },
-      run: async () => ({ success: true, meta: { changes: Number(this.db.prepare(query).run(...args).changes) } }),
+      runSync: () => ({ success: true, meta: { changes: Number(this.db.prepare(query).run(...args).changes) } }),
+      async run() { return this.runSync(); },
     });
     return statement();
+  }
+  async batch(statements) {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const results = statements.map(statement => statement.runSync());
+      this.db.exec("COMMIT");
+      return results;
+    } catch (error) { this.db.exec("ROLLBACK"); throw error; }
   }
 }
 
