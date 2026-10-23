@@ -4,6 +4,60 @@ Stand 23.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-prod
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
 
+## Private Bereitstellung vorbereitet · Version 66 gespeichert · 23.10.2026
+
+Der Betreiber hat die private Bereitstellung des aktuellen Stands einschliesslich
+vorheriger Datenbanksicherung und Migrationen aufgegriffen. Die Bereitstellungsfreigabe
+ist damit vorhanden. Verkauf, Zahlungsarten, automatische Produktion und öffentlicher
+Zugriff bleiben davon getrennt und unverändert gesperrt.
+
+**Nativ geprüft:** Site `appgprj_6a69247390f08191811183b6a04bae94`, Eigentümerrolle,
+Zugang `custom` mit genau einem berechtigten Nutzer, null externen Besuchern,
+Zugriffsrevision 1. Vorheriger Live-Stand Version 65. Umgebung weiterhin Revision 11;
+Checkout, Fulfillment und automatische Produktion ausdrücklich `false`.
+`TOKEN_PURCHASES_ENABLED` ist nicht gesetzt; der bestehende Code behandelt das als
+deaktiviert. Keine Servervariable oder Zugangseinstellung wurde verändert.
+
+Die Datenbankübersicht liefert 21 vollständige Tabellennamen. Die Tabellen von 0014
+und 0016 sowie die beiden Anfrage-ID-/Hashspalten von 0015 fehlen; diese Migrationen
+wurden in diesem Schritt nicht angewandt. Der native Tabellenleser ist kein
+vollständiges Sicherungswerkzeug: Bereits eine einzelne Zeile aus
+`cappatex_preparations` meldet `truncated=true` und `truncated_values=1`.
+Ein daraus gebildeter Export würde lange Gestaltungsdaten verlieren. Es wurde
+deshalb keine solche Datei als Datenbanksicherung ausgegeben oder gespeichert.
+Die verfügbaren nativen Werkzeuge bieten keinen direkten vollständigen D1-Export
+oder Wiederherstellungsbefehl. Vor der Migration bleibt eine vollständige
+Hosting-Sicherung mit nutzbarem Rückspielweg notwendig. Eine Anwendung alter
+Site-Versionen allein ist keine Wiederherstellung der Datenbank.
+
+**Veröffentlichungspaket fertig:** Der offizielle Sites-1.1.1-Quellhelfer hat den
+sauberen getesteten AB3D-Quellstand `d08e0652c85d311d29f27533638633aebafec9f2`
+mit dem vorhandenen Sites-Quellrepository synchronisiert und unverändert paketiert.
+Arbeitsverzeichnis bleibt ausschliesslich dieses AB3D-Repository; GitHub-Branch
+`codex/cappatex-production` und GitHub-main wurden nicht umgeschrieben.
+Archiv `outputs/ab3d-release-d08e065-2026-10-23.tar.gz`, 7.444.557 Bytes,
+SHA-256 `e898dc7959357708984202ec508fc831d7aaf05288f45199c5b76423487b0faa`.
+Paketprüfung: alle Migrationen 0000–0016 vorhanden, keine `.env`-, `.git`- oder
+`node_modules`-Pfade, kein Treffer vorhandener lokaler Secretwerte.
+Die zuvor erfolgreichen 921 Tests, TypeScript, ESLint und der Produktionsbuild
+wurden mit unveränderten Eingaben wiederverwendet; kein unnötiger erneuter Build.
+
+Die native Operation `save_site_version` hat **Version 66** ohne Deployment
+gespeichert: `appgprj_6a69247390f08191811183b6a04bae94~appgver_b8dc71610a908191ae5b06287a14edae`,
+Quellcommit wie oben, `deployment_id=null`. Gespeichertes Archiv 158 Dateien,
+13.998.080 Bytes, Inhalts-Hash
+`sha256:27a6a9143d8b285cf7c47e0f4a8ffed04516584b0f205bd00b9441e081795741`.
+**Gespeichert ist nicht live.** Es wurde keine Deploy-Operation gestartet und
+keine Produktionsmigration ausgeführt. Nach Klärung der Sicherung diese gespeicherte
+Version weiterverwenden, nicht erneut speichern oder paketieren.
+
+Zusätzlicher Migrationsprüfpunkt: 0016 enthält eine Guthabenspaltenkopie und muss
+atomar ausgeführt werden. Der lokale SQLite-/Miniflare-Nachweis liegt vor;
+die [Sites-Speicherreferenz](C:/Users/berk1/.codex/plugins/cache/openai-curated-remote/sites/1.1.1/skills/sites/references/storage.md)
+beschreibt schema-only-Migrationen. Das unterstützte Hosting-Verhalten muss vor
+Anwendung geklärt werden; eine eventuelle Ablehnung darf nicht umgangen werden.
+Keine Änderung des getesteten SQL-Entwurfs oder der Guthabenregeln in diesem Schritt.
+
 ## Weitere Vorbereitung der gemeinsamen Abnahme · 23.10.2026 · nur Quellstand
 
 Fortsetzung auf sauberem `54b3a3da9cc942ebb537c388757dc6a9a2eda833` des bestehenden
