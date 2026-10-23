@@ -31,6 +31,16 @@ async function readOwnMotif(id: string) {
   return ownedMotif(await response.json(), id);
 }
 
+async function readCreatedMotif(response: Response, source: "generated" | "upload", canDownloadOriginal: boolean) {
+  const data = await response.json().catch(() => { throw new Error("Die Antwort konnte nicht bestätigt werden. Bitte prüfe deine Sammlung vor einem weiteren Versuch."); });
+  if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : "Das Motiv konnte nicht sicher gespeichert werden.");
+  if (response.status !== 200) throw new Error("Das gespeicherte Motiv ist noch nicht bestätigt. Bitte prüfe deine Sammlung vor einem weiteren Versuch.");
+  if (!data || typeof data !== "object" || Array.isArray(data) || data.format !== "png"
+    || typeof data.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(data.sha256))
+    throw new Error("Die Motivdatei konnte nicht vollständig bestätigt werden. Bitte prüfe deine Sammlung vor einem weiteren Versuch.");
+  return ownedMotif({ ...data, previewUrl: data.image, source, canDownloadOriginal }, data.designId);
+}
+
 function photoPrintArea(variant: DesignVariant): CSSProperties {
   const photo = variant.mockup;
   return { left: `${100 * photo.left / photo.width}%`, top: `${100 * photo.top / photo.height}%`,
@@ -465,17 +475,14 @@ export default function CappatexDesigner() {
     try {
       const response = await fetch("/api/cappatex", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, style, canvas, confirmGeneration: confirmed,galleryChoice }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Das Motiv konnte nicht erstellt werden.");
-      const motif = ownedMotif({ ...data, previewUrl: data.image, source: "generated", canDownloadOriginal: accountCanDownloadHd,
-        previewWidth: data.previewWidth ?? Math.ceil(data.width / 4), previewHeight: data.previewHeight ?? Math.ceil(data.height / 4) }, data.designId);
+      const motif = await readCreatedMotif(response, "generated", accountCanDownloadHd);
       setMotifs(current => ({ ...current, [motif.designId]: motif }));
       const nextPlacement = variant ? initialPlacement(variant.area, motif) : null;
       showMotif(motif, nextPlacement);
       if (draftKey && nextPlacement) setDrafts({ ...rememberDraft(), [draftKey]: { ...currentDraft,
         working: { ...currentDraft.working, [side]: { designId: motif.designId, placement: nextPlacement } } } });
       setGalleryChoice(newGalleryDraft());setConfirmed(false);
-      setPreviewSize({ width: data.previewWidth ?? Math.ceil(data.width / 4), height: data.previewHeight ?? Math.ceil(data.height / 4) });
+      setPreviewSize({ width: motif.previewWidth, height: motif.previewHeight });
       setUploadedArtwork(false); setLoadedArtwork(""); setPhotoUrl("");
       showProductPreview();
     } catch (caught) { setCreationError({ source: "prompt", message: caught instanceof Error ? caught.message : "Bilddienst nicht erreichbar." }); }
@@ -487,16 +494,14 @@ export default function CappatexDesigner() {
     try {
       const file = await prepareCustomerImage(uploadFile);
       const response = await fetch("/api/cappatex/upload", { method: "POST", headers: { "Content-Type": "image/png", "X-Cappatex-Image-Rights": "confirmed","X-Gallery-Choice":encodeURIComponent(JSON.stringify(galleryChoice)) }, body: file });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Das Bild konnte nicht gespeichert werden.");
-      const motif = ownedMotif({ ...data, previewUrl: data.image, source: "upload", canDownloadOriginal: true }, data.designId);
+      const motif = await readCreatedMotif(response, "upload", true);
       setMotifs(current => ({ ...current, [motif.designId]: motif }));
       const nextPlacement = variant ? initialPlacement(variant.area, motif) : null;
       showMotif(motif, nextPlacement);
       if (draftKey && nextPlacement) setDrafts({ ...rememberDraft(), [draftKey]: { ...currentDraft,
         working: { ...currentDraft.working, [side]: { designId: motif.designId, placement: nextPlacement } } } });
       setGalleryChoice(newGalleryDraft());
-      setPreviewSize({ width: data.previewWidth, height: data.previewHeight });
+      setPreviewSize({ width: motif.previewWidth, height: motif.previewHeight });
       setUploadedArtwork(true); setLoadedArtwork(""); setPhotoUrl("");
       showProductPreview();
     } catch (caught) { setCreationError({ source: "upload", message: caught instanceof Error ? caught.message : "Das Bild konnte nicht verarbeitet werden." }); }

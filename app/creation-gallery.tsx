@@ -12,7 +12,13 @@ const visibilityName:Record<string,string>={private:"Privat",pending:"Wartet auf
 const stateName:Record<string,string>={creating:"Ergebnis wird vorbereitet",ready:"Gespeichert",unarchived:"Datei noch nicht archiviert",archive_error:"Archivierung offen",preview_ready:"Vorschau gespeichert",failed:"Erstellung nicht abgeschlossen"};
 type Detail=GallerySummary&{mine:boolean;canReview:boolean;versions:Array<{taskId:string;type:string;state:string;createdAt:number;modelUrl:string|null}>};
 const categoryName=(studio:GalleryStudio,key:string)=>(GALLERY_CATEGORIES[studio] as Record<string,string>)[key]||"Weitere Werke";
-async function read(response:Response){const data=await response.json();if(!response.ok)throw new Error(data.error||"Die Anfrage konnte nicht abgeschlossen werden.");return data;}
+async function read(response:Response,mutation=false){
+  const data=await response.json().catch(()=>{throw new Error("Die Antwort konnte nicht bestätigt werden. Bitte lade die Ansicht erneut.");});
+  if(!response.ok)throw new Error(typeof data?.error==="string"?data.error:"Die Anfrage konnte nicht abgeschlossen werden.");
+  if(response.status!==200||!data||typeof data!=="object"||Array.isArray(data)||(mutation&&data.ok!==true))
+    throw new Error(mutation?"Die Änderung ist noch nicht bestätigt. Deine Auswahl bleibt erhalten. Bitte lade den Stand erneut, bevor du es nochmals versuchst.":"Der geladene Stand konnte nicht bestätigt werden. Bitte lade die Ansicht erneut.");
+  return data;
+}
 
 export default function CreationGallery({studio,scope="public",detailId}:{studio:GalleryStudio;scope?:"public"|"mine"|"review";detailId?:string}) {
   const [category,setCategory]=useState(""),[query,setQuery]=useState(""),[search,setSearch]=useState(""),[page,setPage]=useState(1);
@@ -34,7 +40,7 @@ export default function CreationGallery({studio,scope="public",detailId}:{studio
 
   async function change(action:string){
     if(!detail||busy)return;setBusy(true);setError("");setMessage("");
-    try{await read(await fetch(`/api/creations/${detail.id}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,revision:detail.revision,choice})}));
+    try{await read(await fetch(`/api/creations/${detail.id}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,revision:detail.revision,choice})}),true);
       setMessage(action==="approve"?"Das Werk ist jetzt in der Galerie sichtbar.":action==="withdraw"?"Die Veröffentlichung wurde zurückgezogen.":action==="reject"?"Der Beitrag wurde nicht freigegeben.":"Deine Auswahl wurde gespeichert.");requestRefresh();
     }catch(e){setError(e instanceof Error?e.message:"Speichern fehlgeschlagen.");}finally{setBusy(false);}
   }
