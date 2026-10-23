@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { ensureAccount } from "../../../../db/account";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { LEGAL_VERSION } from "../../../legal-version";
+import { isJsonObject, readRequestJson, RequestJsonError } from "../../../request-json";
 import {
   fetchShopifyCollection,
   SHOPIFY_COLLECTIONS,
@@ -42,26 +43,29 @@ function error(status: number, code: string, message: string) {
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return error(403, "invalid_origin", "Unzulässige Anfrage.");
-  if (Number(request.headers.get("content-length") || 0) > 20_000) return error(413, "request_too_large", "Der Warenkorb ist zu gross.");
-
-  const body = await request.json().catch(() => null) as {
-    termsAccepted?: unknown;
-    items?: Array<{ productHandle?: unknown; variantId?: unknown; quantity?: unknown }>;
-  } | null;
+  let body: Record<string, unknown>;
+  try {
+    const parsed = await readRequestJson(request, 20_000);
+    if (!isJsonObject(parsed)) return error(400, "invalid_request", "Der Warenkorb ist ungültig.");
+    body = parsed;
+  } catch (caught) {
+    return caught instanceof RequestJsonError && caught.status === 413
+      ? error(413, "request_too_large", "Der Warenkorb ist zu gross.")
+      : error(400, "invalid_request", "Der Warenkorb ist ungültig.");
+  }
   if (body?.termsAccepted !== true) return error(400, "terms_required", "Bitte bestätige die AGB und Datenschutzerklärung.");
   if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 20) {
     return error(400, "invalid_cart", "Der Warenkorb ist leer oder zu gross.");
   }
 
-  const requested = body.items.map((item) => ({
-    productHandle: typeof item.productHandle === "string" ? item.productHandle : "",
-    variantId: typeof item.variantId === "string" ? item.variantId : "",
-    quantity: Number(item.quantity),
-  }));
-  if (requested.some((item) => !/^[a-z0-9][a-z0-9-]*$/.test(item.productHandle)
-    || !/^gid:\/\/shopify\/ProductVariant\/\d+$/.test(item.variantId)
-    || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20)) {
-    return error(400, "invalid_item", "Ein Warenkorb-Artikel ist ungültig.");
+  const requested: Array<{ productHandle: string; variantId: string; quantity: number }> = [];
+  for (const item of body.items) {
+    if (!isJsonObject(item) || typeof item.productHandle !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(item.productHandle)
+      || typeof item.variantId !== "string" || !/^gid:\/\/shopify\/ProductVariant\/\d+$/.test(item.variantId)
+      || typeof item.quantity !== "number" || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20) {
+      return error(400, "invalid_item", "Ein Warenkorb-Artikel ist ungültig.");
+    }
+    requested.push({ productHandle: item.productHandle, variantId: item.variantId, quantity: item.quantity });
   }
 
   try {
