@@ -14,6 +14,32 @@ const offer = (payload = emptyProductionOffer(), version = 0, id = orderId) => (
 const input = (ui, name) => [...ui.container.querySelectorAll("label")].find(label => label.firstChild?.textContent === name)?.querySelector("input,textarea,select");
 const ready = ui => until(() => assert.ok(input(ui, "Material")));
 
+test("actual offer component does not load a complete looking HTTP202 as a confirmed server draft", async () => {
+  const ui = await mount(OfferPanel, props, { fetch: async () => json(offer(), 202) });
+  try {
+    await until(() => assert.match(ui.text(), /Angebotsentwurf konnte nicht geladen werden/));
+    assert.equal(input(ui, "Material"), undefined);
+  } finally { await ui.close(); }
+});
+
+test("actual offer component preserves dirty amounts when a matching save receives only HTTP202", async () => {
+  let puts = 0;
+  const ui = await mount(OfferPanel, props, { fetch: async (_url, init) => {
+    if (init.method !== "PUT") return json(offer());
+    puts++; return json(offer(JSON.parse(init.body).payload, 1), 202);
+  } });
+  try {
+    await ready(ui); await ui.change(input(ui, "Material"), "PLA unconfirmed draft");
+    await ui.click(ui.button("Internen Entwurf speichern"));
+    await until(() => assert.match(ui.text(), /Speichern konnte nicht bestätigt werden/));
+    assert.equal(input(ui, "Material").value, "PLA unconfirmed draft");
+    assert.equal(ui.button("Internen Entwurf speichern").disabled, false);
+    assert.equal(ui.storage.values.size, 1);
+    assert.doesNotMatch(ui.text(), /Interner Entwurf gespeichert/);
+    assert.equal(puts, 1, "No automatic retry after an uncertain save");
+  } finally { await ui.close(); }
+});
+
 test("actual offer component sends unknown amounts as null and preserves explicit integer-cent zero", async () => {
   const puts = [];
   const ui = await mount(OfferPanel, props, { fetch: async (url, init) => {

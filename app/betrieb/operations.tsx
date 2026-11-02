@@ -19,8 +19,8 @@ const taskLabel = (status: string | null) => status === "SUCCEEDED" ? "Dateiumwa
 
 async function readJson(response: Response) {
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(body?.error || "Daten konnten nicht geladen werden. Bitte erneut versuchen.");
-  if (!body || typeof body !== "object") throw new Error("Die Antwort ist unvollständig. Bitte erneut laden.");
+  if (response.status !== 200) throw new Error(body?.error || "Daten konnten nicht geladen werden. Bitte erneut versuchen.");
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("Die Antwort ist unvollständig. Bitte erneut laden.");
   return body;
 }
 
@@ -180,9 +180,11 @@ export default function Operations({ ownerEmail }: { ownerEmail: string }) {
         refreshDetail();
         throw new Error("Diese Prüfung wurde zwischenzeitlich geändert. Deine Eingabe bleibt erhalten. Vergleiche sie mit dem neu geladenen Stand.");
       }
-      if (!response.ok || !body?.review) throw new Error(body?.error || "Prüfung konnte nicht gespeichert werden. Deine Eingabe bleibt erhalten.");
+      if (response.status !== 200 || body?.ok !== true || !body.review || typeof body.review !== "object" || Array.isArray(body.review))
+        throw new Error(typeof body?.error === "string" ? body.error : "Prüfung konnte nicht gespeichert werden. Deine Eingabe bleibt erhalten.");
       const review = body.review as Ab3dReview;
-      if (review.version !== submitted.version + 1 || review.state !== submitted.state || review.notes !== submitted.notes) {
+      if (review.version !== submitted.version + 1 || review.state !== submitted.state || review.notes !== submitted.notes
+        || !Number.isSafeInteger(review.updatedAt) || Number(review.updatedAt) <= 0 || review.updatedBy !== ownerEmail) {
         throw new Error("Die Speicherbestätigung passt nicht zu deiner Eingabe. Deine Notiz bleibt erhalten. Lade den gespeicherten Stand zum Vergleich neu.");
       }
       setDetails(current => current[id] ? { ...current, [id]: { ...current[id], order: { ...current[id].order, review } } } : current);

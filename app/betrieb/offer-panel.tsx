@@ -165,7 +165,7 @@ function OwnedOfferPanel({ orderId, ownerEmail }: { orderId: string; ownerEmail:
         }
         const response = await fetch(`/api/ab3d/operations/${encodeURIComponent(orderId)}/offer`, { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
         const body = await response.json().catch(() => null);
-        if (!response.ok) throw new Error("Der Angebotsentwurf konnte nicht geladen werden. Bitte erneut versuchen.");
+        if (response.status !== 200) throw new Error("Der Angebotsentwurf konnte nicht geladen werden. Bitte erneut versuchen.");
         const incoming = readOffer(body, orderId);
         if (!stillActive()) return;
         if ((offerRef.current[orderId]?.version ?? -1) > incoming.version) return;
@@ -238,7 +238,7 @@ function OwnedOfferPanel({ orderId, ownerEmail }: { orderId: string; ownerEmail:
         if (selected.current === id) setRevision(value => value + 1);
         throw new Error("Der Serverstand wurde zwischenzeitlich geändert. Deine Eingabe bleibt erhalten. Vergleiche beide Stände, bevor du erneut speicherst.");
       }
-      if (!response.ok) throw new Error("Speichern konnte nicht bestätigt werden. Deine Eingaben bleiben erhalten. Bitte Eingaben prüfen oder den Serverstand neu laden.");
+      if (response.status !== 200) throw new Error("Speichern konnte nicht bestätigt werden. Deine Eingaben bleiben erhalten. Bitte Eingaben prüfen oder den Serverstand neu laden.");
       const incoming = readOffer(body, id);
       if (incoming.version !== current.version + 1 || JSON.stringify(toForm(incoming.payload)) !== JSON.stringify(toForm(payload))) throw new Error("Die Speicherbestätigung passt nicht zu diesem Entwurf. Deine Eingaben bleiben erhalten. Bitte den Serverstand neu laden und vergleichen.");
       offerRef.current = { ...offerRef.current, [id]: incoming }; setOffers(offerRef.current);

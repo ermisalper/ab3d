@@ -287,6 +287,81 @@ async function selectInquiry(ui) {
   await until(() => assert.ok(ui.container.querySelector("#ab3d-review-notes")));
 }
 
+test("actual AB3D operations does not load an HTTP202 inquiry list as current", async () => {
+  const ui = await mount(Operations, { ownerEmail: owner }, { fetch: async () => json({ orders: [inquiry()], nextCursor: null }, 202) });
+  try {
+    await until(() => assert.ok(ui.container.querySelector('[role="alert"]')));
+    assert.equal(ui.button(new RegExp(inquiryId)), undefined);
+  } finally { await ui.close(); }
+});
+
+test("actual AB3D operations does not load HTTP202 details into editable review state", async () => {
+  const order = inquiry();
+  const ui = await mount(Operations, { ownerEmail: owner }, { fetch: async url => url.includes("?")
+    ? json({ orders: [order], nextCursor: null }) : url.endsWith("/offer") ? json(blankOffer()) : json(detail(order), 202) });
+  try {
+    await until(() => assert.ok(ui.button(new RegExp(inquiryId))));
+    await ui.click(ui.button(new RegExp(inquiryId)));
+    await until(() => assert.ok(ui.container.querySelector('[role="alert"]')));
+    assert.equal(ui.container.querySelector("#ab3d-review-notes"), null);
+  } finally { await ui.close(); }
+});
+
+for (const failure of ["HTTP202", "negative acknowledgement", "missing acknowledgement", "missing timestamp", "missing actor", "different actor"]) {
+  test(`actual AB3D operations retains dirty notes for ${failure}`, async () => {
+    const order = inquiry(); let patches = 0;
+    const ui = await mount(Operations, { ownerEmail: owner }, { fetch: async (url, init) => {
+      if (init?.method === "PATCH") {
+        patches++; const submitted = JSON.parse(init.body);
+        const review = { ...order.review, version: 1, state: submitted.state, notes: submitted.notes, updatedAt: 2, updatedBy: owner };
+        const body = { ok: true, review };
+        if (failure === "negative acknowledgement") body.ok = false;
+        if (failure === "missing acknowledgement") delete body.ok;
+        if (failure === "missing timestamp") delete review.updatedAt;
+        if (failure === "missing actor") delete review.updatedBy;
+        if (failure === "different actor") review.updatedBy = "other-operator@example.test";
+        return json(body, failure === "HTTP202" ? 202 : 200);
+      }
+      return json(url.includes("?") ? { orders: [order], nextCursor: null } : url.endsWith("/offer") ? blankOffer() : detail(order));
+    } });
+    try {
+      await selectInquiry(ui);
+      await until(() => assert.equal(ui.container.querySelector("#ab3d-review-notes").disabled, false));
+      await ui.change(ui.container.querySelector("#ab3d-review-notes"), "My unconfirmed review note");
+      await import("react").then(({ act }) => act(async () => ui.container.querySelector(".ab3d-ops-review").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }))));
+      await until(() => assert.ok(ui.container.querySelector('[role="alert"]')));
+      assert.equal(ui.container.querySelector("#ab3d-review-notes").value, "My unconfirmed review note");
+      assert.equal(ui.button("Prüfung speichern").disabled, false);
+      assert.match([...ui.storage.values.values()].join(" "), /My unconfirmed review note/);
+      assert.doesNotMatch(ui.text(), /Prüfung für PRINT-ABCDE00001 gespeichert/);
+      assert.equal(patches, 1, "No automatic retry after an uncertain review write");
+    } finally { await ui.close(); }
+  });
+}
+
+test("actual AB3D operations clears dirty notes only for a matching complete HTTP200 review receipt", async () => {
+  let order = inquiry(), patches = 0;
+  const ui = await mount(Operations, { ownerEmail: owner }, { fetch: async (url, init) => {
+    if (init?.method === "PATCH") {
+      patches++; const submitted = JSON.parse(init.body);
+      order = { ...order, review: { state: submitted.state, version: 1, notes: submitted.notes, updatedAt: 2, updatedBy: owner } };
+      return json({ ok: true, review: order.review });
+    }
+    return json(url.includes("?") ? { orders: [order], nextCursor: null } : url.endsWith("/offer") ? blankOffer() : detail(order));
+  } });
+  try {
+    await selectInquiry(ui);
+    await until(() => assert.equal(ui.container.querySelector("#ab3d-review-notes").disabled, false));
+    await ui.change(ui.container.querySelector("#ab3d-review-notes"), "Confirmed synthetic review note");
+    await import("react").then(({ act }) => act(async () => ui.container.querySelector(".ab3d-ops-review").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }))));
+    await until(() => assert.match(ui.text(), /Prüfung für PRINT-ABCDE00001 gespeichert/));
+    assert.equal(ui.button("Prüfung speichern").disabled, true);
+    assert.equal(ui.container.querySelector("#ab3d-review-notes").value, "Confirmed synthetic review note");
+    assert.equal(ui.storage.values.size, 0);
+    assert.equal(patches, 1);
+  } finally { await ui.close(); }
+});
+
 test("actual AB3D operations restores unsaved notes on remount without a PATCH", async () => {
   const storage = new MemoryStorage(), order = inquiry(), key = await reviewKey(), methods = [];
   storage.setItem(key, serializeReviewDrafts({ [inquiryId]: { ...reviewDraft(order.review), notes: "Wandstärke nachprüfen" } }));
