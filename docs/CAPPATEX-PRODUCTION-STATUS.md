@@ -1,4 +1,26 @@
-# CAPPATEX: geprüfter Arbeitsstand, 17.10.2026
+# CAPPATEX: Arbeitsstand und Verkaufsfreigaben, 02.11.2026
+
+## Aktueller Wiederaufnahmestand · 02.11.2026
+
+Gespeicherter Kandidat 66 (`d08e065`) ist nativ bestätigt, weiterhin ohne
+Deployment. Neuere lokale Betreiberkorrekturen sind darin nicht enthalten.
+Private Migration/Bereitstellung ist autorisiert, bleibt aber bis zu vollständiger
+Hosting-Datenbanksicherung und nutzbarem Restoreweg ausgesetzt. Der Tabellenleser
+kürzt weiterhin lange Gestaltungsdaten; daraus wird kein vollständiger Export erzeugt.
+
+Lesender Printify-Abgleich im richtigen Shopify-verbundenen Shop „CAPPATEX“
+(23104859): sechs bestehende Produkte, 75 bestätigte Frontvarianten und 71 Rückseiten.
+Tanktop Schwarz/M (Variante 24640) ist deaktiviert und nicht verfügbar; die bestehende
+Filterung schliesst sie aus. Die Shopify-Blankokollektion ist über den verwendeten
+Storefront-Leseweg nicht bestätigt (`shopify_collection_missing`); deshalb keine neue
+Live-Abnahme der Shopify-SKU-/Variantenbindung. Keine Profile, Preise oder Produktdaten
+erfunden/geändert und keine Fristen verlängert. Bisherige Profilnachweise enden am 09.11.2026.
+
+Verkaufs-, Versand- und Tokenpaketregister bleiben leer, Checkout/Fulfillment/
+automatische Produktion bleiben deaktiviert. Aktueller Gesamtstand und gezielte
+Restabnahmen stehen in [SHOP-LAUNCH-READINESS.md](SHOP-LAUNCH-READINESS.md) und
+[NEXT-MANUAL-STEPS.md](NEXT-MANUAL-STEPS.md). Die folgenden Versionen und
+Anbieterprüfungen sind ausdrücklich historische Nachweise.
 
 Neuester Umsetzungsschritt: [Verkaufsvorbereitung und Schema-2-Bestellkonzept](SHOP-LAUNCH-READINESS.md). Dort stehen der aktuelle 75-Varianten-Abgleich, die abgesicherte Mehrseiten-Anbindung, Betreiberübersicht und offenen Verkaufsfreigaben. Ältere Einträge unten bleiben als zeitlich zugeordnete Nachweise erhalten.
 

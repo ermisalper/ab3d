@@ -1,8 +1,75 @@
 # Verkaufsvorbereitung für AB3D und CAPPATEX
 
-Stand 23.10.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-production`. Die Site bleibt owner-private. Dieser Schritt ist keine Verkaufsfreigabe; ältere Prüfprotokolle behalten ihren damaligen Stand.
+Stand 02.11.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-production`. Die Site bleibt owner-private. Dieser Schritt ist keine Verkaufsfreigabe; ältere Prüfprotokolle behalten ihren damaligen Stand.
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
+
+## Wiederaufnahme und verbleibende Betriebsprüfungen · 02.11.2026
+
+Wiederaufnahme auf sauberem `f4e89479d802b3ac968167bb734340378d0182bb` desselben
+AB3D-Arbeitsbranches. Native Hostingprüfung: gespeicherte Version 66 weiterhin
+mit Quellcommit `d08e065`, vollständigem Archiv und `deployment_id=null`;
+Zugriff unverändert `custom`, Eigentümer, genau ein berechtigter Nutzer, keine
+externen Besucher und Zugriffsrevision 1. Die Datenbank enthält weiterhin 21
+Tabellen; neue Angebots- und KI-Limittabellen sind nicht vorhanden.
+Umgebung weiterhin Revision 11: Checkout, Fulfillment und automatische Produktion
+`false`, Tokenkäufe nicht gesetzt und dadurch deaktiviert. Keine Konfiguration,
+Schlüssel, Zahlungsmethoden oder Berechtigung verändert.
+
+Die Sicherungslücke wurde erneut nativ bestätigt: Eine einzelne Zeile aus
+`cappatex_preparations` wird mit `truncated=true`, `truncated_values=1`
+zurückgegeben. Es wurde kein gekürzter Export als Backup gespeichert. Auch der
+aktualisierte Sites-1.1.2-Ablauf und die verfügbaren Werkzeuge bieten in dieser
+Sitzung keinen bestätigten vollständigen Export-/Restoreweg. Die geprüften
+offiziellen Hinweise zu [Daten und Verbindungen](https://learn.chatgpt.com/docs/sites/data-and-connections)
+und [Site-Verwaltung](https://learn.chatgpt.com/docs/sites/managing-a-site)
+belegen keinen solchen Weg. Daraus wird nicht abgeleitet, dass Sicherungen im
+gesamten Hosting grundsätzlich unmöglich sind. Konkreter Klärungstext ist im
+bestehenden [Betreiberplan](NEXT-MANUAL-STEPS.md) vorbereitet, nicht versandt.
+Die private Bereitstellungsfreigabe bleibt gültig; vor Migration fehlt die Sicherung.
+
+Unabhängig davon werden die verbliebenen Antwortprüfungen der tatsächlichen
+AB3D-Betreiberkomponenten abgesichert. Vollständig aussehende HTTP202-Antworten
+dürfen weder Prüfnotizen noch Angebotsentwürfe als gespeichert bestätigen und
+keine ungespeicherten Eingaben verwerfen. Angebots-GET/PUT und Betreiber-GET
+verlangen HTTP200. Der Prüf-PATCH benötigt zusätzlich `ok=true`, dieselbe Notiz
+und denselben Prüfstatus, Version=gesendet+1, gültigen positiven Zeitstempel
+und den tatsächlich angemeldeten Bearbeiter. Unbestätigte Belege behalten Eingaben,
+Versionsstand und Tab-Sicherung; keine automatische Schreibwiederholung.
+
+**Lokal geprüft:** `pnpm check` vollständig erfolgreich: TypeScript, ESLint,
+genau ein Produktionsbuild und **932/932 Tests**, keine übersprungenen Tests.
+Elf neue tatsächliche React-DOM-Regressionen; Offer-PUT202, Betreiber-GET202
+und negative Prüf-PATCH-Bestätigung vor dem Fix reproduziert. Die gezielten
+Betreiber-/Angebotstests bestehen mit 36/36 Fällen. Keine neue Abhängigkeit,
+Migration, Geschäftsregel oder Produktionsfreigabe. Die Korrekturen sind nicht
+im älteren Kandidaten 66 enthalten; ein neuer geprüfter Kandidat wird vorbereitet.
+
+**Lesender Katalogabgleich:** Im tatsächlichen Printify-Shop 23104859, Titel
+„CAPPATEX“, Vertriebskanal `shopify`, wurden die sechs bestehenden Designprofile
+gegen Produkt-/Blueprint-/Provider-Identität, SKU, Variante, Verfügbarkeit,
+Druckflächen und hinterlegte Fotozuordnungen geprüft: 75 bestätigte Frontvarianten
+und 71 passende Rückseiten. T-Shirt 10/10, Hoodie 26/26, Tanktop 6/7, Pullover 15/15,
+Langarmshirt 14/14 und Poster 4/4. Tanktop Schwarz/M, Printify-Variante 24640,
+SKU `22615528761464870906`, ist beim Produkt weiterhin passend zugeordnet,
+aber `is_enabled=false` und `is_available=false`. Die bestehende Appfilterung
+verwirft diese Variante bereits; keine Anbieter- oder Profiländerung nötig.
+
+Die Storefront-Leseabfrage für `cappatex-selbst-gestalten` liefert HTTP200,
+aber keine bestätigte Kollektion (`shopify_collection_missing`). Damit sind
+die gespeicherten Shopify-Produkt-/Varianten-IDs und SKUs heute nicht erneut
+live abgeglichen. Daraus wird kein Verschwinden der Adminprodukte und keine
+bestimmte fehlende Berechtigung abgeleitet. Veröffentlichung/Kanalzuordnung
+und nutzbarer Storefront-Zugriff müssen im vorhandenen Shopify-Shop geprüft werden.
+Vorhandene lokale Printify-Zugangsdaten wurden ausschliesslich im Prozess für
+fest begrenzte GETs verwendet; die Shopify-Abfragen sind GraphQL-Lesequeries,
+keine Mutationen. Keine neuen Anmeldedaten, keine Produktänderung oder Bestellung.
+Der Audit liegt ohne Zugangsdaten im ignorierten
+`outputs/cappatex-readonly-recheck-2026-11-02.json`.
+
+Die sechs bisherigen Profilnachweise enden im Quellstand weiterhin am 09.11.2026.
+Dieser lesende Abgleich verlängert weder diese Frist noch Foto-/Etiketten-, Preis-,
+Versand- oder Verkaufsfreigaben. Deren Register bleiben unverändert leer.
 
 ## Private Bereitstellung vorbereitet · Version 66 gespeichert · 23.10.2026
 

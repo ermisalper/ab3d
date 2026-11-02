@@ -23,6 +23,15 @@ AB3D-Fertigungsanfragen zusätzlich separat nach Punkt 3 und 4 abnehmen.
 - **Benötigt:** Sicherungskennung/-datei, Zeitpunkt und unterstützten Rückspielweg des Hostings bereitstellen. Die private Bereitstellung ist bereits autorisiert; eine erneute allgemeine Freigabe fehlt nicht. Der native Tabellenleser kürzt selbst bei einer einzelnen Gestaltungszeile ein langes Datenfeld und ist kein vollständiger Export. Vorher vorhandene Tabellen und Migrationsstand erneut prüfen; keine SQL-Datei blind erneut ausführen. Atomare, unterstützte Ausführung der Guthabenspaltenkopie in 0016 klären. Die gemeinsame KI-Anfragegrenze vor Bereitstellung prüfen: Standard 12/Konto/10 Minuten, 30/Konto/UTC-Tag und 100/gesamt/UTC-Tag; optionale Serverwerte dürfen nur ganzzahlig 0–100000 sein, 0 sperrt. Diese Werte begrenzen Anfragen, kein CHF-Budget. Keine neuen Schlüssel erforderlich.
 - **Erfolgreich:** Zwei neue interne Angebotstabellen und Versionsindex, zwei optionale Anfrage-ID-/Hashspalten mit Eindeutigkeitsindex sowie `ai_usage_admissions` mit beiden Zeitindizes vorhanden; alte Anfragen, Kontoguthaben und Zuordnungen unverändert. Neue Konten starten auch beim Datenbankdefault mit 0 Tokens. Betreiber können Entwürfe speichern und Kunden erhalten keinen Zugriff. Eine wiederholte Studio-Anfrage mit derselben ID erzeugt genau einen Datensatz. Eine erlaubte simulierte Grenzprüfung bestätigt den zentralen KI-Stopp ohne kostenpflichtigen Anbieteraufruf. Neue Site-Version und zugehöriger Git-Commit sind dokumentiert. Bis dahin sind die neuen Funktionen nur lokal implementiert.
 
+Vorbereiteter Klärungstext für die Sites-/Hosting-Verwaltung, **nicht versandt**:
+
+> Für meine bestehende Site „AB3D Swiss Design“ benötige ich vor einem privaten Update eine vollständige Sicherung der D1-Datenbank mit Binding `DB`, einschliesslich aller Tabellen und ungekürzter langer JSON-Felder. Der verfügbare Tabellenleser kürzt bereits `cappatex_preparations.payload_json` und reicht nicht als Export. Bitte nennen Sie den unterstützten Sicherungsweg, Sicherungskennung und Zeitpunkt sowie das Verfahren zur Wiederherstellung in dieselbe Site. Zusätzlich ist zu klären, ob eine einzelne Migration als vollständige atomare Transaktion ausgeführt wird: Die vorbereitete Migration 0016 kopiert eine bestehende Guthabenspalte vor DROP/RENAME; vorhandene Guthaben müssen erhalten bleiben. Bitte keine Daten löschen, Zugriffsfreigaben erweitern oder kostenpflichtigen Vorgänge auslösen.
+
+Eine gespeicherte oder zurückgesetzte Site-Version ist kein belegter Ersatz für
+eine vollständige Datenbanksicherung. Die aktuellen offiziellen Hinweise trennen
+[gespeicherte Version und Bereitstellung](https://learn.chatgpt.com/docs/sites/managing-a-site#understand-projects-versions-and-deployments);
+ein konkreter vollständiger Export-/Rückspielweg ist damit noch nicht nachgewiesen.
+
 ## 3. AB3D-Kalkulation und Fertigungsweg bestätigen
 
 - **Fehlt:** Tatsächliche Kosten, geplanter Verkaufspreis, Fertigungsweg, Qualitätsprüfung und belastbare Lieferzusage je Anfrage.
@@ -41,7 +50,7 @@ AB3D-Fertigungsanfragen zusätzlich separat nach Punkt 3 und 4 abnehmen.
 
 - **Fehlt:** Erneuter Abgleich der tatsächlich verkaufbaren Varianten sowie ungeklärte Pflichtlayer und historische T-Shirt-Rückseitenfotos.
 - **Wo:** Richtiger Printify-Shop über vorhandene Shopify-Verbindung; bestehende Profil- und Fotoregister, Freigabeprüfung unter `/cappatex/betrieb`.
-- **Benötigt:** Eindeutige reale SKU-/Shopify-/Printify-IDs, verfügbare Varianten, Provider, exakte Front-/Back-Druckmasse und Dateivorgaben. Originalbytes und Kalibrierung der offenen Produktfotos sowie unveränderter Inhalt und Layout aller erforderlichen Etiketten nachweisen. Beim bekannten Nackenlayer fehlt der Inhalts-Hash; Bild-ID und Metadatenhash reichen nicht.
+- **Benötigt:** Eindeutige reale SKU-/Shopify-/Printify-IDs, verfügbare Varianten, Provider, exakte Front-/Back-Druckmasse und Dateivorgaben. Die Blankokollektion `cappatex-selbst-gestalten` muss im vorgesehenen Shopify-Storefront-Kanal lesbar sein; der aktuelle Leseweg meldet keine bestätigte Kollektion. Tanktop Schwarz/M (Printify 24640) bleibt als nicht verfügbare Variante ausgeschlossen. Die bisherigen Profilnachweise vor 09.11.2026 vollständig erneuern; keine Frist ohne Nachweis verlängern. Originalbytes und Kalibrierung der offenen Produktfotos sowie unveränderter Inhalt und Layout aller erforderlichen Etiketten nachweisen. Beim bekannten Nackenlayer fehlt der Inhalts-Hash; Bild-ID und Metadatenhash reichen nicht.
 - **Erfolgreich:** Jede angebotene Seite besitzt passende Variante, Druckprofil und bestätigte Fotogeometrie. Ungeklärte Produktseiten und Pflichtlayer bleiben gesperrt; keine allgemeine Etikettenfreiheit aus fehlender Beobachtung ableiten.
 
 ## 6. Verkaufspreise und Versand CH/LI abnehmen
