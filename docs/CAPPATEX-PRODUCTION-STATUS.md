@@ -2,8 +2,13 @@
 
 ## Aktueller Wiederaufnahmestand · 02.11.2026
 
-Gespeicherter Kandidat 67 (`5d68aad`) ist nativ bestätigt, weiterhin ohne
-Deployment. Er enthält die neuesten Betreiberkorrekturen; der ältere Kandidat66 nicht.
+Gespeicherter Kandidat 68 (`0cd2edd`) ist nativ bestätigt, weiterhin ohne
+Deployment. Er enthält zusätzlich die abgesicherte Antwortprüfung der CAPPATEX-
+Betreiberübersicht. Die älteren Kandidaten67/66 sind entsprechend überholt.
+HTTP202 und beschädigte Nutzdaten werden nicht als bestätigte Prüfung angezeigt;
+interne Fehlermeldungen werden nicht übernommen. **937/937 Offline-Tests**,
+TypeScript, ESLint und ein Produktionsbuild erfolgreich; auch die GitHub-CI des
+Quellcommits erfolgreich. Keine neue Browser- oder Live-Abnahme.
 Private Migration/Bereitstellung ist autorisiert, bleibt aber bis zu vollständiger
 Hosting-Datenbanksicherung und nutzbarem Restoreweg ausgesetzt. Der Tabellenleser
 kürzt weiterhin lange Gestaltungsdaten; daraus wird kein vollständiger Export erzeugt.

@@ -24,8 +24,28 @@ nach Fehler sind abgedeckt. Vollständiger `pnpm check`: **937/937 Tests**, Type
 ESLint und ein Produktionsbuild erfolgreich. Ein unabhängiger lesender Review
 der Angebots-/Anfrage-Wiederaufnahme ergab keinen weiteren belegten Fehler;
 vier bestehende Entwurfs-/Konflikttests bestanden. Keine neue Browserprüfung,
-Produktionsmigration oder Bereitstellung. Die gespeicherte Version67 enthält
-diese neue Anzeigeprüfung noch nicht.
+Produktionsmigration oder Bereitstellung. Auch die
+[GitHub-CI des Quellcommits](https://github.com/ermisalper/ab3d/actions/runs/41469315118)
+ist erfolgreich. Die älteren gespeicherten Versionen67/66 enthalten diese neue
+Anzeigeprüfung noch nicht.
+
+**Neuester gespeicherter Kandidat68, nicht live:** Quellcommit
+`0cd2edd85ca1f16a4e9fd4b0f72faa226d48a814`, Version-ID
+`appgprj_6a69247390f08191811183b6a04bae94~appgver_819139aa4274819192eb1af02a0c1e18`,
+`deployment_id=null`, nativ nach dem Speichern erneut bestätigt. Offizieller
+Sites-1.1.2-Quell-/Pakethelfer mit deaktiviertem automatischem Veröffentlichen;
+vorhandenen erfolgreichen Build ohne erneute Installation oder Doppelbuild
+verwendet. Archiv `outputs/ab3d-dashboard-release-2026-11-02.tar.gz`, 7.446.076 Bytes,
+SHA-256 `5902892e8951c21c29e607861ad472d747e758be6807f2f4bcd26e27d2ab3af4`.
+Native Archivablage:158 Dateien,14.008.320 Bytes,
+Inhalts-Hash `sha256:31f2527fb3ac7b80ae9ee5b4ef7bda140d760aeadf662accba310896a7bd7fd8`.
+Vorbereitete Migrationen0014–0016 enthalten, nicht ausgeführt. Quell- und
+entpackter Archivinhalt ohne Treffer vorhandener lokaler Secretwerte; keine
+`.env`-/`.git`-/`node_modules`-Pfade im Paket. Zugriff weiterhin `custom`,
+Revision1, ein erlaubter Nutzer, keine externen Besucher. Kein Deployment,
+keine Produktionsdatenbank-, Servervariablen- oder Zugriffsänderung. Die nachfolgenden
+Kandidaten66/67 beschreiben den jeweiligen früheren Prüfstand; für das spätere
+private Update nach bestätigter Sicherung Kandidat68 verwenden.
 
 ## Wiederaufnahme und verbleibende Betriebsprüfungen · 02.11.2026
 
