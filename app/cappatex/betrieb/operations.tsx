@@ -9,18 +9,48 @@ type State = { checkedAt: number; configuration: { checkoutEnabled: boolean; ful
   readiness: ReturnType<typeof cappatexReadiness>;
   counts: Array<{ state: string; total: number }>; orders: Array<ReturnType<typeof fulfillmentSummary>>; limit: number };
 const date = (value: number) => new Date(value).toLocaleString("de-CH");
+const unavailable = "Die Betreiberübersicht konnte nicht bestätigt werden. Bitte aktualisiere den Status.";
+const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
+const count = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const timestamp = (value: unknown) => count(value) && Number.isFinite(new Date(value as number).getTime());
+const text = (value: unknown): value is string => typeof value === "string";
+const dated = (value: unknown) => text(value) && Number.isFinite(Date.parse(value));
+
+/** A successful transport alone cannot confirm the configuration or a release check. */
+function checkedOverview(value: unknown): State {
+  if (!record(value) || !timestamp(value.checkedAt) || !record(value.configuration) || !record(value.readiness)
+    || !Array.isArray(value.counts) || !Array.isArray(value.orders) || !count(value.limit) || Number(value.limit) < 1
+    || Number(value.limit) > 50 || value.orders.length > Number(value.limit)) throw new Error(unavailable);
+  const config = value.configuration, readiness = value.readiness;
+  if (!["checkoutEnabled", "fulfillmentEnabled", "automaticProductionRequested", "webhookConfigured", "tokenPurchasesRequested"]
+    .every(key => typeof config[key] === "boolean")
+    || !["registeredProfiles", "registeredShippingReleases", "registeredTokenPackReleases"].every(key => count(config[key]))
+    || config.productionWritePermissions !== "unverified" || readiness.checkedAt !== value.checkedAt
+    || readiness.externalChecksPerformed !== false || !Array.isArray(readiness.rows)
+    || !readiness.rows.every(row => record(row) && ["id", "title", "scope", "detail", "next"].every(key => text(row[key]))
+      && ["CAPPATEX", "Tokenkäufe", "Gemeinsam"].includes(String(row.area))
+      && text(row.status) && Object.hasOwn(EVIDENCE_STATUS_LABELS, row.status)
+      && Array.isArray(row.basis) && row.basis.every(basis => record(basis) && text(basis.reference)
+        && (basis.recordedAt === null || dated(basis.recordedAt)) && (basis.validUntil === undefined || dated(basis.validUntil))))
+    || !value.counts.every(row => record(row) && text(row.state) && count(row.total))
+    || !value.orders.every(order => record(order) && ["id", "reference", "state", "label"].every(key => text(order[key]))
+      && (order.printifyOrderId === null || text(order.printifyOrderId)) && (order.reason === null || text(order.reason))
+      && timestamp(order.createdAt) && timestamp(order.updatedAt) && typeof order.needsReview === "boolean" && typeof order.stalled === "boolean"))
+    throw new Error(unavailable);
+  return value as State;
+}
+
 export default function Operations() {
   const [data, setData] = useState<State | null>(null), [message, setMessage] = useState(""), [busy, setBusy] = useState(true);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/cappatex/operations", { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) }).then(async response => {
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Prüfung nicht verfügbar.");
-      return body;
+      if (response.status !== 200) throw new Error(unavailable);
+      return checkedOverview(await response.json());
     }).then(body => { if (!controller.signal.aborted) setData(body); })
       .catch(error => { if (!controller.signal.aborted) { setData(null); setMessage(error instanceof Error && error.name === "TimeoutError"
-        ? "Die Prüfung hat zu lange gedauert. Bitte versuche es erneut." : error instanceof Error ? error.message : "Prüfung nicht verfügbar."); } })
+        ? "Die Prüfung hat zu lange gedauert. Bitte versuche es erneut." : unavailable); } })
       .finally(() => { if (!controller.signal.aborted) setBusy(false); });
     return () => controller.abort();
   }, [revision]);

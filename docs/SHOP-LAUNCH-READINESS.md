@@ -4,6 +4,29 @@ Stand 02.11.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-prod
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
 
+## Unabhängige Fortsetzung: bestätigte Betreiberübersicht · 02.11.2026
+
+Die rein lesende CAPPATEX-Betreiberansicht akzeptierte HTTP202 als geladene
+Prüfung und übernahm ungeprüfte Konfigurationswerte und verschachtelte Listen.
+Ein neuer Komponententest reproduzierte die unzutreffende Erfolgsmeldung.
+Die Ansicht verlangt nun HTTP200 und prüft Konfiguration, Zeitstempel,
+Belegstatus/-grundlagen, Zähler und Auftragsübersichten vor der Übernahme. Sie
+meldet ungültige Antworten verständlich, entfernt einen zuvor geladenen Stand
+bei gescheiterter Aktualisierung und zeigt keine ungefilterten Server- oder
+Transportfehler. Ein erneuter Versuch bleibt eine ausdrückliche GET-Abfrage.
+Keine zusätzlichen Anbieterabfragen, Schreibaktionen oder Freigaben.
+
+Fünf neue Tests verwenden die tatsächliche React-Komponente sowie die vorhandenen
+serverseitigen Beleg- und Auftragssummierungsfunktionen mit synthetischen Daten.
+HTTP202, falsche boolesche Werte, beschädigte Listen, unbestätigte Prüfgrundlagen,
+fehlerhafte Zeitstempel, Verbindungs-/JSON-Fehler und erfolgreiche Wiederaufnahme
+nach Fehler sind abgedeckt. Vollständiger `pnpm check`: **937/937 Tests**, TypeScript,
+ESLint und ein Produktionsbuild erfolgreich. Ein unabhängiger lesender Review
+der Angebots-/Anfrage-Wiederaufnahme ergab keinen weiteren belegten Fehler;
+vier bestehende Entwurfs-/Konflikttests bestanden. Keine neue Browserprüfung,
+Produktionsmigration oder Bereitstellung. Die gespeicherte Version67 enthält
+diese neue Anzeigeprüfung noch nicht.
+
 ## Wiederaufnahme und verbleibende Betriebsprüfungen · 02.11.2026
 
 **Betreiberklärung:** Der Nutzer bestätigt, dass weiterhin keine vollständige
