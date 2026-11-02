@@ -2,8 +2,8 @@
 
 ## Aktueller Wiederaufnahmestand · 02.11.2026
 
-Gespeicherter Kandidat 66 (`d08e065`) ist nativ bestätigt, weiterhin ohne
-Deployment. Neuere lokale Betreiberkorrekturen sind darin nicht enthalten.
+Gespeicherter Kandidat 67 (`5d68aad`) ist nativ bestätigt, weiterhin ohne
+Deployment. Er enthält die neuesten Betreiberkorrekturen; der ältere Kandidat66 nicht.
 Private Migration/Bereitstellung ist autorisiert, bleibt aber bis zu vollständiger
 Hosting-Datenbanksicherung und nutzbarem Restoreweg ausgesetzt. Der Tabellenleser
 kürzt weiterhin lange Gestaltungsdaten; daraus wird kein vollständiger Export erzeugt.

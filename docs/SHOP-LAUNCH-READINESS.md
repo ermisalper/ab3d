@@ -43,7 +43,24 @@ Elf neue tatsächliche React-DOM-Regressionen; Offer-PUT202, Betreiber-GET202
 und negative Prüf-PATCH-Bestätigung vor dem Fix reproduziert. Die gezielten
 Betreiber-/Angebotstests bestehen mit 36/36 Fällen. Keine neue Abhängigkeit,
 Migration, Geschäftsregel oder Produktionsfreigabe. Die Korrekturen sind nicht
-im älteren Kandidaten 66 enthalten; ein neuer geprüfter Kandidat wird vorbereitet.
+im älteren Kandidaten 66 enthalten, sondern im neu gespeicherten Kandidaten 67.
+
+**Kandidat 67 nativ gespeichert, nicht live:** Offizieller Sites-1.1.2-Quellhelfer,
+Quellcommit `5d68aadc51efa4bf75c7bf9751def6dafab8fa56`, gespeicherte Version
+`appgprj_6a69247390f08191811183b6a04bae94~appgver_ea35718cd37c819197a8e4b5ec7389c8`,
+`deployment_id=null`. Archiv `outputs/ab3d-release-2026-11-02.tar.gz`,
+7.444.612 Bytes, SHA-256
+`4eaccff00fc368d75c182896cafa260538cf978c7e6973a11519e26ff012dce6`.
+Native Archivablage:158 Dateien,13.998.080 Bytes,
+Inhalts-Hash `sha256:5313092d88e888ff5f579fe3f51e755b53f85426f8bb628883d0ff6064656d77`.
+Alle Migrationen0000–0016 sind enthalten, aber nicht angewandt. Paket- und
+Quellscan ohne Treffer vorhandener lokaler Secretwerte; keine `.env`-/`.git`-/
+`node_modules`-Pfade im Paket. Vorhandener erfolgreicher Build unverändert
+wiederverwendet; keine zusätzliche Installation oder erneuter lokaler Build.
+Diese Version für die spätere private Bereitstellung verwenden, wenn Sicherung
+und Migrationsvoraussetzungen geklärt sind; nicht nochmals speichern oder paketieren.
+Die native Quellsynchronisierung berührt nicht GitHub-main. Die Betreiberkorrektur
+liegt im Quellcommit `df41039`; weitere lokale Änderungen sind Statusdokumentation.
 
 **Lesender Katalogabgleich:** Im tatsächlichen Printify-Shop 23104859, Titel
 „CAPPATEX“, Vertriebskanal `shopify`, wurden die sechs bestehenden Designprofile
