@@ -6,6 +6,17 @@ Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CA
 
 ## Wiederaufnahme und verbleibende Betriebsprüfungen · 02.11.2026
 
+**Betreiberklärung:** Der Nutzer bestätigt, dass weiterhin keine vollständige
+Hosting-Datenbanksicherung bekannt ist. Migrationen und private Bereitstellung
+bleiben bis zur Sicherung ausgesetzt; die Bereitstellungsfreigabe selbst gilt weiter.
+Es besteht noch keine Firma; AB3D/CAPPATEX werden als neues Projekt aufgebaut.
+Es wurde keine Rechtsform gewählt, kein Einzelunternehmen unterstellt und kein
+Name/keine Adresse aus Profil- oder Kontodaten als Betreiberangabe übernommen.
+Vor Verkaufsstart sind verantwortlicher Anbieter und veröffentlichbare
+Kontaktadresse festzulegen. Grundlage für die Anbieterinformationen:
+[SECO Onlinehandel](https://www.seco.admin.ch/de/onlinehandel).
+Impressumsfelder bleiben offen, keine Veröffentlichung persönlicher Angaben.
+
 Wiederaufnahme auf sauberem `f4e89479d802b3ac968167bb734340378d0182bb` desselben
 AB3D-Arbeitsbranches. Native Hostingprüfung: gespeicherte Version 66 weiterhin
 mit Quellcommit `d08e065`, vollständigem Archiv und `deployment_id=null`;

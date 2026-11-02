@@ -62,9 +62,9 @@ ein konkreter vollständiger Export-/Rückspielweg ist damit noch nicht nachgewi
 
 ## 7. Shopify-Verkaufsbetrieb und Rechtstexte bestätigen
 
-- **Fehlt:** Aktuelle Konto-, Markt-, Zahlungs- und Geschäftsabnahme für einen späteren Verkaufsstart.
+- **Fehlt:** Aktuelle Konto-, Markt-, Zahlungs- und Geschäftsabnahme für einen späteren Verkaufsstart sowie benannter verantwortlicher Anbieter und veröffentlichbare Kontaktadresse. Es besteht laut Betreiber noch keine Firma; das Projekt wird derzeit neu aufgebaut.
 - **Wo:** Bestehende Shopify-Einstellungen sowie Impressum, Datenschutz und Verkaufs-/Rückgabebedingungen beider Bereiche.
-- **Benötigt:** Persönliche Geschäftsentscheidung zu Tarifwechsel aus „Pause and Build“, Zahlungsmethoden, Steuern, vollständigen Anbieterangaben und anwendbaren Kundenbedingungen. Diese Änderungen benötigen eine ausdrückliche Genehmigung.
+- **Benötigt:** Festlegen, wer beim Verkaufsstart tatsächlich als Anbieter auftritt (verantwortliche Person beziehungsweise später gegründeter Rechtsträger), und vollständigen Namen sowie veröffentlichbare Kontaktadresse bestätigen. Keine Firma, Rechtsform, UID oder MWST-Nummer erfinden oder automatisch ein Einzelunternehmen annehmen. Persönliche Geschäftsentscheidung zu Tarifwechsel aus „Pause and Build“, Zahlungsmethoden, Steuern und anwendbaren Kundenbedingungen separat treffen. Diese Änderungen benötigen eine ausdrückliche Genehmigung.
 - **Erfolgreich:** Verantwortliche Geschäftsdaten und Bedingungen bestätigt; CH-/LI-Checkout mit erlaubten Zahlungsarten nach gesonderter Testfreigabe geprüft. Ein Shopify-Upgrade allein öffnet weder Studios noch Produktion.
 
 ## 8. Einzigen Fulfillment-Weg und Webhook-Zustellung extern belegen
