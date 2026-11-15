@@ -1,4 +1,25 @@
-# CAPPATEX: Arbeitsstand und Verkaufsfreigaben, 02.11.2026
+# CAPPATEX: Arbeitsstand und Verkaufsfreigaben, 15.11.2026
+
+## Aktuelle Katalogsperre · 15.11.2026
+
+Alle sechs Gestaltungsprofile sind seit09.11. abgelaufen. Deshalb wird kein
+Blanko zur Auswahl angeboten, auch wenn Printify erreichbar ist. Die alte
+pauschale Meldung erklärt diesen Grund nicht; lokal ist eine gezielte,
+rechtegebundene Ablaufdiagnose ergänzt. Kandidat68 enthält sie noch nicht.
+Keine Frist oder Verkaufs-/Produktionssperre wurde geändert.
+
+Frisch gelesen: richtiger Printify-Shop „CAPPATEX“ (23104859) mit Shopify-Kanal
+erreichbar; Anbieterdaten passen für 60 Varianten und 56 Rückseiten in fünf
+Profilen. Beim Pullover ist das Produkt lesbar, aber Blueprint457/Provider26-
+Varianten liefern HTTP404. Tanktop Schwarz/M bleibt nicht verfügbar.
+Shopify liefert die fertige Kollektion (6 Produkte / 30 Varianten), die
+Blankokollektion bleibt im Storefront-Leseweg unbestätigt. Diese Datenabgleiche
+ersetzen keine erneuerte Profil-, Foto-, Preis- oder Versandfreigabe.
+Die Frist muss mit vollständiger neuer Evidenz erneuert werden; kein blosser
+Datumswechsel. Keine neue Live- oder Browserabnahme, keine Bereitstellung.
+Lokale Diagnosekorrektur: **943/943 Tests**, TypeScript, vollständiges ESLint
+und ein Produktionsbuild erfolgreich. Keine Profile oder Bestellfreigaben erneuert.
+Details: [Verkaufsvorbereitung](SHOP-LAUNCH-READINESS.md).
 
 ## Aktueller Wiederaufnahmestand · 02.11.2026
 

@@ -1,5 +1,7 @@
 import { verifiedCatalog } from "../../../cappatex-verified-catalog";
 import { designCatalog, type CappatexDesignProduct } from "../../../cappatex-design-catalog";
+import { CAPPATEX_DESIGN_PROFILES } from "../../../cappatex-design-profiles";
+import { generationAccess } from "../../../cappatex-generation-access";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 
 export async function GET() {
@@ -20,8 +22,16 @@ export async function GET() {
     }) : [];
     if (designs.status === "fulfilled") products.push(...designs.value.filter(item => !products.some(product => product.id === item.id)));
     if (!products.length && (sales.status === "rejected" || designs.status === "rejected")) throw new Error("catalog_unavailable");
+    const now = Date.now(), shopId = process.env.PRINTIFY_SHOP_ID?.trim() || "";
+    // Explain the private preview's existing expiry gate; never renew a profile or grant access here.
+    const previewsExpired = !products.length && Boolean(user
+      && generationAccess(user.email, "owner", process.env.CAPPATEX_GENERATION_ALLOWED_EMAILS).allowed)
+      && Boolean(shopId) && CAPPATEX_DESIGN_PROFILES.length > 0 && CAPPATEX_DESIGN_PROFILES.every(profile =>
+        profile.shopId === shopId && Number.isFinite(Date.parse(profile.validUntil)) && Date.parse(profile.validUntil) <= now);
     return Response.json({ products, checkoutEnabled: process.env.CAPPATEX_CHECKOUT_ENABLED === "true" && products.some(product => product.purchaseReady),
-      message: products.some(product => !product.purchaseReady) ? "Echtes Blanko für deine Gestaltung: Farbe, Grösse und Platzierung sind wählbar. Bestellungen sind noch gesperrt."
+      ...(previewsExpired ? { code: "design_profiles_expired" } : {}),
+      message: previewsExpired ? "Die Produktprüfung für die Blanko-Vorschau ist abgelaufen. Varianten und Druckflächen müssen erneut geprüft werden, bevor du wieder ein Produkt auswählen kannst. Bestellungen bleiben gesperrt."
+        : products.some(product => !product.purchaseReady) ? "Echtes Blanko für deine Gestaltung: Farbe, Grösse und Platzierung sind wählbar. Bestellungen sind noch gesperrt."
         : products.length ? `${products.length} geprüfte Blanko-Produkte. Versand in die Schweiz und nach Liechtenstein.`
         : "Die Blanko-Produkte werden noch geprüft. Selbst gestaltete Artikel sind derzeit nicht bestellbar. Die fertige Kollektion findest du im normalen Katalog." },
     { headers: { "Cache-Control": "no-store" } });

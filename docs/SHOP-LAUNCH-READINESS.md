@@ -1,8 +1,59 @@
 # Verkaufsvorbereitung für AB3D und CAPPATEX
 
-Stand 02.11.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-production`. Die Site bleibt owner-private. Dieser Schritt ist keine Verkaufsfreigabe; ältere Prüfprotokolle behalten ihren damaligen Stand.
+Stand 15.11.2026. Ausschliesslich `ermisalper/ab3d`, Branch `codex/cappatex-production`. Die Site bleibt owner-private. Dieser Schritt ist keine Verkaufsfreigabe; ältere Prüfprotokolle behalten ihren damaligen Stand.
 
 Neueste Ergänzung: [Private Produktgestaltungen wiederfinden und fortsetzen](CAPPATEX-SAVED-GESTALTUNGEN.md), einschliesslich Vorder-/Rückseiten-Kopien und abgesicherter Tab-Wiederherstellung.
+
+## Gesperrte Blanko-Auswahl und Verbindungsprüfung · 15.11.2026
+
+Die gemeldete leere Blanko-Auswahl ist reproduzierbar: Alle sechs bestehenden
+Gestaltungsprofile endeten am `2026-11-09T00:00:00Z`. `designCatalog()` entfernt
+abgelaufene Profile vor jedem Printify-Abruf; das leere Verkaufsregister liefert
+keine weiteren Kandidaten. Die pauschale Meldung „werden noch geprüft“ erklärt
+diesen Ablauf bisher nicht. Die Sperre selbst beweist keinen Verbindungsausfall.
+
+Erneuter tatsächlicher, ausschliesslich lesender Abgleich mit dem bestehenden
+Zugang: Printify bestätigt Shop23104859 „CAPPATEX“, Vertriebskanal `shopify`.
+Produkt, Provider, SKU/Varianten-ID, Verfügbarkeit, Optionen, Druckflächen und
+gespeicherte Foto-URL-Zuordnung passen bei 60 Varianten und 56 Rückseiten:
+T-Shirt10, Hoodie26, Tanktop6, Langarmshirt14 und Poster4. Dies ist ein aktueller
+Anbieterdatenvergleich, keine erneuerte Geometrie-/Foto-, Versand- oder Verkaufsfreigabe.
+Tanktop Schwarz/M (24640) bleibt deaktiviert und nicht verfügbar.
+
+Der bestehende Pullover `6aca555903e91232940b49e4` ist lesbar (HTTP200). Seine
+Anbietervarianten-Abfrage für Blueprint457/Provider26 liefert jedoch HTTP404,
+auch beim gezielten zweiten Abruf. Daraus wird keine Löschung des Produkts
+abgeleitet; diese Druckflächen und Varianten sind derzeit nicht erneut bestätigt.
+Kein Ersatzanbieter wurde ausgewählt oder veröffentlicht.
+
+Shopify liefert die fertige Kollektion `cappatex` mit sechs Produkten und 30
+Varianten. Die Blankokollektion `cappatex-selbst-gestalten` bleibt über denselben
+Storefront-Leseweg unbestätigt (`shopify_collection_missing` bei HTTP200).
+Damit ist keine neue Shopify-Bindung der Blankovarianten nachgewiesen. Der
+private Vorschaukatalog benötigt nach seinem bestehenden Vertrag keine
+Shopify-Veröffentlichung; die fehlende Kollektion erklärt seinen Fristablauf nicht.
+Hostingkonfiguration weiterhin Revision11, Shop-IDs vorhanden, Checkout,
+Fulfillment und automatische Produktion `false`; private Audience unverändert.
+
+Lokale Korrektur ausschliesslich an der Fehlererklärung: Der bereits berechtigte
+private Betreiber erhält bei vollständig abgelaufenen Profilen und leerem Katalog
+`design_profiles_expired` und einen gezielten Hinweis. Normale verfügbare Kandidaten
+bleiben auswählbar, fehlende Rechte oder andere Prüffehler werden nicht als Ablauf
+ausgegeben. Keine Frist verlängert, kein Profil geändert, keine Bestellsperre geöffnet.
+Der gespeicherte Kandidat68 enthält diese neue Diagnose noch nicht. Keine
+Browserprüfung, Produktionsmigration oder Bereitstellung. Der erste Netzwerkabruf
+war durch die lokale Sandbox blockiert; die anschliessend genehmigte Ausführung
+liess ausschliesslich feste Printify-GETs und Shopify-Katalog-Lesequeries zu.
+Keine KI-Generierung, Warenkörbe, Bestellungen oder Anbieteränderungen.
+Bereinigte Einzelheiten stehen in den ignorierten
+`outputs/cappatex-connection-recheck-2026-11-15*.json`; sie enthalten keine Zugangsdaten.
+
+Prüfung des geänderten Quellstands: sechs neue Regressionen, vollständige Suite
+**943/943 Tests**, TypeScript, vollständiges ESLint und ein Produktionsbuild
+erfolgreich. Vor/am/nach Ablauf sowie weiterhin auswählbare aktuelle Kandidaten,
+teilweise abgelaufene Register, andere Anbieterfehler, ungültige Daten und fehlende
+Betreiberrechte geprüft. Der neue Grenztest scheiterte vor dem Fix reproduzierbar.
+Keine übersprungenen Tests. Quellscan ohne Treffer vorhandener lokaler Secretwerte.
 
 ## Unabhängige Fortsetzung: bestätigte Betreiberübersicht · 02.11.2026
 

@@ -414,9 +414,85 @@ describe("offline private design catalog without sales approval", { concurrency:
     assert.equal(body.products[0].purchaseReady, false);
     assert.match(body.products[0].blockedReason, /noch geprüft/);
     assert.equal(body.products[0].variants[0].price, null);
+    assert.equal(body.code, undefined, "An available preview must not report expired product evidence");
     assert.equal(body.products[0].variants[0].shopifyVariantId, variant.shopifyVariantId);
     assert.equal(fixture.requests.length, 2);
     assert.ok(fixture.requests.every(request => request.method === "GET" && request.url.startsWith("https://api.printify.com/")));
+  });
+
+  for (const [label, offset] of [["immediately before", -1], ["at", 0], ["after", 1]]) {
+    test(`private catalog reports the product-evidence expiry ${label} its boundary without opening checkout`, async () => {
+      const candidate = previewOnly(), deadline = Date.parse(candidate.validUntil);
+      Date.now = () => deadline + offset;
+      const response = await getDesignCatalog(), body = await response.json();
+      assert.equal(response.status, 200);
+      assert.equal(body.checkoutEnabled, false);
+      assert.equal(candidate.validUntil, profile.validUntil, "The diagnostic never renews a profile");
+      if (offset < 0) {
+        assert.equal(body.products.length, 1);
+        assert.equal(body.products[0].purchaseReady, false);
+        assert.equal(body.code, undefined);
+        assert.equal(fixture.requests.length, 2);
+        assert.ok(fixture.requests.every(request => request.method === "GET" && request.url.startsWith("https://api.printify.com/")));
+      } else {
+        assert.deepEqual(body.products, []);
+        assert.equal(body.code, "design_profiles_expired");
+        assert.match(body.message, /Produktprüfung.*abgelaufen/);
+        assertNoTokensOrNetwork();
+      }
+      assert.equal(fixture.carts.length, 0);
+      assert.equal(fixture.db.sqlite.prepare("SELECT COUNT(*) AS total FROM cappatex_snapshots").get().total, 0);
+    });
+  }
+
+  test("expired preview evidence neither hides a current candidate nor reports a fully expired catalogue", async () => {
+    const expired = previewOnly(), current = anotherPreview(1);
+    expired.validUntil = new Date(NOW).toISOString();
+    fixture.interceptFetch = (url, method) => method === "GET" && url.pathname === candidatePath(current)
+      ? Response.json(candidateProduct(current)) : undefined;
+    const response = await getDesignCatalog(), body = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.products.map(product => product.id), [current.id]);
+    assert.equal(body.checkoutEnabled, false);
+    assert.equal(body.code, undefined);
+    assert.equal(fixture.requests.length, 2);
+    assert.ok(fixture.requests.every(request => request.method === "GET" && !request.url.endsWith(candidatePath(expired))));
+    fixture.changeProvider = provider => { provider.variants[0].placeholders[0].width++; };
+    const unavailable = await (await getDesignCatalog()).json();
+    assert.deepEqual(unavailable.products, []);
+    assert.equal(unavailable.code, undefined, "A still-current profile failing provider checks is not a fully expired catalogue");
+    assert.equal(unavailable.checkoutEnabled, false);
+  });
+
+  test("an expiry diagnosis requires the existing private operator allowance even with subscriber audience", async () => {
+    const candidate = previewOnly(); candidate.validUntil = new Date(NOW).toISOString();
+    process.env.CAPPATEX_GENERATION_AUDIENCE = "subscribers";
+    for (const actor of [null, "customer@example.test", EMAIL]) {
+      runtime.actor = actor;
+      if (actor === EMAIL) process.env.CAPPATEX_GENERATION_ALLOWED_EMAILS = "";
+      const response = await getDesignCatalog(), body = await response.json();
+      assert.equal(response.status, 200);
+      assert.deepEqual(body.products, []);
+      assert.equal(body.checkoutEnabled, false);
+      assert.equal(body.code, undefined);
+      assert.doesNotMatch(body.message, /abgelaufen/);
+      assertNoTokensOrNetwork();
+    }
+  });
+
+  test("empty registries, invalid expiry dates and another shop are not misdiagnosed as expired evidence", async () => {
+    const candidate = previewOnly();
+    for (const change of ["missing", "invalid-date", "wrong-shop"]) {
+      candidate.validUntil = change === "invalid-date" ? "not-a-date" : new Date(NOW).toISOString();
+      candidate.shopId = change === "wrong-shop" ? "unconfirmed-other-shop" : profile.shopId;
+      runtime.designProfiles.splice(0, runtime.designProfiles.length, ...(change === "missing" ? [] : [candidate]));
+      const response = await getDesignCatalog(), body = await response.json();
+      assert.equal(response.status, 200);
+      assert.deepEqual(body.products, []);
+      assert.equal(body.code, undefined);
+      assert.equal(body.checkoutEnabled, false);
+      assertNoTokensOrNetwork();
+    }
   });
 
   test("back geometry and gallery require the exact provider side, variant and trusted photo", async () => {
