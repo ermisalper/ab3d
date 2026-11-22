@@ -122,10 +122,11 @@ test("a late initial token catalogue cannot reopen checkout after a newer closed
   } finally { first.resolve(json(catalogue())); await ui.close(); }
 });
 
-test("restoring blocked session storage reuses an existing token UUID after an explicit status refresh", async () => {
+test("restoring blocked session storage reuses an existing token UUID after an explicit status refresh", { timeout: 10_000 }, async () => {
   const storage = new MemoryStorage(), key = await storageKey(), posts = [];
   storage.setItem(key, JSON.stringify(pending)); storage.blocked = true;
-  const ui = await mount(TokenShop, props, { storage, fetch: async (_url, init = {}) => {
+  const refreshed = deferred();
+  const ui = await mount(TokenShop, { ...props, onRefreshBalance: async () => { refreshed.resolve(); return true; } }, { storage, fetch: async (_url, init = {}) => {
     if (init.method !== "POST") return json(catalogue());
     posts.push(JSON.parse(init.body)); return json(receipt);
   } });
@@ -134,6 +135,9 @@ test("restoring blocked session storage reuses an existing token UUID after an e
     assert.equal(posts.length, 0); assert.match(ui.text(), /sicheren Kauf/);
     storage.blocked = false;
     await ui.click(ui.button("Kaufstatus & Guthaben aktualisieren"));
+    // React's click flush does not await the native WebCrypto worker. This callback
+    // occurs only after storage restoration and the confirmed catalogue read.
+    await act(async () => { await refreshed.promise; });
     assert.equal(posts.length, 0);
     assert.ok(ui.button(/Denselben Checkout öffnen/));
     assert.equal(ui.container.querySelector('input[type="checkbox"]').checked, false);
@@ -141,6 +145,70 @@ test("restoring blocked session storage reuses an existing token UUID after an e
     await ui.click(ui.button(/Denselben Checkout öffnen/));
     assert.equal(posts.length, 1); assert.equal(posts[0].requestId, pending.requestId);
   } finally { await ui.close(); }
+});
+
+test("a delayed storage-key digest keeps checkout locked until the saved UUID is restored", { timeout: 10_000 }, async (t) => {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email));
+  const storage = new MemoryStorage(), key = await storageKey(), posts = [], methods = [];
+  const digestRequested = deferred(), releaseDigest = deferred(), refreshed = deferred();
+  let delayRestore = false;
+  t.mock.method(crypto.subtle, "digest", (algorithm, input) => {
+    assert.equal(algorithm, "SHA-256"); assert.equal(new TextDecoder().decode(input), email);
+    if (delayRestore) { digestRequested.resolve(); return releaseDigest.promise; }
+    return Promise.resolve(hash);
+  });
+  storage.setItem(key, JSON.stringify(pending)); storage.blocked = true;
+  const ui = await mount(TokenShop, { ...props, onRefreshBalance: async () => { refreshed.resolve(); return true; } }, { storage, fetch: async (_url, init = {}) => {
+    methods.push(init.method || "GET");
+    if (init.method !== "POST") return json(catalogue());
+    posts.push(JSON.parse(init.body)); return json(receipt);
+  } });
+  try {
+    await choose(ui); await ui.click(ui.button(/Weiter zur Zahlung/));
+    assert.equal(posts.length, 0); assert.match(ui.text(), /sicheren Kauf/);
+    storage.blocked = false; delayRestore = true;
+    await ui.click(ui.button("Kaufstatus & Guthaben aktualisieren"));
+    await digestRequested.promise;
+    assert.equal(ui.button("Kaufstatus & Guthaben aktualisieren").disabled, true);
+    assert.equal(ui.container.querySelector(".token-purchase-review .button").disabled, true);
+    assert.equal(JSON.parse(storage.getItem(key)).requestId, pending.requestId);
+    await ui.click(ui.container.querySelector(".token-purchase-review .button"));
+    await ui.click(ui.button("Kaufstatus & Guthaben aktualisieren"));
+    assert.deepEqual(methods, ["GET"]); assert.equal(posts.length, 0); assert.deepEqual(ui.redirects, []);
+    await act(async () => { releaseDigest.resolve(hash); await refreshed.promise; });
+    assert.ok(ui.button(/Denselben Checkout öffnen/));
+    assert.equal(ui.container.querySelector('input[type="checkbox"]').checked, false);
+    assert.equal(posts.length, 0); assert.deepEqual(ui.redirects, []);
+    await ui.check(ui.container.querySelector('input[type="checkbox"]'));
+    await ui.click(ui.button(/Denselben Checkout öffnen/));
+    assert.equal(posts.length, 1); assert.equal(posts[0].requestId, pending.requestId);
+    assert.equal(JSON.parse(storage.getItem(key)).requestId, pending.requestId);
+  } finally { releaseDigest.resolve(hash); await ui.close(); }
+});
+
+test("an aborted initial storage-key digest cannot start a stale catalogue read after refresh", { timeout: 10_000 }, async (t) => {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email));
+  const storage = new MemoryStorage(), key = await storageKey(), initialDigest = deferred(), refreshed = deferred(), methods = [];
+  storage.setItem(key, JSON.stringify(pending)); let digests = 0;
+  t.mock.method(crypto.subtle, "digest", (algorithm, input) => {
+    assert.equal(algorithm, "SHA-256"); assert.equal(new TextDecoder().decode(input), email);
+    return ++digests === 1 ? initialDigest.promise : Promise.resolve(hash);
+  });
+  const ui = await mount(TokenShop, { ...props, onRefreshBalance: async () => { refreshed.resolve(); return true; } }, { storage, fetch: async (_url, init = {}) => {
+    methods.push(init.method || "GET"); return json(catalogue());
+  } });
+  try {
+    assert.equal(digests, 1); assert.deepEqual(methods, []);
+    await ui.click(ui.button("Kaufstatus & Guthaben aktualisieren"));
+    await act(async () => { await refreshed.promise; });
+    assert.equal(digests, 2); assert.deepEqual(methods, ["GET"]);
+    assert.ok(ui.button(/Denselben Checkout öffnen/));
+    assert.equal(ui.container.querySelector('input[type="checkbox"]').checked, false);
+    await act(async () => { initialDigest.resolve(hash); });
+    assert.deepEqual(methods, ["GET"], "Completing the abandoned digest cannot launch another initial read");
+    assert.equal(JSON.parse(storage.getItem(key)).requestId, pending.requestId);
+    assert.deepEqual(ui.redirects, []);
+  } finally { initialDigest.resolve(hash); await ui.close(); }
 });
 
 test("two token checkout clicks in the same event batch send only one request", async () => {

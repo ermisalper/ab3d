@@ -5,7 +5,8 @@ gesonderte Freigabe. Sie aktivieren durch diese Dokumentation keinen Verkauf.
 
 Für die gemeinsame Abnahme zuerst Browser-/Kontozugang klären, danach die
 Produkt-, Preis-, Versand-, Rechts- und Zahlungsnachweise prüfen. Bereitstellung
-und Migration brauchen eine getrennte Freigabe; ein kostenpflichtiger Ende-zu-Ende-Test
+und Migration setzen eine bestätigte vollständige Sicherung und einen nutzbaren
+Restoreweg voraus. Die private Bereitstellung ist bereits autorisiert; ein kostenpflichtiger Ende-zu-Ende-Test
 folgt erst mit den dafür notwendigen eigenen Freigaben. Individuelle
 AB3D-Fertigungsanfragen zusätzlich separat nach Punkt 3 und 4 abnehmen.
 
